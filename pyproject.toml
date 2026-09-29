@@ -1,0 +1,9 @@
+[project]
+name = "jetdistill"
+version = "0.1.0"
+description = "The JEDI-linear jet tagger's last hidden layer distilled into if-statements on jet physics observables"
+requires-python = ">=3.11"
+dependencies = ["numpy", "jax", "keras", "hgq2", "scikit-learn", "matplotlib", "h5py"]
+
+[tool.setuptools.packages.find]
+include = ["jetdistill*"]
