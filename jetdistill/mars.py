@@ -18,7 +18,7 @@ from .config import SETUPS, MASSES, MASS_MULT, RESULTS
 from .network import Network
 from .observables import library, compute, mass_ids
 
-N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, 100, 12000, 5
+N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (100 if not config.SMOKE else 10), 12000, 5
 
 
 def splits(n, untrained=False, sizes=None):

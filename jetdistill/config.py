@@ -15,6 +15,10 @@ CLASSES = ['g', 'q', 'W', 'Z', 't']
 
 # jets used by each step (all from the TRAIN archive except the test jets, which come from the VAL archive)
 N_STEP1_FIT, N_TUNE_FIT, N_DEV, N_TEST_SPLIT = 40000, 100000, 25000, 50000
+N_STEP4_FIT, N_EXPLAIN, N_FULL_TEST = 150000, 60000, None          # None: the whole test file
+SMOKE = os.environ.get('JETDISTILL_SMOKE') == '1'                    # a quick run of every stage on a few thousand jets (tests)
+if SMOKE:
+    N_STEP1_FIT, N_TUNE_FIT, N_DEV, N_TEST_SPLIT, N_STEP4_FIT, N_EXPLAIN, N_FULL_TEST = 3000, 3000, 2000, 2000, 3000, 3000, 4000
 
 MASSES = {'m_W': 80.4, 'm_Z': 91.19, 'm_H': 125.1, 'm_t': 172.8}   # offered as candidate thresholds of mass observables
 MASS_MULT = (.5, 1., 1.5, 2.)

@@ -20,9 +20,9 @@ from .config import SETUPS, RESULTS, FIDELITY_LAMBDA
 from .network import Network
 from .observables import compute, library
 
-FAMILIES = dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons'))
+FAMILIES = dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons')) if not config.SMOKE else \
+           dict(network=((8, 5), None), labels=((5,), 'labels'), neurons=((8,), 'neurons'))
 STEP4_METRIC = dict(network='agree', labels='acc', neurons='neuron')
-N_EXPLAIN, N_STEP4_FIT = 60000, 150000
 TITLES = dict(network="tuned on the network's predictions", decisions="tuned on the network's decisions", labels='tuned on the true labels', neurons="tuned on the network's neuron values")
 
 
@@ -38,12 +38,12 @@ def jets(n, which, log=print):
         t0 = time.time(); f.parent.mkdir(parents=True, exist_ok=True)
         if which == 'explain':
             X = np.load(config.DATA / 'train_ptetaphi_f16.npy', mmap_mode='r'); pool = np.setdiff1d(np.arange(len(X)), data.rows('dev'))
-            rows = np.sort(pool[np.random.default_rng(0).choice(len(pool), N_EXPLAIN, replace=False)])
+            rows = np.sort(pool[np.random.default_rng(0).choice(len(pool), config.N_EXPLAIN, replace=False)])
             x = np.asarray(X[rows, :n]).astype(np.float32)
             import h5py
             with h5py.File(config.DATA / 'train_meta.h5') as h: y = h['label'][:][rows]
         else:
-            stop = N_STEP4_FIT if which == 'fit' else None; x = data.particles(which, n, stop=stop); y = data.labels(which, stop=stop)
+            stop = config.N_STEP4_FIT if which == 'fit' else config.N_DEV if which == 'dev' else config.N_FULL_TEST; x = data.particles(which, n, stop=stop); y = data.labels(which, stop=stop)
         net = Network(n).run(x); Q = compute(x, n)
         np.savez(f, x=x, y=y.astype(np.int8), Z=net['z'].astype(np.float32), L=net['logits'].astype(np.float32), **{'Q_' + k: v.astype(np.float32) for k, v in Q.items()})
         log(f'jets {which}: {len(y)} in {time.time() - t0:.0f} s')
@@ -157,7 +157,7 @@ def stage_metrics(setup, n, log=print):
         rows.append(dict(family=m['family'], formula=tag, name=m['title'], terms=m['terms'], parent=m.get('parent'),
                          **metrics.metrics(F.logits(load_formula(setup, n, tag), test['Q'], last), test['y'], test['net'])))
     long = mars.load(setup, n); fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT)          # step 1 alone: 100 terms per neuron, least squares
-    step1 = tuning.refit([dict(nr, terms=nr['terms'][:100]) for nr in long], fit['Q'], fit['Z'])
+    step1 = tuning.refit([dict(nr, terms=nr['terms'][:FAMILIES['network'][0][0]]) for nr in long], fit['Q'], fit['Z'])
     s1 = dict(name=f'{F.n_terms(step1)} (step 1: if-statements fitted to each neuron separately)', terms=F.n_terms(step1), **metrics.metrics(F.logits(step1, test['Q'], last), test['y'], test['net']))
     (out_dir(setup, n) / 'metrics.json').write_text(json.dumps(dict(n_jets=int(len(test['y'])), models=rows, step1=s1)))
     for r in rows: log(f"{r['name'][:70]:70s} accuracy {100 * r['accuracy']:.2f}%  same as the network {100 * r['same_as_network']:.2f}%")

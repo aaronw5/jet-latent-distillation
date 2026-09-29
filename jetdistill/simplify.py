@@ -22,7 +22,8 @@ from .network import round_wrap
 
 TOL = dict(agree=0.005, acc=0.004, neuron=0.01)
 KC = {'lin': 0, 'gt': 1, 'lt': 2}
-BUDGETS = (600, 500, 400, 350, 300, 250, 200, 150, 120)
+from .config import SMOKE
+BUDGETS = (600, 500, 400, 350, 300, 250, 200, 150, 120) if not SMOKE else (60, 40)
 
 
 class Step4:
@@ -85,7 +86,7 @@ class Step4:
             out[j] = dict(pool=P, G=G, r=r, yy=yy, sd=sd, full=full, path=path)
         return out
 
-    def pools(self, rounds=3, batch=10, ref_budget=250, log=print):
+    def pools(self, rounds=3, batch=10, ref_budget=250 if not SMOKE else 40, log=print):
         """the pool snapshots of rounds 0..rounds (each round removes the `batch` cheapest observables)"""
         W = self.weights(); qset = set(F.observables_used(self.start)); PP = self.build_paths(qset, W); snaps = [PP]
         for rd in range(rounds):
@@ -164,7 +165,7 @@ class Step4:
             out.append(dict(neuron=nr['neuron'], intercept=b, terms=list(acc.values())))
         return out
 
-    def candidate(self, PP, n_keep, steps=300):
+    def candidate(self, PP, n_keep, steps=300 if not SMOKE else 30):
         """one budget from one pool snapshot -> {digits: formula}"""
         Wr = self.weights_raw()
         g = self.refit_onesided(self.canon(self.refit_onesided(assemble(PP, n_keep), Wr)), Wr)

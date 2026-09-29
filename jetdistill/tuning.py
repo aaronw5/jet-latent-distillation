@@ -18,8 +18,9 @@ is halved, down to 2 %."""
 import numpy as np
 from . import formula as F
 
-STEPS, LR = 800, 3e-3
-STEPS_BY_TARGET = dict(labels=500)     # as in the original runs
+from .config import SMOKE
+STEPS, LR = (800 if not SMOKE else 100), 3e-3
+STEPS_BY_TARGET = dict(labels=500) if not SMOKE else {}     # as in the original runs
 TOL = dict(probabilities=0.001, decisions=0.001, labels=0.001, neurons=0.005)
 
 
