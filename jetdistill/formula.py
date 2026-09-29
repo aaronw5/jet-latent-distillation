@@ -34,8 +34,7 @@ def bases(formula, Q):
 
 def pre_activations(formula, Q):
     """(J, 16): each neuron before its ReLU"""
-    return np.stack([nr['intercept'] + (B @ np.array([t['coef'] for t in nr['terms']]) if nr['terms'] else 0.0)
-                     for nr, B in zip(formula, bases(formula, Q))], 1)
+    return np.stack([nr['intercept'] + B @ np.array([t['coef'] for t in nr['terms']], np.float64).reshape(-1) for nr, B in zip(formula, bases(formula, Q))], 1)
 
 
 def hidden(formula, Q):

@@ -46,6 +46,7 @@ const qa=q=>`<a href="#" class="ql" onclick="qpop(decodeURIComponent('${encodeUR
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const el=document.getElementById('qpop');if(el)el.remove()}});
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const cur=v=>LEN=='long'?D.versions[v]:LEN=='sr'?((D.sr||{})[v]):((D.compact||{})[v]||{})[LEN];
+let QN={};const qn=q=>/^S\d+$/.test(q)?q:(QN[q]||q);
 const tval=t=>`${num(t)}`;
 const massNote=(t)=>{for(const [k,m] of Object.entries(D.masses))for(const c of [.5,1,1.5,2])if(Math.abs(t-c*m)<1e-6)return ` (${c==1?'':c+'×'}${k.replace('m_','m_')})`;return ''};
 const shapeTxt=(q,k,p,mu,sd)=>k=='lin'?qn(q):k=='sq'?`${qn(q)}²`:k=='cube'?`${qn(q)}³`:k=='sqrt'?`√${qn(q)}`:k=='log'?`log ${qn(q)}`:k=='exp'?`exp((${qn(q)} − ${num(mu)}) / ${num(sd)})`:k=='bump'?`exp(−((${qn(q)} − ${num(p[0])}${massNote(p[0])}) / ${num(p[1])})²)`:k=='gt'?`(${qn(q)} − ${num(p)})`:`(${num(p)} − ${qn(q)})`;
@@ -63,12 +64,17 @@ function hist(h){const W=420,H=180,L=36,B=26,bn=h.bins,n=bn.length-1,mx=Math.max
  const line=(arr,col,dash)=>`<path d="${arr.map((v,i)=>`${i?'L':'M'}${px(i).toFixed(1)},${py(v).toFixed(1)} L${px(i+1).toFixed(1)},${py(v).toFixed(1)}`).join(' ')}" fill="none" stroke="${col}" stroke-width="1.6" ${dash?'stroke-dasharray="4 3"':''}/>`;
  return `<svg width="${W}" height="${H}"><rect x="${L}" y="4" width="${W-L-8}" height="${H-B-4}" fill="#fff" stroke="#d0d5dd"/>${line(h.real,'#1d2433')}${line(h.formula,'#2b6cb0')}
  <text x="${L}" y="${H-10}" font-size="9">${num(bn[0])}</text><text x="${W-8}" y="${H-10}" font-size="9" text-anchor="end">${num(bn[n])}</text><text x="${(L+W)/2}" y="${H-2}" font-size="9.5" text-anchor="middle">neuron value (jets with value 0 not drawn)</text></svg>`}
+let TAB='results';const TABS=[['results','Results'],['explain','Neuron Interpretation'],['scores','Class-Score Decomposition'],['tryjet','Per-Jet Evaluation'],['made','Methodology'],['python','Python Implementation']];
 function drawBar(){document.getElementById('bar').innerHTML=`<div>${TABS.map(([k,l])=>`<button class="tab${k==TAB?' on':''}" onclick="TAB='${k}';show()">${l}</button>`).join('')}</div>`}
 function show(){for(const [k] of TABS){const e=document.getElementById('p-'+k);if(e)e.hidden=k!=TAB}redraw();window.scrollTo(0,0)}
+let TV=null;
 const tnode=(nd,path)=>{if(nd.leaf)return `<span class="pill" style="background:${COL[nd.leaf]}">${nd.leaf}</span> <span class="cnt">${nd.n.toLocaleString()} fit jets, ${pct(nd.purity)} of them decided ${nd.leaf} by the network</span>`;
  return `<details data-p="${path}" ontoggle="if(this.open&&!this.dataset.done){this.dataset.done=1;this.querySelector('div').innerHTML=tkids(this.dataset.p)}"><summary>if ${qa(nd.q)} ≤ ${num(nd.t)} <span class="cnt">(${nd.n.toLocaleString()} jets)</span></summary><div style="margin-left:18px;border-left:1px solid var(--line);padding-left:8px"></div></details>`};
 const tget=path=>{let nd=D.tree.variants[TV].tree;for(const c of path.split('').filter(Boolean))nd=c=='l'?nd.le:nd.gt;return nd};
 window.tkids=path=>{const nd=tget(path);return `<div><b>yes:</b> ${tnode(nd.le,path+'l')}</div><div><b>no</b> (${esc(nd.q)} > ${num(nd.t)}): ${tnode(nd.gt,path+'g')}</div>`};
+let PYSEL=null;
+let FT=null,FK='scoretree',FPATH=[],FJ=null,FJI=-1,FJSRC='',FBIG={},PYO=null,NODES=[],FMSG='';
+const KINDS=[['formula','the formula (class score → neurons → if-statements)'],['scoretree','small tree + score tests'],['tree','small tree (quantities only)'],['scoretree_big','bigger tree + score tests'],['tree_big','bigger tree (quantities only)']];
 const fmt=v=>{const a=Math.abs(v);return a===0?'0':a>=100?v.toFixed(1):a>=1?v.toFixed(3):a>=0.01?v.toFixed(4):v.toPrecision(3)};
 function fpiece(Q,q,k,t){const x=Q[q];return k==='lin'?x:(k==='gt'?Math.max(0,x-t):Math.max(0,t-x))}
 function ftermV(Q,t){return fpiece(Q,t.q,t.kind,t.t)*(t.q2?fpiece(Q,t.q2,t.kind2,t.t2):1)}
@@ -133,6 +139,8 @@ function drawFormulas(){const el=document.getElementById('formulas');if(!el)retu
  h+=`<div class="card">${body}</div>`;
  el.innerHTML=h}
 function fFollow(){const T=fTree();if(!T||!FJ)return;const w=fWalk(T,FJ);const cur=FPATH.length?FPATH[FPATH.length-1]:T.tree;let nd=cur;for(let k=0;k<2&&!('leaf' in nd);k++)nd=fVal(nd.f,FJ,w.S)>nd.t?nd.gt:nd.le;if(nd!==cur&&!('leaf' in nd))FPATH.push(nd);drawFormulas()}
+let MMET='rej50',MSEL=null;
+const MMETS=[['rej30','rejection at 30% efficiency'],['rej50','at 50%'],['rej80','at 80%'],['auc','AUC'],['op','own decision: efficiency / rejection']];
 function rKey(m){return m.family+'|'+(m.formula||'')+'|'+(m.kind||m.name)}
 function drawResults(){const el=document.getElementById('results');if(!el)return;const M=D.metrics;if(!M){el.innerHTML='<div class="card">No results for this network yet.</div>';return}const pre=ROS?rosCompare():'';
  const ms=M.models,net=ms[0],pc=v=>v==null?'–':(100*v).toFixed(2)+'%',f1=v=>v==null?'–':v>=1000?Math.round(v).toLocaleString():v>=10?v.toFixed(1):v.toFixed(2);
@@ -155,9 +163,11 @@ function drawResults(){const el=document.getElementById('results');if(!el)return
  <div>show: ${MMETS.map(([k,l])=>`<button class="btn${k==MMET?' on':''}" onclick="MMET='${k}';drawResults()">${l}</button>`).join(' ')}</div>
  <div style="overflow-x:auto;margin-top:6px"><table><tr><th>ROC</th><th>model</th><th>size</th><th class="num">accuracy</th><th class="num">vs network (points)</th><th class="num">same class as the network</th><th class="num">same class as its formula</th>${CL.map(c=>`<th class="num" style="color:${COL[c]}">${c}</th>`).join('')}</tr>${rows}</table></div></div>
  <div class="card"><b>ROC curves of the ticked models</b> <span class="cnt">(background rejection against signal efficiency, log scale; the dot is the model's own decision)</span><div style="margin:4px 0">${sel.map((m,i)=>`<span style="color:${palette[i%palette.length]};margin-right:12px">■ ${esc(m.family==='formula'?m.formula+' terms: '+(m.kind==='formula'?'formula':m.name):m.name)}</span>`).join('')}</div><div class="grid">${rocs}</div></div>`}
+let XT=null;let LZ={},LZN=0,XOPEN=new Set(),XSEC=new Set([...Array(16).keys()].map(j=>j+'-4'));
 function lz(fn){const k='z'+(LZN++);LZ[k]=fn;return k}
 function lzOpen(d){if(d.open&&!d.dataset.done){d.dataset.done=1;const b=d.querySelector(':scope>.lzb');if(b&&LZ[d.dataset.lz])b.innerHTML=LZ[d.dataset.lz]()}}
 function lzDetails(cls,summary,fn,open,extra){const k=lz(fn);return `<details class="${cls}" data-lz="${k}"${open?' open data-done="1"':''} ontoggle="lzOpen(this)${extra||''}"><summary>${summary}</summary><div class="lzb">${open?fn():''}</div></details>`}
+const DIV_P='#0e7490',DIV_N='#92400e';
 function xImg(img,diff,sz){const n=img.length,c=sz/n;let mx=0;for(const r of img)for(const v of r)mx=Math.max(mx,Math.abs(v));mx=mx||1;let s='';
  for(let i=0;i<n;i++)for(let j=0;j<n;j++){const v=img[n-1-i][j];if(!v)continue;const a=Math.sqrt(Math.min(1,Math.abs(v)/mx));s+=`<rect x="${(j*c).toFixed(1)}" y="${(i*c).toFixed(1)}" width="${c.toFixed(1)}" height="${c.toFixed(1)}" fill="${diff?(v>0?DIV_P:DIV_N):'#1d2433'}" fill-opacity="${a.toFixed(3)}"><title>${diff?(v>0?'more':'less')+' pT here than in all jets':'pT share'}: ${(100*v).toFixed(2)}%</title></rect>`}
  return `<svg viewBox="0 0 ${sz} ${sz}" width="${sz}" height="${sz}" style="background:#fff;border:1px solid #d0d5dd"><line x1="${sz/2}" x2="${sz/2}" y1="0" y2="${sz}" stroke="#eef0f3"/><line y1="${sz/2}" y2="${sz/2}" x1="0" x2="${sz}" stroke="#eef0f3"/>${s}</svg>`}
@@ -259,6 +269,7 @@ function xCombos(n,j,ref){if(!n.combos.length)return '';const T=n.combo_tests,CT
    ${L.length>1?`<div class="cnt" style="margin-top:6px"><b>Its ${L.length} finer groups</b> (largest first; what split each off is shown under its name)</div>`+L.map(f=>lzDetails('xterm',`${head(f,false)}<div class="cnt" style="margin-left:14px">split off by: ${esc(f._path.join(' › '))}</div>`,()=>`<div style="margin:4px 0 6px 14px">${xGroupBody(f,n,T,ref,null)}</div>`)).join(''):''}
   </div>`)});
  return h}
+const CUTC='#0e7490';
 function xArea(allv,selv,edges,W,h,lab,logx,unit){const n=allv.length,L=6,X=i=>L+(W-L-6)*i/n,mx=Math.max(...allv,1e-12),Y=v=>4+(h-10)*(1-v/mx);
  const path=a=>{let d=`M${X(0).toFixed(1)},${(h-6).toFixed(1)}`;a.forEach((v,i)=>{d+=`L${X(i).toFixed(1)},${Y(v).toFixed(1)}L${X(i+1).toFixed(1)},${Y(v).toFixed(1)}`});return d+`L${X(n).toFixed(1)},${(h-6).toFixed(1)}Z`};
  const tot=allv.reduce((a,b)=>a+b,0),sel=selv.reduce((a,b)=>a+b,0);
@@ -282,6 +293,7 @@ function xExample(c,T){const x=c.example;if(!x)return '';const L=[`start value  
  return `<div style="margin-top:6px"><div class="cnt"><b>One typical jet of this combination, worked out</b> (the jet with the median neuron value):</div><pre class="xpre" style="margin:2px 0">${esc(L.join('\n'))}</pre></div>`}
 function xQCut(t){const H=t.hist;if(!H||!H.all||!H.passing)return '';return xArea(H.all,H.passing,H.edges,200,56,esc(t.q)+':',false,'')}
 function xAbsRow(p,ref,t){return `<div class="cnt" style="margin-top:6px"><b>On an absolute scale</b> — which part of each distribution of all jets these jets are:</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">${t?xQCut(t):''}${xCutPt(p,ref)}${p.image?xImgOver(p,ref,100):''}</div>`}
+let TJ={tag:null,jet:null,src:'',i:-1,open:null,msg:'',pyo:null};
 function tjForms(){return Object.keys(D.explain||{}).sort(tagOrd)}
 function tjEval(tag,Q){const A=D.explain[tag].anat,L=D.last,H=[],Z=[],TV=[];
  for(const n of [...A.neurons].sort((a,b)=>a.neuron-b.neuron)){let z=n.intercept;const tv=n.terms.map(t=>{const v=t.coef*ftermV(Q,t);z+=v;return v});const j=n.neuron,f=L.f7[j],i=L.i7[j];Z[j]=z;TV[j]=tv;H[j]=(Math.floor(Math.max(z,0)*2**f+0.5)/2**f)%(2**i)}
@@ -339,6 +351,7 @@ function drawTryJet(){const el=document.getElementById('tryjet');if(!el)return;c
     <tr><td></td><td><b>sum z = ${xFmt(R.Z[j])}</b> → neuron = max(0, z), rounded</td><td></td><td class="num"><b>${R.H[j].toFixed(2)}</b></td></tr></table>
     <div class="cnt" style="margin-top:4px">what this neuron adds to each class score for this jet: ${CL.map((c,i)=>`<b style="color:${COL[c]}">${c}</b> ${(R.H[j]*K[j][i]>=0?'+':'')+(R.H[j]*K[j][i]).toFixed(2)}`).join(' · ')}</div></div>`}}
  el.innerHTML=h+'</div></div>'}
+let XSORT='importance';
 function xAddsChart(t){const H=t.hist;if(!H)return '';const W=270,h=96,L=44,e=H.edges,x0=e[0],x1=e[e.length-1],X=v=>L+(W-L-8)*(v-x0)/(x1-x0);
  const hinge=(k,th,v)=>k==='lin'?v:k==='gt'?Math.max(0,v-th):Math.max(0,th-v),m2=t.q2?hinge(t.kind2,t.t2,t.q2_median_when_passing??0):1;
  const xs=[...Array(81).keys()].map(i=>x0+(x1-x0)*i/80),ys=xs.map(v=>t.coef*hinge(t.kind,t.t,v)*m2),M=Math.max(...ys.map(Math.abs),1e-9),Y=v=>h/2-(h/2-8)*v/M;
@@ -371,6 +384,7 @@ function drawScores(){const el=document.getElementById('scores');if(!el)return;c
   <div>${xGroup('highest 10% of score '+c,S.top10,ref)}</div></div>`}
  h+=`</div>`;
  el.innerHTML=h}
+const XLOAD={};
 function xReady(t){const X=D.explain[t];if(X&&X.anat)return true;if(!XLOAD[t]){XLOAD[t]=1;fetch(X.file).then(r=>r.json()).then(o=>{xUnslim(o);Object.assign(D.explain[t],o);drawExplain();drawScores();drawTryJet()}).catch(e=>{XLOAD[t]='error: '+e;drawExplain();drawScores();drawTryJet()})}return false}
 function xUnslim(o){for(const n of o.anat.neurons){const w=c=>{const x=c.example;if(x&&x.qv&&!x.values)x.values=n.terms.map(t=>({q:t.q,v:x.qv[t.q],q2:t.q2,v2:t.q2?x.qv[t.q2]:undefined}));(c.children||[]).forEach(w)};n.combos.forEach(w)}}
 function tagOrd(a,b){const o={network:0,'network-simplified':1,labels:2,'labels-simplified':3,neurons:4,'neurons-simplified':5},f=t=>ROS&&D.fam?(o[D.fam[t]]??6):0;return f(a)-f(b)||b-a}
@@ -491,6 +505,7 @@ function drawPython(){const P=D.py||{},ks=Object.keys(P),el=document.getElementB
  h+=`<div class="card"><b>${r.file}</b> <a class="btn" href="${r.file}" target="_blank" rel="noopener">open</a> <span class="cnt">run it with <code>python3 ${r.file}</code> to classify an example jet</span></div><pre style="max-height:760px;overflow:auto">${r.text!=null?esc(r.text):'loading …'}</pre>`;
  if(r.text==null&&!r._loading){r._loading=1;fetch(r.file).then(x=>x.text()).then(t=>{r.text=t;drawPython()}).catch(e=>{r.text='(could not load '+r.file+' here: '+e+'; open the page from the website)';drawPython()})}
  el.innerHTML=h}
+const ROSDRAW={results:drawResults,explain:()=>{drawExplain();drawScores()},scores:()=>{drawExplain();drawScores()},tryjet:drawTryJet,formulas:drawFormulas,made:drawMade,python:drawPython};
 function redraw(){drawBar();(ROSDRAW[TAB]||drawResults)()}
 {XT=FT=TJ.tag=D.main;PYSEL='formula '+D.main;document.title='Distilling the Latent Space of a Real-Time Jet Tagger into Interpretable Physics Equations';document.querySelector('h1').innerHTML='Distilling the Latent Space of a Real-Time Jet Tagger into Interpretable Physics Equations <span class="cnt" style="font-size:15px;font-weight:400">— the jet tagger’s last hidden layer, translated into if-statements</span>';
  document.getElementById('sub').innerHTML=`${D.exp?`<div style="margin-bottom:6px"><b>Version: ${D.exp.label}.</b> <span class="cnt">Observables: ${D.exp.obs}.</span></div>`:''}The JEDI-linear jet tagger (${D.n} particles; classes g, q, W, Z, t) decides from 16 numbers, its last hidden layer (“jet layer 4”). Here each of those 16 numbers is written as a sum of if-statements on physics quantities of the jet (mass, width, how the pT is shared, …), <b>tuned so that the network’s own last step makes the same decisions as the network</b>. Every number on ${(D.metrics||{n_jets:0}).n_jets.toLocaleString()} test jets.`}
