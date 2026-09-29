@@ -117,9 +117,10 @@ def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=print):
         if np.ptp(zj['fit']) < 1e-9:
             neurons.append(dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True)); continue
         terms, coef, path = fit_neuron(zj, Q, keys, knots, sel)
-        Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = np.maximum(zj['test'], 0)
-        r2 = float(1 - ((ht - np.maximum(Bt @ coef, 0)) ** 2).mean() / max(ht.var(), 1e-12))
-        neurons.append(dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c)) for t, c in zip(terms, coef[1:])], dev_r2_path=path, test_r2=r2))
+        Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = np.maximum(zj['test'], 0); zt = Bt @ coef
+        r2h = lambda z: float(1 - ((ht - np.maximum(z, 0)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
+        imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
+        neurons.append(dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c), importance=m) for t, c, m in zip(terms, coef[1:], imp)], dev_r2_path=path, test_r2=r2))
         log(f'neuron {j}: {len(terms)} terms, R² on test jets {r2:.4f}, {time.time() - t0:.0f} s')
     res = dict(setup=setup_name, n=n, untrained=untrained, lowlevel=lowlevel, observables=keys, n_thresholds={k: len(v) for k, v in knots.items()},
                jets=dict(fit=len(Z['fit']), dev=len(Z['dev']), test=len(Z['test'])), neurons=neurons)
