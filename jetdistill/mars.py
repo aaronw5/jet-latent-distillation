@@ -18,6 +18,10 @@ from .config import SETUPS, MASSES, MASS_MULT, RESULTS
 from .network import Network
 from .observables import library, compute, mass_ids
 
+
+def log(*a):
+    print(*a, flush=True)
+
 N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (100 if not config.SMOKE else 10), 12000, 5
 
 
@@ -30,7 +34,7 @@ def splits(n, untrained=False, sizes=None):
     return out, net
 
 
-def candidate_observables(setup, n, Q, lowlevel=False, log=print):
+def candidate_observables(setup, n, Q, lowlevel=False, log=log):
     """the observables step 1 may use in this setup (finite and not constant on every split)"""
     lib = library(n); drop = mass_ids(n) if setup.no_mass else set()
     if setup.strict:                                     # also every observable that is (m / ΣpT)² in disguise
@@ -103,7 +107,7 @@ def _lstsq(terms, Qf, target, NF):
     B = np.stack([np.ones(NF)] + [term_value(t, Qf) for t in terms], 1); return np.linalg.lstsq(B, target, rcond=None)[0]
 
 
-def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=print):
+def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log):
     t0 = time.time(); setup = SETUPS[setup_name]
     S, net = splits(n, untrained)
     Q = {s: S[s][2] for s in S}; Z = {s: S[s][1]['z'] for s in S}

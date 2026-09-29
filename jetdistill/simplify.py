@@ -23,6 +23,10 @@ from .network import round_wrap
 TOL = dict(agree=0.005, acc=0.004, neuron=0.01)
 KC = {'lin': 0, 'gt': 1, 'lt': 2}
 from .config import SMOKE
+
+
+def log(*a):
+    print(*a, flush=True)
 BUDGETS = (600, 500, 400, 350, 300, 250, 200, 150, 120) if not SMOKE else (60, 40)
 
 
@@ -86,7 +90,7 @@ class Step4:
             out[j] = dict(pool=P, G=G, r=r, yy=yy, sd=sd, full=full, path=path)
         return out
 
-    def pools(self, rounds=3, batch=10, ref_budget=250 if not SMOKE else 40, log=print):
+    def pools(self, rounds=3, batch=10, ref_budget=250 if not SMOKE else 40, log=log):
         """the pool snapshots of rounds 0..rounds (each round removes the `batch` cheapest observables)"""
         W = self.weights(); qset = set(F.observables_used(self.start)); PP = self.build_paths(qset, W); snaps = [PP]
         for rd in range(rounds):
@@ -262,7 +266,7 @@ def sort_formula(f):
     return [dict(neuron=nr['neuron'], intercept=nr['intercept'], terms=sorted(nr['terms'], key=lambda t: (bool(t.get('q2')), t['q'], t.get('q2') or '', KC[t['kind']], t.get('t') or 0, t.get('t2') or 0))) for nr in f]
 
 
-def run(start, jets, last, metric, total_budgets=BUDGETS, snapshots=(0, 1), log=print):
+def run(start, jets, last, metric, total_budgets=BUDGETS, snapshots=(0, 1), log=log):
     """all candidates (budgets below the START size, pool rounds 0 and 1, 2 and 3 significant digits) and the choice"""
     S = Step4(start, jets, last, metric); PPs = S.pools(log=log); cands = []
     for r in snapshots:

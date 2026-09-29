@@ -20,6 +20,10 @@ from .config import SETUPS, RESULTS, FIDELITY_LAMBDA
 from .network import Network
 from .observables import compute, library
 
+
+def log(*a):
+    print(*a, flush=True)
+
 FAMILIES = dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons')) if not config.SMOKE else \
            dict(network=((8, 5), None), labels=((5,), 'labels'), neurons=((8,), 'neurons'))
 STEP4_METRIC = dict(network='agree', labels='acc', neurons='neuron')
@@ -30,7 +34,7 @@ def out_dir(setup, n): return RESULTS / setup / f'n{n}'
 
 
 # ---------------------------------------------------------------- cached jets
-def jets(n, which, log=print):
+def jets(n, which, log=log):
     """dict(Q=observables, y=true class, net=network class, P=network probabilities, Z=network pre-activations, H=ReLU(Z));
     which: 'fit' (150,000 training jets), 'dev' (25,000), 'full_test' (the whole test file), 'explain' (60,000 training jets)"""
     f = RESULTS / '_jets' / f'n{n}' / f'{which}.npz'
@@ -84,12 +88,12 @@ def load_formula(setup, n, tag):
 
 
 # ---------------------------------------------------------------- stages
-def stage_step1(setup, n, log=print):
+def stage_step1(setup, n, log=log):
     src = SETUPS[setup].step1_from or setup
     if not (out_dir(src, n) / 'step1.json').exists(): mars.run(src, n, log=log)
 
 
-def stage_tune(setup, n, log=print):
+def stage_tune(setup, n, log=log):
     S = SETUPS[setup]; long = mars.load(setup, n); last = Network(n).last
     fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT); dev = jets(n, 'dev', log); fams = dict(FAMILIES)
     fams['network'] = (fams['network'][0], S.target or 'probabilities')
@@ -109,7 +113,7 @@ def main_formula(setup, n, family):
     return next((t for t, m in formulas(setup, n).items() if m['family'] == family and m['role'] == 'main'), None)
 
 
-def stage_step4(setup, n, log=print):
+def stage_step4(setup, n, log=log):
     last = Network(n).last; J = dict(fit=jets(n, 'fit', log), dev=jets(n, 'dev', log))
     drop_formulas(setup, n, lambda m: m['role'] != 'step4')
     for fam in ('network', 'labels', 'neurons'):
@@ -120,7 +124,7 @@ def stage_step4(setup, n, log=print):
         if chosen: log(f"{fam}: smaller version {add_formula(setup, n, chosen, fam, 'step4', f'smaller version of the {tag} ({TITLES[fam]}; step 4)', parent=tag)}")
 
 
-def stage_export(setup, n, check_jets=5000, log=print):
+def stage_export(setup, n, check_jets=5000, log=log):
     last = Network(n).last; test = jets(n, 'full_test', log); fit = jets(n, 'fit', log)
     ranges = {q: (float(min(test['Q'][q].min(), fit['Q'][q].min())), float(max(test['Q'][q].max(), fit['Q'][q].max()))) for q in test['Q']}
     for tag, m in formulas(setup, n).items():
@@ -136,7 +140,7 @@ def stage_export(setup, n, check_jets=5000, log=print):
         assert s1 == 1.0 and s2 == 1.0, f'exported files of {tag} differ from the formula'
 
 
-def stage_explain(setup, n, log=print):
+def stage_explain(setup, n, log=log):
     from .explain import pack as P, anatomy as A
     last = Network(n).last; ex = jets(n, 'explain', log); dev = jets(n, 'dev', log); test = jets(n, 'full_test', log)
     for tag, m in formulas(setup, n).items():
@@ -150,7 +154,7 @@ def stage_explain(setup, n, log=print):
         log(f'{tag}: explanation data written')
 
 
-def stage_metrics(setup, n, log=print):
+def stage_metrics(setup, n, log=log):
     last = Network(n).last; test = jets(n, 'full_test', log)
     rows = [dict(family='network', name='the network', **metrics.metrics(test['L'], test['y'], test['net']))]
     for tag, m in formulas(setup, n).items():
@@ -163,7 +167,7 @@ def stage_metrics(setup, n, log=print):
     for r in rows: log(f"{r['name'][:70]:70s} accuracy {100 * r['accuracy']:.2f}%  same as the network {100 * r['same_as_network']:.2f}%")
 
 
-def stage_page(setup, n, log=print):
+def stage_page(setup, n, log=log):
     from .site import page
     log(f'page: {page.build(setup, n)}')
 

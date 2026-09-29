@@ -19,6 +19,10 @@ import numpy as np
 from . import formula as F
 
 from .config import SMOKE
+
+
+def log(*a):
+    print(*a, flush=True)
 STEPS, LR = (800 if not SMOKE else 100), 3e-3
 STEPS_BY_TARGET = dict(labels=500) if not SMOKE else {}     # as in the original runs
 TOL = dict(probabilities=0.001, decisions=0.001, labels=0.001, neurons=0.005)
@@ -84,7 +88,7 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR):
     return F.with_coefs(formula, [(np.asarray(c / s, np.float64), float(c0)) for (c, c0), s in zip(best[1], sd)]), best[0]
 
 
-def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=0.02, log=print):
+def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=0.02, log=log):
     """step 3; returns (pruned formula, path of (terms, validation score))"""
     cur, ref = train(formula, Qf, Qd, target, fit, dev, last, lam); path = [(F.n_terms(cur), ref)]
     log(f'step 2: {path[-1][0]} terms, validation {ref:.4f}')
