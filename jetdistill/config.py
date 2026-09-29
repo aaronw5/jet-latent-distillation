@@ -25,13 +25,13 @@ class Setup(dict):
 
 
 SETUPS = {
-    'all': Setup(label='All observables', page_desc='all jet quantities; candidate thresholds: the 5–95% quantiles of each quantity, plus the W/Z/H/top masses (and ×½, ×1.5, ×2) for mass quantities',
+    'all': Setup(label='All observables', page_desc='all jet quantities, including the jet mass and masses of particle subsets; candidate thresholds: the 5–95% quantiles of each quantity, and for mass quantities also 0.5, 1, 1.5 and 2 × m_W, m_Z, m_H, m_t',
                  masses_as_thresholds=True),
-    'nophys': Setup(label='No mass values as thresholds', page_desc='all jet quantities; candidate thresholds: only the 5–95% quantiles (no W/Z/H/top mass values offered)',
+    'nophys': Setup(label='No W, Z or top mass as a candidate threshold', page_desc='all jet quantities, including the jet mass; candidate thresholds: only the 5–95% quantiles of each quantity (no W, Z, H or top mass values offered)',
                     masses_as_thresholds=False),
-    'nomass': Setup(label='No mass observables', page_desc='no quantity with units of mass (jet mass, masses of particle subsets, subjets, soft drop) and no ratio built from masses',
+    'nomass': Setup(label='No mass observables', page_desc='no mass quantities (jet mass, masses of particle subsets, subjet and soft-drop masses, m/pT are excluded); candidate thresholds: the 5–95% quantiles of each quantity',
                     masses_as_thresholds=False, no_mass=True),
-    'nomass_strict': Setup(label='No mass observables or exact equivalents', page_desc='as “No mass observables”, and also no quantity equal to (m/ΣpT)² in disguise (|correlation| > 0.98 on the training jets)',
+    'nomass_strict': Setup(label='No mass observables or exact equivalents', page_desc='no mass quantities, and also no quantity equal to (m/ΣpT)² in disguise (|correlation| > 0.98: Σ zᵢzⱼΔRᵢⱼ², Σ zΔR², λ₁ + λ₂, …); candidate thresholds: the 5–95% quantiles of each quantity',
                            masses_as_thresholds=False, no_mass=True, strict=True),
     'all_agree': Setup(label='All observables, tuned for agreement', page_desc='as “All observables”; step 2 is tuned toward the network’s decision for each jet (its class) instead of its probabilities',
                        masses_as_thresholds=True, step1_from='all', target='decisions', truth_family=False),

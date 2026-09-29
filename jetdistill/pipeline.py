@@ -156,7 +156,10 @@ def stage_metrics(setup, n, log=print):
     for tag, m in formulas(setup, n).items():
         rows.append(dict(family=m['family'], formula=tag, name=m['title'], terms=m['terms'], parent=m.get('parent'),
                          **metrics.metrics(F.logits(load_formula(setup, n, tag), test['Q'], last), test['y'], test['net'])))
-    (out_dir(setup, n) / 'metrics.json').write_text(json.dumps(dict(n_jets=int(len(test['y'])), models=rows)))
+    long = mars.load(setup, n); fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT)          # step 1 alone: 100 terms per neuron, least squares
+    step1 = tuning.refit([dict(nr, terms=nr['terms'][:100]) for nr in long], fit['Q'], fit['Z'])
+    s1 = dict(name=f'{F.n_terms(step1)} (step 1: if-statements fitted to each neuron separately)', terms=F.n_terms(step1), **metrics.metrics(F.logits(step1, test['Q'], last), test['y'], test['net']))
+    (out_dir(setup, n) / 'metrics.json').write_text(json.dumps(dict(n_jets=int(len(test['y'])), models=rows, step1=s1)))
     for r in rows: log(f"{r['name'][:70]:70s} accuracy {100 * r['accuracy']:.2f}%  same as the network {100 * r['same_as_network']:.2f}%")
 
 
