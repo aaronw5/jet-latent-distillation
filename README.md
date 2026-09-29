@@ -17,6 +17,11 @@ Site: https://aaronw5.github.io/jet-tagger-distillation/
 | 64 particles | tuned on the network | 690 | 94.18 % | 81.37 % (80.94 %) |
 | 64 particles | smaller version | 250 | 93.70 % | 81.18 % |
 
+**Control.** The same step 1 on an untrained copy of the network (random weights at each layer's trained scale, the same
+number formats) explains a median 16 % of each neuron's variance at 64 particles (55 % at 8), against 92 % (89 %) for the
+trained network. Boosted trees on the raw particle inputs explain 79 % (83 %) of the trained neurons: less than the physics
+observables do. Step 1 on the raw inputs only explains 42 % (58 %).
+
 Nothing is fitted or chosen on the test file: fitting uses jets of the training archive, choices (lengths, sizes) use
 validation jets of the training archive, and the validation archive of the dataset is the test file.
 
