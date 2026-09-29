@@ -22,6 +22,10 @@ number formats) explains a median 16 % of each neuron's variance at 64 particles
 trained network. Boosted trees on the raw particle inputs explain 79 % (83 %) of the trained neurons: less than the physics
 observables do. Step 1 on the raw inputs only explains 42 % (58 %).
 
+A run of this repository (`python -m jetdistill.pipeline all 8`, 1.2 hours) reproduces the 8-particle numbers: 805
+if-statements, 90.57 % / 65.66 %; smaller version 399, 90.06 % / 65.56 %; step 1 identical. Formula sizes can differ
+slightly between runs, since pruning keeps any cut that stays within 0.1 point of validation agreement.
+
 Nothing is fitted or chosen on the test file: fitting uses jets of the training archive, choices (lengths, sizes) use
 validation jets of the training archive, and the validation archive of the dataset is the test file.
 
