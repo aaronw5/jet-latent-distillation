@@ -4,7 +4,7 @@ The control network has fresh random weights at each layer's trained scale (kern
 from a Gaussian with that weight's trained mean and spread) and the trained number formats. Step 1 runs on it with the
 same observables as the setup 'all'. Per neuron that varies:
   R² on the test jets, R² along the forward selection (validation jets), which kinds of observables carry it (term
-  importance by category), how well it separates one class from the rest (best AUC), how much of it the jet mass alone
+  importance by category; the share on orientation-only observables, Δη or Δφ alone), how well it separates one class from the rest (best AUC), how much of it the jet mass alone
   explains (R² of its mean in 1-GeV mass bins).
 Two further checks, both fitted on training jets and scored on test jets:
   learnable  boosted trees on the raw particle inputs (no observables): can anything describe the neuron?
@@ -20,6 +20,17 @@ from ..observables import compute
 
 KS = [1, 2, 3, 5, 10, 18, 30, 45, 60, 100]
 CATS = ['mass', 'prong structure', 'width and shape', 'pT and multiplicity', 'single particles']
+ORIENTATION = re.compile(r'^(mean_eta2?|mean_phi2?|eta_\d+|phi_\d+|abseta_\d+|absphi_\d+|orientation_deg)$')   # depend on Δη or Δφ alone
+
+
+def orientation_share(neurons):
+    """share of the formula's term importance on observables that depend on the jet's orientation (Δη or Δφ alone), not on
+    distances; a random network's neurons are mostly fitted by these"""
+    tot = d = 0.0
+    for nr in neurons:
+        for t in nr['terms']:
+            qs = [q for q in (t['q'], t.get('q2')) if q]; w = abs(t['importance']); tot += w; d += w * sum(bool(ORIENTATION.match(q)) for q in qs) / len(qs)
+    return d / max(tot, 1e-12)
 
 
 def category(q):
@@ -69,7 +80,7 @@ def compare(n):
     for lab, f, un in (('trained', RESULTS / 'all' / f'n{n}' / 'step1.json', False), ('untrained', out_dir(n) / 'step1_untrained.json', True)):
         N = summary(json.loads(f.read_text())['neurons']); P = per_neuron(np.maximum(Network(n, untrained=un).run(x)['z'], 0), y, m)
         for nr in N: nr.update(P.get(nr['neuron'], {}))
-        res[lab] = N
+        res[lab] = N; res[f'{lab}_orientation_share'] = orientation_share(json.loads(f.read_text())['neurons'])
         print(lab, 'median R² on test jets', round(float(np.median([r['r2_test'] for r in N])), 3), flush=True)
     (out_dir(n) / 'compare.json').write_text(json.dumps(res, indent=1))
 

@@ -37,13 +37,21 @@ def splits(n, untrained=False, sizes=None):
 def candidate_observables(setup, n, Q, lowlevel=False, log=log):
     """the observables step 1 may use in this setup (finite and not constant on every split)"""
     lib = library(n); drop = mass_ids(n) if setup.no_mass else set()
-    if setup.strict:                                     # also every observable that is (m / ΣpT)² in disguise
-        ref = Q['fit']['mass_over_sum_pt_sq']
-        for k, v in Q['fit'].items():
-            if k not in drop and np.ptp(v) > 0 and np.isfinite(v).all() and abs(np.corrcoef(v, ref)[0, 1]) > 0.98:
-                drop.add(k); log(f'strict: excluded {k} (correlation {np.corrcoef(v, ref)[0, 1]:.4f})')
+    if setup.strict: drop |= strict_equivalents(Q['fit'], drop, log)   # also every observable that is (m / ΣpT)² in disguise
     keep = [k for k in lib if k not in drop and (not lowlevel or re.fullmatch(r'(pt|eta|phi)_\d+', k))]
     return [k for k in keep if all(np.isfinite(Q[s][k]).all() for s in Q) and np.ptp(Q['fit'][k]) > 0]
+
+
+def strict_equivalents(Qfit, drop=(), log=None):
+    """observables (not already dropped) with |correlation| > 0.98 with (m / ΣpT)² on the training jets"""
+    ref = Qfit['mass_over_sum_pt_sq']; out = set()
+    for k, v in Qfit.items():
+        if k in drop or not (np.ptp(v) > 0 and np.isfinite(v).all()): continue
+        r = np.corrcoef(v, ref)[0, 1]
+        if abs(r) > 0.98:
+            out.add(k)
+            if log: log(f'strict: excluded {k} (correlation {r:.4f})')
+    return out
 
 
 def thresholds(v, mass_like, offer_masses):
