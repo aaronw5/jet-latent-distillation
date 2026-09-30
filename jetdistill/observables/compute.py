@@ -6,10 +6,9 @@ ParT networks ('kin', 'full'; N = 128) also take jet = (J, 4) jet pT, η, φ, en
 type, d0, σ(d0), dz, σ(dz) (see part/data.py) for the extra observables of library.extras."""
 import itertools
 import numpy as np
-from .library import KH, KS, TOPK, RINGS, ring_tag, library, PTYPES
+from .library import KH, KS, TOPK, RINGS, ring_tag, library, PTYPES, H3, H4, HSD
 from ..config import n_particles
 
-H3, H4, HSD = 24, 12, 20   # ECF e2/e3 on the first 24 slots, e4 on the first 12, soft drop on the first 20
 ZCUT, R0, EPS = 0.1, 0.8, 1e-30
 
 
@@ -60,24 +59,48 @@ def _dR2(u, v):
     return (ya - yb) ** 2 + dp ** 2
 
 
-def _softdrop(pt, eta, phi):
-    """Cambridge/Aachen clustering (E-scheme, rapidity-azimuth distance) of the real particles among the first HSD slots,
-    then soft drop (β = 0, z_cut = 0.1): follow the harder branch until min(pT1, pT2)/(pT1 + pT2) > z_cut.
-    Returns the groomed mass, z_g, R_g and the number of removed branches."""
-    J, H = pt.shape; real = pt > 0; rows = np.arange(J)
-    V = np.zeros((J, 2 * H, 4)); V[:, :H] = _p4(pt, eta, phi)
-    kids = -np.ones((J, 2 * H, 2), int); slot_node = np.tile(np.arange(H), (J, 1)); active = real.copy()
-    iu = np.triu(np.ones((H, H), bool), 1)
-    for s in range(H - 1):
+def _ca_tree(pt, eta, phi, batch=128):
+    """Cambridge/Aachen clustering (E-scheme, rapidity-azimuth distance) of the real particles of each jet (the first
+    slots; padding pT = 0 at the end). Returns V (J, 2H, 4) four-vectors of every node, kids (J, 2H, 2) its two children
+    (-1 for a particle) and the root node of each jet. Jets are clustered in batches of similar multiplicity, each batch
+    only over its real slots; pairwise distances are kept and only the merged node's row is recomputed after a merge
+    (the same merges, in the same order, as recomputing every distance)."""
+    J, H = pt.shape; V = np.zeros((J, 2 * H, 4)); kids = -np.ones((J, 2 * H, 2), int); root = np.zeros(J, int)
+    nreal = (pt > 0).sum(1); order = np.argsort(nreal, kind='stable')
+    for i0 in range(0, J, batch):
+        idx = order[i0:i0 + batch]; h = max(int(nreal[idx].max()), 1)
+        v, k, r = _ca_batch(pt[idx, :h], eta[idx, :h], phi[idx, :h], H)
+        V[idx] = v; kids[idx] = k; root[idx] = r
+    return V, kids, root
+
+
+def _ca_batch(pt, eta, phi, H):
+    J, h = pt.shape; rows = np.arange(J); real = pt > 0
+    V = np.zeros((J, 2 * H, 4)); V[:, :h] = _p4(pt, eta, phi); kids = -np.ones((J, 2 * H, 2), int)
+    slot_node = np.tile(np.arange(h), (J, 1)); active = real.copy(); cols = np.arange(h)
+    Y, PH = _yphi(V[:, :h])
+    def d2(ya, pa, yb, pb):                     # _dR2 on cached rapidities and azimuths
+        dp = np.mod(pa - pb + np.pi, 2 * np.pi) - np.pi; return (ya - yb) ** 2 + dp ** 2
+    D = np.where(active[:, :, None] & active[:, None] & np.triu(np.ones((h, h), bool), 1), d2(Y[:, :, None], PH[:, :, None], Y[:, None], PH[:, None]), np.inf)
+    for s in range(h - 1):
         go = active.sum(1) >= 2
         if not go.any(): break
-        Vs = V[rows[:, None], slot_node]
-        D = np.where(active[:, :, None] & active[:, None] & iu, _dR2(Vs[:, :, None], Vs[:, None]), np.inf).reshape(J, -1)
-        f = D.argmin(1); a, b = f // H, f % H
+        f = D.reshape(J, -1).argmin(1); a, b = f // h, f % h
         new = H + s; na, nb = slot_node[rows, a], slot_node[rows, b]
         V[go, new] = V[rows, na][go] + V[rows, nb][go]; kids[go, new, 0] = na[go]; kids[go, new, 1] = nb[go]
-        slot_node[go, a[go]] = new; active[go, b[go]] = False
-    cur = slot_node[rows, active.argmax(1)]; done = np.zeros(J, bool)
+        g = np.flatnonzero(go); ag, bg = a[g], b[g]
+        slot_node[g, ag] = new; active[g, bg] = False; D[g, bg, :] = np.inf; D[g, :, bg] = np.inf
+        yn, pn = _yphi(V[g, new]); Y[g, ag] = yn; PH[g, ag] = pn
+        dn = d2(yn[:, None], pn[:, None], Y[g], PH[g]); act = active[g]
+        D[g, ag, :] = np.where(act & (cols > ag[:, None]), dn, np.inf); D[g, :, ag] = np.where(act & (cols < ag[:, None]), dn, np.inf)
+    return V, kids, slot_node[rows, active.argmax(1)]
+
+
+def _softdrop(pt, eta, phi, tree=None):
+    """soft drop (β = 0, z_cut = 0.1) on the C/A tree: follow the harder branch until min(pT1, pT2)/(pT1 + pT2) > z_cut.
+    Returns the groomed mass, z_g, R_g and the number of removed branches."""
+    J, H = pt.shape; rows = np.arange(J)
+    V, kids, cur = tree if tree is not None else _ca_tree(pt, eta, phi); done = np.zeros(J, bool)
     mass, zg, rg, nrm = np.zeros(J), np.zeros(J), np.zeros(J), np.zeros(J)
     for _ in range(H):
         c1, c2 = kids[rows, cur, 0], kids[rows, cur, 1]; done |= c1 < 0

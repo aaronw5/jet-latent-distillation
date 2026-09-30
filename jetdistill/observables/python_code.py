@@ -3,7 +3,7 @@
 quantities_source(ids, n) returns the source of  quantities(pt, eta, phi) -> SimpleNamespace(<id>=value, ...)  with only
 the helper blocks the requested observables need. The expressions come from library.py."""
 import re
-from .library import library
+from .library import library, H3, H4, HSD
 
 HELPERS = '''    n = len(pt)
     P = range(n)
@@ -51,7 +51,7 @@ TENSOR = '''
 '''
 
 ECF = '''
-    hard = sorted(P, key=lambda i: -pt[i])[:24]
+    hard = sorted(P, key=lambda i: -pt[i])[:H3_]
     R = {(i, j): math.sqrt(dist2(i, j)) for i in hard for j in hard}
     e2 = sum(z[i] * z[j] * R[i, j] for i in hard for j in hard if i < j)
     e3 = sum(z[i] * z[j] * z[k] * R[i, j] * R[i, k] * R[j, k] for i in hard for j in hard for k in hard if i < j < k)
@@ -65,7 +65,7 @@ V2 = '''
 
     def ecf(name):
         if 'ecf' not in _memo:
-            h3, h4 = min(n, 24), min(n, 12)
+            h3, h4 = min(n, H3_), min(n, H4_)
             Rm = {(i, j): math.sqrt(dist2(i, j)) for i in range(h3) for j in range(h3)}
             o = dict(e2=0.0, e2b2=0.0, e3=0.0, e3b2=0.0, g31=0.0, g32=0.0, e4=0.0, g41=0.0, g42=0.0)
             for i in range(h3):
@@ -133,7 +133,7 @@ V2 = '''
 
     def softdrop(what):
         if 'sd' not in _memo:
-            node = {i: (pt[i] * math.cos(phi[i]), pt[i] * math.sin(phi[i]), pt[i] * math.sinh(eta[i]), pt[i] * math.cosh(eta[i])) for i in range(min(n, 20)) if pt[i] > 0}
+            node = {i: (pt[i] * math.cos(phi[i]), pt[i] * math.sin(phi[i]), pt[i] * math.sinh(eta[i]), pt[i] * math.cosh(eta[i])) for i in range(min(n, HSD_)) if pt[i] > 0}
             live, kids, new = list(node), {}, 1000
 
             def dR2(u, v):
@@ -221,7 +221,7 @@ def helper_code(exprs):
     if any(re.search(rf'\b{w}\b', exprs) for w in ('e2', 'e3')): body += ECF
     if any(t in exprs for t in V2_TOKENS) or any(t in exprs for t in TRACK_TOKENS): body += V2
     if any(t in exprs for t in TRACK_TOKENS): body += TRACKS
-    return body
+    return body.replace('H3_', str(H3)).replace('H4_', str(H4)).replace('HSD_', str(HSD))
 
 
 def quantities_source(ids, n):

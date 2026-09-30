@@ -10,10 +10,12 @@ that both give the same values. Every observable with units of mass has 'mass' i
 observables remove them by that rule, see config.py)."""
 import itertools
 from typing import NamedTuple
-from ..config import n_particles
+from ..config import n_particles, TAGGER
 
 KH, KS = 15, 10            # per-particle observables: the KH hardest; the KS softest real particles beyond them (N > KH)
 TOPK = (2, 3, 5, 10, 15, 20, 30, 40, 50)
+# ECF e2/e3 on the first H3 slots, e4 on the first H4, C/A clustering (soft drop, Lund plane) on the first HSD
+H3, H4, HSD = (24, 12, 20) if TAGGER == 'jedi' else (32, 16, 128)
 RINGS = ((0, .05), (.05, .1), (.1, .2), (.2, .4), (.4, None))
 
 
@@ -102,7 +104,7 @@ def library(n):
         add(f'n_for_{int(100 * f)}pct', f'number of particles for {int(100 * f)}% of ΣpT', f'ncum({f:g})', f'number of hardest particles that carry {int(100 * f)}% of the jet pT')
     add('pt_entropy', 'pT entropy −Σᵢ zᵢ ln zᵢ', '-sum(z[i] * math.log(z[i]) for i in real)', 'pT entropy −Σ zᵢ ln zᵢ')
     # ---- each of the hardest particles ----
-    for i in range(min(n, KH)):
+    for i in range(min(n, KH) if isinstance(net, int) else 0):          # ParT: block A (all 128 particles, see extras)
         add(f'pt_{i}', f'pT of particle {i}', f'pt[{i}]', f'pT of particle {i} [GeV]')
         add(f'eta_{i}', f'Δη of particle {i}', f'eta[{i}]', f'Δη of particle {i}')
         add(f'phi_{i}', f'Δφ of particle {i}', f'phi[{i}]', f'Δφ of particle {i}')
@@ -117,7 +119,7 @@ def library(n):
             add(f'ptdr0_{i}', f'pT of particle {i} × ΔR to particle 0', f'pt[{i}] * math.sqrt(dist2(0, {i})) if pt[{i}] > 0 else 0.0', f'pT{i} · ΔR(0, {i}) [GeV]')
             add(f'pair_mass_0_{i}', f'mass of particles 0 and {i}', f'pair_mass(0, {i})', f'mass of particles 0 and {i} [GeV]')
     # ---- the softest real particles beyond the hardest KH (a particle among the KH hardest is named by its hardest index) ----
-    if n > KH:
+    if n > KH and isinstance(net, int):
         for s in range(1, KS + 1):
             for nm, w, d in (('pT', 'pt', 'pT [GeV]'), ('pT share', 'z', 'pT share'), ('|Δη|', 'abseta', '|Δη|'), ('|Δφ|', 'absphi', '|Δφ|'), ('ΔR', 'dr', 'ΔR from the jet axis')):
                 add(f'soft{s}_{w}', f'{nm} of softest particle {s}', f'softp({s}, {w!r})', f'{d} of the {s}. softest real particle (0 if it is among the {KH} hardest)')
@@ -132,8 +134,8 @@ def library(n):
         add(f'n_real_top{k}', f'number of real particles among the {k} hardest', f'sum(1 for x in pt[:{k}] if x > 0)', f'number of real particles among the {k} hardest')
     # ---- energy correlation functions (β = 1 unless noted) ----
     E = lambda s: f"ecf('{s}')"; mx = lambda s: f'max({s}, 1e-30)'
-    add('e3', 'e₃ = Σᵢ<ⱼ<ₖ zᵢzⱼzₖ ΔRᵢⱼΔRᵢₖΔRⱼₖ', E('e3'), 'energy correlation e3 (β=1, 24 hardest)')
-    add('e4', 'e₄ (hardest 12)', E('e4'), 'energy correlation e4 = Σ zᵢzⱼzₖzₗ × product of the 6 ΔR (β=1, 12 hardest)')
+    add('e3', 'e₃ = Σᵢ<ⱼ<ₖ zᵢzⱼzₖ ΔRᵢⱼΔRᵢₖΔRⱼₖ', E('e3'), f'energy correlation e3 (β=1, {H3} hardest)')
+    add('e4', f'e₄ (hardest {H4})', E('e4'), f'energy correlation e4 = Σ zᵢzⱼzₖzₗ × product of the 6 ΔR (β=1, {H4} hardest)')
     add('C3', 'C₃ = e₄e₂/e₃²', f"{E('e4')} * {E('e2')} / {mx(E('e3') + ' ** 2')}", 'energy correlation ratio e4·e2/e3² (small = three-prong)')
     add('D3', 'D₃ = e₄e₂³/e₃³', f"{E('e4')} * {E('e2')} ** 3 / {mx(E('e3') + ' ** 3')}", 'energy correlation ratio e4·e2³/e3³ (small = three-prong)')
     add('N2', 'N₂ = ₂e₃/(₁e₂)²', f"{E('g32')} / {mx(E('e2') + ' ** 2')}", 'generalized ECF ratio N2 (two smallest angles; small = two-prong)')
@@ -162,7 +164,7 @@ def library(n):
     add('sj3_pairmin_over_m', 'smallest subjet-pair m / jet m (3 subjets)', 'min(subjets(3)["mpair"]) / max(mass_of(n), 1e-9)', 'smallest subjet-pair mass / jet mass (dimensionless)')
     add('sj3_pairmax_over_m', 'largest subjet-pair m / jet m (3 subjets)', 'max(subjets(3)["mpair"]) / max(mass_of(n), 1e-9)', 'largest subjet-pair mass / jet mass (dimensionless)')
     # ---- soft drop ----
-    add('sd_mass', 'soft-drop mass (β=0, z_cut=0.1)', 'softdrop("mass")', 'soft-drop groomed mass, C/A on the 20 hardest, β=0, z_cut=0.1 [GeV]')
+    add('sd_mass', 'soft-drop mass (β=0, z_cut=0.1)', 'softdrop("mass")', f'soft-drop groomed mass, C/A on the {HSD} hardest, β=0, z_cut=0.1 [GeV]')
     add('sd_zg', 'soft-drop z_g', 'softdrop("zg")', 'momentum sharing of the soft-drop splitting')
     add('sd_rg', 'soft-drop R_g', 'softdrop("rg")', 'angle of the soft-drop splitting')
     add('sd_nremoved', 'soft-drop: number of removed branches', 'softdrop("removed")', 'number of branches removed by soft drop')
