@@ -14,7 +14,7 @@ Usage: python -m jetdistill.analysis.control <N> [step1|lowlevel|compare|learnab
 import json, re, sys
 import numpy as np
 from .. import data, mars
-from ..config import RESULTS
+from ..config import RESULTS, TAGGER
 from ..network import Network
 from ..observables import compute
 
@@ -33,7 +33,14 @@ def orientation_share(neurons):
     return d / max(tot, 1e-12)
 
 
+PART_CATS = ('pairs and Lund plane', 'particle types, charge and tracks')
+if TAGGER == 'part': CATS = CATS + list(PART_CATS)
+
+
 def category(q):
+    if re.fullmatch(r'(lnpt|lne|lnptrel|lnerel|charge|ischhad|isnhad|isphoton|iselectron|ismuon|td0|d0err|tdz|dzerr)_\d+', q): return 'single particles'
+    if re.match(r'(pair_|n_pairs_|lund|n_lund|ln(delta|kt|z|m2)_\d)', q): return 'pairs and Lund plane'
+    if re.match(r'(n_|z_)(charged|neutral|photon|electron|muon|lepton)|jet_charge|sum_charge|lead_c|lep_|sip_|n_s(d0|dz|3d)|max_abs_|z_displaced', q): return 'particle types, charge and tracks'
     if 'mass' in q or q in ('m01', 'm012') or q.startswith('mratio') or 'over_m' in q: return 'mass'
     if re.match(r'(tau|C2|D2|C3|D3|N2|N3|M2|M3|e2|e3|e4|sj[23]_|sd_zg|sd_rg|sd_nremoved|dr01|dr02|dr12|dr_m)', q): return 'prong structure'
     if re.match(r'(pt|eta|phi|dr|z|abseta|absphi|zdr|dr0|dr1|ptdr0)_\d+$', q) or q.startswith('soft'): return 'single particles'

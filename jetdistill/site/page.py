@@ -5,12 +5,26 @@ import json, shutil, subprocess, tempfile
 from pathlib import Path
 import numpy as np
 from .. import pipeline as P
-from ..config import SETUPS, CLASSES, FIDELITY_LAMBDA, RESULTS
+from ..config import SETUPS, CLASSES, FIDELITY_LAMBDA, RESULTS, SITE, TAGGER, NC, net_dir
 from ..network import Network
 from ..observables import library, relabel, symbol, CODE_RENAME
 
 TEMPLATE = Path(__file__).with_name('template.html')
-SITE = RESULTS.parent / 'site'
+PART_COLORS = dict(QCD='#667085', Hbb='#c53030', Hcc='#dd6b20', Hgg='#b7791f', H4q='#9f7aea', Hqql='#d53f8c', Zqq='#6b46c1', Wqq='#2b6cb0',
+                   Tbqq='#2f855a', Tbl='#319795')
+PART_CLASSES = ('QCD (light quark or gluon), H→bb̄, H→cc̄, H→gg, H→4q, H→ℓνqq′, Z→qq̄, W→qq′, t→bqq′, t→bℓν')
+
+
+def part_tagger(n, n_explain):
+    """what the page says about the ParT network (its template reads D.tagger)"""
+    full = n == 'full'
+    return dict(title='Distilling the Latent Space of the Particle Transformer into Interpretable Physics Equations', nn=128, relu=False, py=f'part_{n}', own=False, k1=60, kk='60', nexplain=f'{n_explain:,}',
+                pyin='a jet’s particles (up to 128, hardest first: pT [GeV], Δη, Δφ relative to the jet axis, energy [GeV]; empty slots pT = 0) and the jet’s pT, η and energy'
+                     + (', plus each particle’s charge, type (charged hadron, neutral hadron, photon, electron, muon) and track impact parameters d0, dz with their uncertainties' if full else ''),
+                step1='For each of the 128 numbers the network’s last layer reads (its class token after the last LayerNorm; no activation follows), its value is fitted',
+                intro=f'The Particle Transformer (ParT, trained on JetClass; input features “{n}”: '
+                      + ('each particle’s kinematics, type, charge and track displacement, and every pair’s ΔR, kT, z and mass' if full else 'each particle’s kinematics and every pair’s ΔR, kT, z and mass')
+                      + f'; 10 classes: {PART_CLASSES}) decides from 128 numbers, its class token after the last LayerNorm, which a single linear layer turns into the 10 class scores. Here each of those 128 numbers')
 FAMNAME = {('network', 'main'): 'network', ('network', 'other'): 'network', ('network', 'step4'): 'network-simplified',
            ('labels', 'main'): 'labels', ('labels', 'step4'): 'labels-simplified', ('neurons', 'main'): 'neurons', ('neurons', 'step4'): 'neurons-simplified'}
 
@@ -41,7 +55,7 @@ def slim(full):
 
 
 def build(setup, n, site=SITE):
-    base = P.out_dir(setup, n); out = Path(site) / setup / f'n{n}'; out.mkdir(parents=True, exist_ok=True)
+    base = P.out_dir(setup, n); out = Path(site) / setup / net_dir(n); out.mkdir(parents=True, exist_ok=True)
     reg = P.formulas(setup, n); M = json.loads((base / 'metrics.json').read_text()); lib = library(n); S = SETUPS[setup]
     last = Network(n).last; K, b, i_, f_ = last
     fam = {t: FAMNAME[(m['family'], m['role'])] for t, m in reg.items()}; parent = {t: m['parent'] for t, m in reg.items() if m.get('parent')}
@@ -49,7 +63,10 @@ def build(setup, n, site=SITE):
     main = max((r for r in models if r.get('formula') and fam[r['formula']] == 'network'), key=lambda r: r['same_as_network'])['formula']
     D = dict(n=n, classes=CLASSES, mode='rosetta', fam=fam, parent=parent, main=main, metrics=dict(n_jets=M['n_jets'], models=models),
              exp=dict(name=setup, label=S.label, obs=S.page_desc, lam=FIDELITY_LAMBDA),
-             last=dict(K7=K.tolist(), b7=b.tolist(), i7=i_.tolist(), f7=f_.tolist()))
+             last=dict(K7=K.tolist(), b7=b.tolist(), i7=None if i_ is None else i_.tolist(), f7=None if f_ is None else f_.tolist()))
+    if TAGGER == 'part':
+        from ..config import N_EXPLAIN
+        D.update(tagger=part_tagger(n, N_EXPLAIN), colors=PART_COLORS)
     # the comparison table and the runs table (tuned on the network / on the labels, step 1)
     rows = [dict(M['models'][0], family='network')] + ([dict(M['step1'], family='step 1')] if M.get('step1') else [])
     rows += [dict(r, name=f"{r['formula']} ({r['name']})", family='labels' if reg[r['formula']]['family'] == 'labels' else 'network target')
@@ -76,7 +93,7 @@ def build(setup, n, site=SITE):
         if (d / 'check.json').exists():
             C = json.loads((d / 'check.json').read_text()); r = next(x for x in M['models'] if x.get('formula') == t)
             for suffix, key in (('', f'formula {t}'), ('_normalized', f'formula {t} normalized')):
-                src = d / f'jedi_n{n}_formula{t}{suffix}.py'; shutil.copy2(src, out / src.name)
+                src = d / P.file_name(n, t, suffix); shutil.copy2(src, out / src.name)
                 D['py'][key] = dict(file=src.name, title=m['title'], terms=m['terms'], lines=len(src.read_text().splitlines()), n_jets=C['n_jets'],
                                     same_class_as_pipeline=C['same_class_file' if not suffix else 'same_class_normalized_file'], accuracy_file=r['accuracy'],
                                     accuracy_pipeline=r['accuracy'], agree_with_network_file=r['same_as_network'], network_accuracy=M['models'][0]['accuracy'])
@@ -94,11 +111,12 @@ def build(setup, n, site=SITE):
     (out / 'index.html').write_text(page); return out / 'index.html'
 
 
-def example_jets(setup, n, reg, last, per_class=20):
-    """100 test jets (20 per true class) for the per-jet tab: particles, observables the formulas use, classes"""
+def example_jets(setup, n, reg, last, per_class=100 // NC):
+    """100 test jets (the same number per true class) for the per-jet tab: particles, observables the formulas use, classes"""
     from .. import formula as F
     T = P.jets(n, 'full_test'); rng = np.random.default_rng(3)
-    idx = np.sort(np.concatenate([rng.choice(np.flatnonzero(T['y'] == c), per_class, replace=False) for c in range(5)]))
+    y = T['y'][:len(T['x'])]          # (ParT's test particles are kept for the first jets only)
+    idx = np.sort(np.concatenate([rng.choice(np.flatnonzero(y == c), per_class, replace=False) for c in range(NC)]))
     fs = {t: P.load_formula(setup, n, t) for t in reg}; need = sorted({q for f in fs.values() for q in F.observables_used(f)})
     Q = {q: T['Q'][q][idx] for q in need}
     return dict(y=T['y'][idx].tolist(), net=T['net'][idx].tolist(), parts=[[[round(float(v), 4) for v in p] for p in x if p[0] > 0] for x in T['x'][idx]],
