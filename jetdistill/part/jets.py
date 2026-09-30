@@ -6,7 +6,7 @@ which: 'fit' (training jets, the first N_STEP4_FIT of the shuffled 'fit' split),
 The jet-level observables are computed once and saved, one file per quantity (float32). ParT's per-particle and pair inputs
 (blocks A and B of observables.library, ~35,000 quantities) are computed from the particles when a step uses them
 (BlockQ); for 'full_test' the particles are read from the dataset folder (memory-mapped)."""
-import json, time
+import json, os, time
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from .. import config
@@ -103,7 +103,7 @@ def build(n, which, log=print, chunk=5000, workers=None):
         for name in ('x_f16', 'ext_f16'):
             A = np.load(src / f'{name}.npy', mmap_mode='r'); o = np.argsort(r); a = np.empty((len(r),) + A.shape[1:], np.float16); a[o] = A[r[o]]; np.save(d / f'{name}.npy', a)
     ids = core_ids(n); out = {k: np.lib.format.open_memmap(d / 'Q' / f'{k}.npy', 'w+', np.float32, (len(r),)) for k in ids}
-    parts = [(n, folder, r[s:s + chunk], ids) for s in range(0, len(r), chunk)]; workers = workers or min(4, len(parts))
+    parts = [(n, folder, r[s:s + chunk], ids) for s in range(0, len(r), chunk)]; workers = workers or min(int(os.environ.get('JETDISTILL_WORKERS', 4)), len(parts))
     with ProcessPoolExecutor(workers) as ex:
         for i, Q in enumerate(ex.map(_core_chunk, parts)):
             s = i * chunk

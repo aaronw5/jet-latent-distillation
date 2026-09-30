@@ -15,7 +15,7 @@ ParT: the jet-level observables are candidates as above; ParT's per-particle and
 screened at every step: the 100 whose value or distance from its median correlates most with the current residual (on
 6,000 of the selection jets) join the candidates. Neurons are fitted in parallel processes.
 Output: results/<setup>/n<N>/step1.json (terms in the order chosen; later steps take the first K of each neuron)."""
-import json, re, sys, time
+import json, os, re, sys, time
 import numpy as np
 from . import config, data
 from .config import SETUPS, MASSES, MASS_MULT, RESULTS, RELU, TAGGER, net_dir
@@ -191,7 +191,7 @@ def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log, worke
         log(f'screening: {len(screen.ids)} per-particle and pair quantities, {time.time() - t0:.0f} s')
     log(f'{len(keys)} observables, {sum(1 + 2 * len(v) for v in knots.values())} candidate terms, {time.time() - t0:.0f} s')
     _G.update(Q=Q, Z=Z, keys=keys, knots=knots, sel=sel, screen=screen)
-    workers = workers or (4 if TAGGER == 'part' else 1)
+    workers = workers or int(os.environ.get('JETDISTILL_WORKERS', 4 if TAGGER == 'part' else 1))
     if workers > 1:
         import multiprocessing as mp
         with mp.get_context('fork').Pool(workers, initializer=_one_thread) as pool: neurons = pool.map(_one_neuron, range(Z['fit'].shape[1]), chunksize=1)

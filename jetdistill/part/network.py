@@ -13,6 +13,7 @@ Inputs follow data/JetClass/JetClass_<kin|full>.yaml of the ParT repository: eac
 clip((x - center) * scale, -5, 5), padded slots are filled by repeating the jet's own particles (weaver's 'wrap'
 padding; they are masked out, only their values must be finite), the pairwise features are built by the model from the
 particles' (px, py, pz, E)."""
+import os
 import numpy as np
 from ..config import MODELS
 
@@ -63,7 +64,9 @@ class ParTNetwork:
             sd = {k: (torch.randn(v.shape, generator=g) * v.float().std() + v.float().mean()).to(v.dtype) if v.is_floating_point() and v.numel() > 1 and not k.endswith(('running_mean', 'running_var')) else v
                   for k, v in sd.items()}
         self.model.load_state_dict(sd, strict=True); self.model.eval()
-        W = self.model.fc[0].weight.detach().double().numpy(); b = self.model.fc[0].bias.detach().double().numpy()
+        self.device = os.environ.get('JETDISTILL_DEVICE', 'cpu')           # 'mps' (Apple GPU) or 'cuda' for faster inference
+        self.model.to(self.device)
+        W = self.model.fc[0].weight.detach().cpu().double().numpy(); b = self.model.fc[0].bias.detach().cpu().double().numpy()
         self.last = (W.T.copy(), b.copy(), None, None)
         self._cls = {}
         self.model.fc.register_forward_hook(lambda mod, inp, out: self._cls.__setitem__('h', inp[0].detach()))
@@ -75,8 +78,9 @@ class ParTNetwork:
         with torch.no_grad():
             for i in range(0, N, batch):
                 idx = order[i:i + batch]; x, v, m = inputs({k: a[idx] for k, a in J.items()}, self.n)
-                out = self.model(torch.from_numpy(x), torch.from_numpy(v), torch.from_numpy(m))
-                L[idx] = out.numpy(); Z[idx] = self._cls['h'].numpy()
+                dev = lambda a: torch.from_numpy(a).to(self.device)
+                out = self.model(dev(x), dev(v), dev(m))
+                L[idx] = out.cpu().numpy(); Z[idx] = self._cls['h'].cpu().numpy()
                 if log and (i // batch) % 200 == 0: log(f'  network {self.n}: {i + len(idx)} / {N} jets')
         return dict(z=Z.astype(np.float64), h=Z.astype(np.float64), logits=L.astype(np.float64))
 
