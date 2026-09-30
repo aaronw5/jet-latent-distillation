@@ -1,0 +1,10 @@
+numpy
+scipy
+jax
+keras
+hgq2
+scikit-learn
+h5py
+
+[test]
+pytest

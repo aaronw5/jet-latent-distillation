@@ -1,23 +1,28 @@
 """Vectorised numpy implementation of every observable of library.py (same algorithms and tie-breaking as the
 plain-Python code of the exported files; tests/test_observables.py compares them).
 
-compute(X, n) -> {id: array (J,)} for particles X (J, n, 3) = (pT [GeV], Δη, Δφ), hardest first, padding pT = 0 at the end."""
+compute(X, n) -> {id: array (J,)} for particles X (J, N, 3) = (pT [GeV], Δη, Δφ), hardest first, padding pT = 0 at the end.
+ParT networks ('kin', 'full'; N = 128) also take jet = (J, 4) jet pT, η, φ, energy and ext = (J, N, 6) charge, particle
+type, d0, σ(d0), dz, σ(dz) (see part/data.py) for the extra observables of library.extras."""
 import itertools
 import numpy as np
-from .library import KH, KS, TOPK, RINGS, ring_tag, library
+from .library import KH, KS, TOPK, RINGS, ring_tag, library, PTYPES
+from ..config import n_particles
 
 H3, H4, HSD = 24, 12, 20   # ECF e2/e3 on the first 24 slots, e4 on the first 12, soft drop on the first 20
 ZCUT, R0, EPS = 0.1, 0.8, 1e-30
 
 
-def compute(X, n, ids=None, chunk=1000):
+def compute(X, n, ids=None, chunk=1000, jet=None, ext=None):
     """all observables (or only `ids`) of the jets X, in chunks of `chunk` jets"""
-    X = np.asarray(X, np.float64).reshape(len(X), n, 3); out = {}
+    net, n = n, n_particles(n); X = np.asarray(X, np.float64).reshape(len(X), n, 3); out = {}
     for i0 in range(0, len(X), chunk):
-        for k, v in _chunk(X[i0:i0 + chunk], n).items():
+        O = _chunk(X[i0:i0 + chunk], n)
+        if not isinstance(net, int): O.update(_extras(X[i0:i0 + chunk], net, np.asarray(jet[i0:i0 + chunk], np.float64), None if ext is None else np.asarray(ext[i0:i0 + chunk], np.float64)))
+        for k, v in O.items():
             if ids is None or k in ids: out.setdefault(k, []).append(v)
     O = {k: np.nan_to_num(np.concatenate(v)) for k, v in out.items()}
-    lib = library(n); missing = set(ids or lib) - set(O)
+    lib = library(net); missing = set(ids or lib) - set(O)
     assert not missing, f'no numpy implementation for {sorted(missing)}'
     return {k: O[k] for k in (ids or lib)}
 
@@ -200,4 +205,29 @@ def _chunk(X, n):
             O['sj3_pairmin_over_m'] = mp.min(-1) / np.maximum(m, 1e-9); O['sj3_pairmax_over_m'] = mp.max(-1) / np.maximum(m, 1e-9)
     # ---- soft drop ----
     hs = min(n, HSD); O['sd_mass'], O['sd_zg'], O['sd_rg'], O['sd_nremoved'] = _softdrop(pt[:, :hs], eta[:, :hs], phi[:, :hs])
+    return O
+
+
+def _extras(X, net, jet, ext):
+    """library.extras: jet η and energy; for 'full' particle types, charge and track impact parameters"""
+    pt, eta, phi = X[..., 0], X[..., 1], X[..., 2]; real = pt > 0; z = pt / pt.sum(1, keepdims=True); jeta = jet[:, 1]
+    E = np.where(real, pt * np.cosh(jeta[:, None] + eta), 0.0).sum(1)
+    O = dict(jet_abs_eta=np.abs(jeta), sum_e=E, log_sum_e=np.log(E))
+    if net != 'full': return O
+    q, typ, d0, d0e, dz, dze = (ext[..., i] for i in range(6)); ch = real & (q != 0); rows = np.arange(len(X))
+    conds = dict(charged_had=typ == 1, neutral_had=typ == 2, photon=typ == 3, electron=typ == 4, muon=typ == 5, charged=q != 0)
+    for k in PTYPES:
+        c = real & conds[k]; O[f'n_{k}'] = c.sum(1).astype(float); O[f'z_{k}'] = (z * c).sum(1)
+    lep = real & ((typ == 4) | (typ == 5)); O['n_lepton'] = lep.sum(1).astype(float)
+    zl = np.where(lep, z, -1.0); il = zl.argmax(1); has = lep.any(1)
+    O['lep_z'] = np.where(has, z[rows, il], 0.0); O['lep_dr'] = np.where(has, np.hypot(eta[rows, il], phi[rows, il]), 0.0)
+    O['jet_charge'] = (np.where(real, q, 0) * z).sum(1); O['jet_charge_k05'] = (np.where(real, q, 0) * np.sqrt(z)).sum(1); O['sum_charge'] = np.where(real, q, 0).sum(1)
+    for w, v, e in (('d0', d0, d0e), ('dz', dz, dze)):
+        sig = np.where(ch, v / np.maximum(e, 1e-6), 0.0); order = np.argsort(-np.where(ch, np.abs(sig), -1.0), 1, kind='stable')
+        s_sorted = np.take_along_axis(sig, order, 1); c_sorted = np.take_along_axis(ch, order, 1)
+        for r in (1, 2, 3): O[f's{w}_{r}'] = np.where(c_sorted[:, r - 1], s_sorted[:, r - 1], 0.0)
+        for c in (2, 5): O[f'n_s{w}_above_{c}'] = (ch & (np.abs(v) > c * e)).sum(1).astype(float)
+        O[f'max_abs_{w}'] = np.where(ch, np.abs(v), 0.0).max(1)
+    disp = ch & (np.abs(d0) > 3 * d0e); O['z_displaced'] = (z * disp).sum(1)
+    O['mass_displaced'] = _m4(*(_p4(pt, eta, phi) * disp[..., None]).sum(1).T)
     return O

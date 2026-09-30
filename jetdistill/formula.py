@@ -1,15 +1,28 @@
-"""A formula: the 16 neurons of the last hidden layer, each a sum of terms of observables, plus the network's last layer.
+"""A formula: the neurons of the network's last hidden layer (JEDI: 16, ParT: 128), each a sum of terms of observables,
+plus the network's last layer.
 
 JSON form (a list, one entry per neuron):
   {"neuron": j, "intercept": c0, "terms": [{"q": <observable id>, "kind": "lin"|"gt"|"lt", "t": threshold, "coef": a,
                                           ["q2", "kind2", "t2" for a product of two]}, ...]}
   kind "lin": Q;  "gt": max(0, Q − t)  ("if Q > t: add a·(Q − t)");  "lt": max(0, t − Q).
-Neuron j = max(0, c0 + Σ a·term); the class scores are the network's own last layer applied to the 16 neurons
-(network.logits_from_h: round to the network's fixed-point grid, wrap, weights, biases)."""
+Neuron j = act(c0 + Σ a·term), act = max(0, ·) for JEDI and the identity for ParT (config.RELU); the class scores are the
+network's own last layer applied to the neurons (network.logits_from_h: JEDI rounds to its fixed-point grid and wraps,
+then weights and biases; ParT: weights and biases)."""
 import json
 from pathlib import Path
 import numpy as np
+from .config import RELU
 from .network import logits_from_h
+
+
+def act(z):
+    """the neurons' activation: max(0, z) for JEDI, none for ParT"""
+    return np.maximum(z, 0) if RELU else np.asarray(z)
+
+
+def is_on(z):
+    """where a neuron passes information on (JEDI: z > 0; ParT: everywhere)"""
+    return np.asarray(z) > 0 if RELU else np.ones(np.shape(z), bool)
 
 
 def factor(x, kind, t):
@@ -33,12 +46,12 @@ def bases(formula, Q):
 
 
 def pre_activations(formula, Q):
-    """(J, 16): each neuron before its ReLU"""
+    """(J, neurons): each neuron before its activation"""
     return np.stack([nr['intercept'] + B @ np.array([t['coef'] for t in nr['terms']], np.float64).reshape(-1) for nr, B in zip(formula, bases(formula, Q))], 1)
 
 
 def hidden(formula, Q):
-    return np.maximum(pre_activations(formula, Q), 0)
+    return act(pre_activations(formula, Q))
 
 
 def logits(formula, Q, last):

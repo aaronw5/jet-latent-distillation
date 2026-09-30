@@ -1,4 +1,5 @@
 """One setup, one network, end to end:   python -m jetdistill.pipeline <setup> <N> [stage ...]
+(ParT: JETDISTILL_TAGGER=part python -m jetdistill.pipeline <setup> <kin|full> [stage ...]; folders <kin|full> instead of n<N>)
 
 Stages (default: all, in this order):
   step1    MARS on the network's neurons                                 results/<setup>/n<N>/step1.json
@@ -9,14 +10,15 @@ Stages (default: all, in this order):
   metrics  every formula and the network on the whole test file         results/<setup>/n<N>/metrics.json
   page     the setup's page                                              site/<setup>/n<N>/index.html
 Families: 'network' (tuned on the network's probabilities, or its decisions for all_agree; from 100 and 60 terms per
-neuron), 'labels' (tuned on the true labels, from 60), 'neurons' (tuned on the network's neuron values, from 100). Each
+neuron), 'labels' (tuned on the true labels, from 60), 'neurons' (tuned on the network's neuron values, from 100); ParT:
+60 and 30, 30, 60 (128 neurons instead of 16). Each
 formula is named by its number of terms (its tag). The written explanations (explain.json, combos.json) are added to
 formulas/<tag>/ separately (see README) and picked up by the page.
-Jets (observables and network outputs) are computed once per network and cached in results/_jets/n<N>/."""
+Jets (observables and network outputs) are computed once per network and cached in results/_jets/n<N>/ (ParT: part/jets.py)."""
 import json, sys, time
 import numpy as np
 from . import config, data, formula as F, mars, tuning, simplify, export, metrics
-from .config import SETUPS, RESULTS, FIDELITY_LAMBDA
+from .config import SETUPS, RESULTS, FIDELITY_LAMBDA, TAGGER, net_dir
 from .network import Network
 from .observables import compute, library
 
@@ -24,19 +26,27 @@ from .observables import compute, library
 def log(*a):
     print(*a, flush=True)
 
-FAMILIES = dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons')) if not config.SMOKE else \
-           dict(network=((8, 5), None), labels=((5,), 'labels'), neurons=((8,), 'neurons'))
+FAMILIES = dict(network=((8, 5), None), labels=((5,), 'labels'), neurons=((8,), 'neurons')) if config.SMOKE else \
+           dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons')) if TAGGER == 'jedi' else \
+           dict(network=((60, 30), None), labels=((30,), 'labels'), neurons=((60,), 'neurons'))
+PREFIX = 'jedi_n{n}' if TAGGER == 'jedi' else 'part_{n}'      # exported file names: <prefix>_formula<tag>.py
 STEP4_METRIC = dict(network='agree', labels='acc', neurons='neuron')
 TITLES = dict(network="tuned on the network's predictions", decisions="tuned on the network's decisions", labels='tuned on the true labels', neurons="tuned on the network's neuron values")
 
 
-def out_dir(setup, n): return RESULTS / setup / f'n{n}'
+def out_dir(setup, n): return RESULTS / setup / net_dir(n)
+
+
+def file_name(n, tag, suffix=''): return PREFIX.format(n=n) + f'_formula{tag}{suffix}.py'
 
 
 # ---------------------------------------------------------------- cached jets
 def jets(n, which, log=log):
     """dict(Q=observables, y=true class, net=network class, P=network probabilities, Z=network pre-activations, H=ReLU(Z));
     which: 'fit' (150,000 training jets), 'dev' (25,000), 'full_test' (the whole test file), 'explain' (60,000 training jets)"""
+    if TAGGER == 'part':
+        from .part.jets import jets as part_jets
+        return part_jets(n, which, log)
     f = RESULTS / '_jets' / f'n{n}' / f'{which}.npz'
     if not f.exists():
         t0 = time.time(); f.parent.mkdir(parents=True, exist_ok=True)
@@ -125,16 +135,17 @@ def stage_step4(setup, n, log=log):
 
 
 def stage_export(setup, n, check_jets=5000, log=log):
-    last = Network(n).last; test = jets(n, 'full_test', log); fit = jets(n, 'fit', log)
-    ranges = {q: (float(min(test['Q'][q].min(), fit['Q'][q].min())), float(max(test['Q'][q].max(), fit['Q'][q].max()))) for q in test['Q']}
+    last = Network(n).last; test = jets(n, 'full_test', log); fit = jets(n, 'fit', log); used = set().union(*[F.observables_used(load_formula(setup, n, t)) for t in formulas(setup, n)])
+    ranges = {q: (float(min(test['Q'][q].min(), fit['Q'][q].min())), float(max(test['Q'][q].max(), fit['Q'][q].max()))) for q in test['Q'] if q in used}
+    extra = dict(jet=test['jet'][:check_jets], ext=test['ext'][:check_jets] if n == 'full' else None) if TAGGER == 'part' else {}
     for tag, m in formulas(setup, n).items():
         f = load_formula(setup, n, tag); d = out_dir(setup, n) / 'formulas' / tag; L = F.logits(f, test['Q'], last); pred = L.argmax(1)
         stats = (f'Whole test file ({len(pred):,} jets): accuracy {100 * (pred == test["y"]).mean():.2f}% (the network: {100 * (test["net"] == test["y"]).mean():.2f}%); '
                  f'same class as the network for {100 * (pred == test["net"]).mean():.2f}% of jets.')
         norm = export.normalize(f, fit['Q'], last); (d / 'normalized.json').write_text(json.dumps(dict(neurons=norm[0], classes=norm[1])))
-        p1 = export.write_formula(f, n, last, ranges, m['title'], stats, d / f'jedi_n{n}_formula{tag}.py')
-        p2 = export.write_normalized(f, n, last, norm, m['title'], stats, d / f'jedi_n{n}_formula{tag}_normalized.py')
-        s1, _ = export.check(p1, test['x'][:check_jets], pred); s2, _ = export.check(p2, test['x'][:check_jets], pred)
+        p1 = export.write_formula(f, n, last, ranges, m['title'], stats, d / file_name(n, tag))
+        p2 = export.write_normalized(f, n, last, norm, m['title'], stats, d / file_name(n, tag, '_normalized'))
+        s1, _ = export.check(p1, test['x'][:check_jets], pred, **extra); s2, _ = export.check(p2, test['x'][:check_jets], pred, **extra)
         (d / 'check.json').write_text(json.dumps(dict(n_jets=min(check_jets, len(pred)), same_class_file=s1, same_class_normalized_file=s2, lines=len(p1.read_text().splitlines()))))
         log(f'{tag}: files give the formula’s class on {100 * s1:.2f}% / {100 * s2:.2f}% of {check_jets} test jets')
         assert s1 == 1.0 and s2 == 1.0, f'exported files of {tag} differ from the formula'
@@ -176,6 +187,6 @@ STAGES = dict(step1=stage_step1, tune=stage_tune, step4=stage_step4, export=stag
 
 
 if __name__ == '__main__':
-    setup, n, *todo = sys.argv[1:]; n = int(n)
+    setup, n, *todo = sys.argv[1:]; n = config.parse_net(n)
     for s in todo or list(STAGES):
-        t0 = time.time(); STAGES[s](setup, n); print(f'== {setup} n{n} {s} done in {time.time() - t0:.0f} s', flush=True)
+        t0 = time.time(); STAGES[s](setup, n); print(f'== {setup} {net_dir(n)} {s} done in {time.time() - t0:.0f} s', flush=True)

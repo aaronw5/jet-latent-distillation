@@ -12,7 +12,7 @@ import os
 os.environ.setdefault('KERAS_BACKEND', 'jax')
 from pathlib import Path
 import numpy as np
-from .config import MODELS
+from .config import MODELS, TAGGER
 from .data import inputs
 
 LAYERS = dict(l1='q_einsum_dense_batchnorm', qs='q_sum', l2='q_einsum_dense_batchnorm_1', dd='q_einsum_dense_batchnorm_2', add='q_add',
@@ -70,10 +70,16 @@ class Network:
 
 
 def round_wrap(H, i_bits, f_bits):
-    """each neuron rounded to a multiple of 2^-f, then wrapped modulo 2^i (the last layer's unsigned fixed-point input)"""
+    """each neuron rounded to a multiple of 2^-f, then wrapped modulo 2^i (the last layer's unsigned fixed-point input);
+    i_bits None: no rounding (ParT)"""
+    if i_bits is None: return np.asarray(H, np.float64)
     s = 2.0 ** np.asarray(f_bits, np.float64)
     return (np.floor(np.asarray(H, np.float64) * s + 0.5) / s) % 2.0 ** np.asarray(i_bits, np.float64)
 
 
 def logits_from_h(H, K, b, i_bits, f_bits):
     return round_wrap(H, i_bits, f_bits) @ K + b
+
+
+if TAGGER == 'part':              # the pipeline asks for Network(n); for ParT that is the Particle Transformer
+    from .part.network import ParTNetwork as Network  # noqa: F811

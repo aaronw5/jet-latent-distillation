@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "The JEDI-linear jet tagger's last hidden layer distilled into if-statements on jet physics observables"
 requires-python = ">=3.11"
 dependencies = ["numpy", "scipy", "jax", "keras", "hgq2", "scikit-learn", "h5py"]
-optional-dependencies = { test = ["pytest"] }
+optional-dependencies = { test = ["pytest"], part = ["torch", "uproot", "awkward"] }   # ParT also needs weaver-core 0.4.x: pip install --no-deps "weaver-core<0.5"
 
 [tool.setuptools.packages.find]
 include = ["jetdistill*"]

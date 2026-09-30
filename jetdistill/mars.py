@@ -1,20 +1,22 @@
-"""Step 1: each of the network's 16 neurons as a sum of terms of observables (MARS-style forward selection, Friedman 1991).
+"""Step 1: each of the network's neurons as a sum of terms of observables (MARS-style forward selection, Friedman 1991).
 
-Target: the neuron's value before its ReLU, z, clipped below at −0.2·(spread of its positive values): below 0 the ReLU
-erases every difference, so the fit only follows z a little way into the negative range.
+Target (JEDI): the neuron's value before its ReLU, z, clipped below at −0.2·(spread of its positive values): below 0 the
+ReLU erases every difference, so the fit only follows z a little way into the negative range. ParT: the neuron itself
+(no activation follows it). R² is always measured on what the last layer reads (JEDI: max(0, ·)).
 Candidate terms of an observable Q: Q itself, max(0, Q − t) and max(0, t − Q) for every candidate threshold t (the 5 %,
 10 %, …, 95 % quantiles of Q on the fitting jets; for mass observables also m_W, m_Z, m_H, m_t and ×½, ×1.5, ×2 when the
 setup offers them), and products of an already chosen threshold term with a threshold term of one of the 10 observables
 most correlated with the current residual.
 Each step adds the candidate that lowers the squared error most (on 12,000 of the fitting jets), refits all coefficients
 by least squares on all 40,000 fitting jets, and scores R² of max(0, formula) against the neuron on 25,000 validation jets;
-the kept length is the best validation R² (stop after 5 steps without improvement, or 100 terms). Only the network's
+the kept length is the best validation R² (stop after 5 steps without improvement, or 100 terms; 60 for ParT). Only the network's
 neuron values are used, never the classes.
 Output: results/<setup>/n<N>/step1.json (terms in the order chosen; later steps take the first K of each neuron)."""
 import json, re, sys, time
 import numpy as np
 from . import config, data
-from .config import SETUPS, MASSES, MASS_MULT, RESULTS
+from .config import SETUPS, MASSES, MASS_MULT, RESULTS, RELU, TAGGER, net_dir
+from .formula import act
 from .network import Network
 from .observables import library, compute, mass_ids
 
@@ -22,12 +24,16 @@ from .observables import library, compute, mass_ids
 def log(*a):
     print(*a, flush=True)
 
-N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (100 if not config.SMOKE else 10), 12000, 5
+N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (10 if config.SMOKE else 100 if TAGGER == 'jedi' else 60), 12000, 5
 
 
 def splits(n, untrained=False, sizes=None):
     """{split: (particles, network outputs, observables)} for the fitting, validation and test jets of step 1"""
     sizes = sizes or dict(fit=config.N_STEP1_FIT, dev=config.N_DEV, test=config.N_TEST_SPLIT)
+    if TAGGER == 'part' and not untrained:          # the network outputs are stored with the jets
+        from .pipeline import jets, sub
+        out = {s: (lambda J: (J['x'], dict(z=J['Z'], h=J['H'], logits=J['L']), J['Q']))(sub(jets(n, s), N)) for s, N in sizes.items()}
+        return out, Network(n)
     net = Network(n, untrained=untrained); out = {}
     for s, N in sizes.items():
         x = data.particles(s, n, stop=N); out[s] = (x, net.run(x), compute(x, n))
@@ -74,14 +80,14 @@ def term_value(tm, Q):
 def fit_neuron(z, Q, keys, knots, sel, log=None):
     """forward selection for one neuron; z = {split: pre-activation}. Returns (terms, coefficients incl. intercept, path)"""
     zf, zd = z['fit'], z['dev']; NF = len(zf)
-    zpos = zf[zf > 0]; floor = -0.2 * (zpos.std() if len(zpos) > 50 else zf.std()); target = np.maximum(zf, floor)
+    zpos = zf[zf > 0]; floor = -0.2 * (zpos.std() if len(zpos) > 50 else zf.std()); target = np.maximum(zf, floor) if RELU else zf
     cache = {}
     for k in keys:
         v = Q['fit'][k][sel]
         cache[k] = (np.stack([v] + [np.maximum(0, v - t) for t in knots[k]] + [np.maximum(0, t - v) for t in knots[k]], 1).astype(np.float32),
                     [('lin', None)] + [('gt', t) for t in knots[k]] + [('lt', t) for t in knots[k]])
     chosen, Bsel, path = [], [np.ones(len(sel))], []; best = (-np.inf, 0); stall = 0
-    ys = target[sel]; hd = np.maximum(zd, 0)
+    ys = target[sel]; hd = act(zd)
     def gain(C, Qb, r):
         Cp = C - Qb @ (Qb.T @ C); nn = (Cp ** 2).sum(0); g = np.where(nn > 1e-9, (Cp.T @ r) ** 2 / np.maximum(nn, 1e-12), 0); i = int(g.argmax()); return float(g[i]), i
     for _ in range(MAX_TERMS):
@@ -103,7 +109,7 @@ def fit_neuron(z, Q, keys, knots, sel, log=None):
         chosen.append(tm); Bsel.append(term_value(tm, {k: Q['fit'][k][sel] for k in (tm['q'], tm.get('q2')) if k}))
         coef = _lstsq(chosen, Q['fit'], target, NF)
         Bd = np.stack([np.ones(len(zd))] + [term_value(t, Q['dev']) for t in chosen], 1)
-        r2 = 1 - ((hd - np.maximum(Bd @ coef, 0)) ** 2).mean() / max(hd.var(), 1e-12); path.append(round(float(r2), 4))
+        r2 = 1 - ((hd - act(Bd @ coef)) ** 2).mean() / max(hd.var(), 1e-12); path.append(round(float(r2), 4))
         if r2 > best[0] + 1e-4: best, stall = (r2, len(chosen)), 0
         else: stall += 1
         if stall >= STALL or r2 > .9995: break
@@ -129,22 +135,22 @@ def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log):
         if np.ptp(zj['fit']) < 1e-9:
             neurons.append(dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True)); continue
         terms, coef, path = fit_neuron(zj, Q, keys, knots, sel)
-        Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = np.maximum(zj['test'], 0); zt = Bt @ coef
-        r2h = lambda z: float(1 - ((ht - np.maximum(z, 0)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
+        Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = act(zj['test']); zt = Bt @ coef
+        r2h = lambda z: float(1 - ((ht - act(z)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
         imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
         neurons.append(dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c), importance=m) for t, c, m in zip(terms, coef[1:], imp)], dev_r2_path=path, test_r2=r2))
         log(f'neuron {j}: {len(terms)} terms, R² on test jets {r2:.4f}, {time.time() - t0:.0f} s')
     res = dict(setup=setup_name, n=n, untrained=untrained, lowlevel=lowlevel, observables=keys, n_thresholds={k: len(v) for k, v in knots.items()},
                jets=dict(fit=len(Z['fit']), dev=len(Z['dev']), test=len(Z['test'])), neurons=neurons)
-    out = out or RESULTS / setup_name / f'n{n}' / 'step1.json'; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(json.dumps(res, indent=1))
+    out = out or RESULTS / setup_name / net_dir(n) / 'step1.json'; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(json.dumps(res, indent=1))
     return res
 
 
 def load(setup_name, n):
     """the step-1 neurons; a setup with step1_from reuses that setup's step 1"""
     src = SETUPS[setup_name].step1_from or setup_name
-    return json.loads((RESULTS / src / f'n{n}' / 'step1.json').read_text())['neurons']
+    return json.loads((RESULTS / src / net_dir(n) / 'step1.json').read_text())['neurons']
 
 
 if __name__ == '__main__':
-    run(sys.argv[1], int(sys.argv[2]))
+    run(sys.argv[1], config.parse_net(sys.argv[2]))

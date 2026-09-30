@@ -9,25 +9,28 @@
    last layer; jets where the neuron is off get 0.1 of its mean weight);  formulas tuned on the neuron values — the
    network's own neurons, weight 1/Var.
 3. Whole observables are removed in rounds (10 at a time, the ones whose removal costs least at 250 terms), 3 rounds.
-4. For each budget (600 … 120 terms) and pool round 0 or 1: assemble, clean up (always-on thresholds → linear, merge
+4. For each budget (600 … 120 terms; ParT: 80 % … 15 % of the start formula's terms) and pool round 0 or 1: assemble, clean up (always-on thresholds → linear, merge
    duplicates), refit one-sided (jets where the reference neuron is off only penalise a positive value), train
    coefficients and thresholds together (300 Adam steps), refit, round thresholds to 2 or 3 significant digits.
 5. Choice: the smallest candidate whose validation score is within TOL of the START formula's (agreement with the
    network 0.5 points; accuracy 0.4 points; mean neuron R² 0.01).
-Only training jets are used for fitting and validation jets for the choice."""
+Only training jets are used for fitting and validation jets for the choice.
+ParT's neurons have no activation: every jet counts as "on" (the one-sided loss becomes plain least squares)."""
 import copy
 import numpy as np
 from . import formula as F
 from .network import round_wrap
+from .formula import act, is_on
 
 TOL = dict(agree=0.005, acc=0.004, neuron=0.01)
 KC = {'lin': 0, 'gt': 1, 'lt': 2}
-from .config import SMOKE
+from .config import SMOKE, TAGGER
 
 
 def log(*a):
     print(*a, flush=True)
-BUDGETS = (600, 500, 400, 350, 300, 250, 200, 150, 120) if not SMOKE else (60, 40)
+BUDGETS = (60, 40) if SMOKE else (600, 500, 400, 350, 300, 250, 200, 150, 120) if TAGGER == 'jedi' else None
+FRACTIONS = (0.8, 0.65, 0.5, 0.4, 0.3, 0.25, 0.2, 0.15)     # ParT: budgets as shares of the start formula's terms
 
 
 class Step4:
@@ -42,12 +45,12 @@ class Step4:
         return list(F.pre_activations(f, self.jets[split]['Q']).T)
 
     def logits_from_z(self, Z):
-        K, b, i, fb = self.last; return round_wrap(np.maximum(np.stack(Z, 1), 0), i, fb) @ K + b
+        K, b, i, fb = self.last; return round_wrap(act(np.stack(Z, 1)), i, fb) @ K + b
 
     def score(self, f, split='dev'):
         J = self.jets[split]
         if self.metric == 'neuron':
-            Hn = np.maximum(J['Z'], 0); H = np.maximum(np.stack(self.zs(f, split), 1), 0); v = Hn.var(0); ok = v > 1e-9
+            Hn = act(J['Z']); H = act(np.stack(self.zs(f, split), 1)); v = Hn.var(0); ok = v > 1e-9
             return float(np.mean(1 - ((H - Hn) ** 2).mean(0)[ok] / v[ok]))
         pred = self.logits_from_z(self.zs(f, split)).argmax(1)
         return float((pred == (J['net'] if self.metric == 'agree' else J['y'])).mean())
@@ -63,15 +66,15 @@ class Step4:
     def weights(self, neg=0.1, split='fit'):
         """per neuron, per jet: the weight of the pool fits"""
         if self.metric == 'neuron':
-            return [np.where(z > 0, 1.0, neg) / (np.maximum(z, 0).var() + 1e-9) for z in self.jets[split]['Z'].T]
+            return [np.where(is_on(z), 1.0, neg) / (act(z).var() + 1e-9) for z in self.jets[split]['Z'].T]
         Z, W = self._fisher(split); out = []
         for z, w in zip(Z, W):
-            on = z > 0; m = w[on].mean() if on.any() else 1e-6; out.append(np.where(on, w, neg * m))
+            on = is_on(z); m = w[on].mean() if on.any() else 1e-6; out.append(np.where(on, w, neg * m))
         return out
 
     def weights_raw(self, split='fit'):
         if self.metric == 'neuron':
-            return [np.full(len(z), 1.0 / (np.maximum(z, 0).var() + 1e-9)) for z in self.jets[split]['Z'].T]
+            return [np.full(len(z), 1.0 / (act(z).var() + 1e-9)) for z in self.jets[split]['Z'].T]
         return [w + 1e-6 for w in self._fisher(split)[1]]
 
     # ---------------- pools and backward paths
@@ -90,8 +93,9 @@ class Step4:
             out[j] = dict(pool=P, G=G, r=r, yy=yy, sd=sd, full=full, path=path)
         return out
 
-    def pools(self, rounds=3, batch=10, ref_budget=250 if not SMOKE else 40, log=log):
+    def pools(self, rounds=3, batch=10, ref_budget=None, log=log):
         """the pool snapshots of rounds 0..rounds (each round removes the `batch` cheapest observables)"""
+        ref_budget = ref_budget or (40 if SMOKE else 250 if TAGGER == 'jedi' else int(0.3 * F.n_terms(self.start)))
         W = self.weights(); qset = set(F.observables_used(self.start)); PP = self.build_paths(qset, W); snaps = [PP]
         for rd in range(rounds):
             c = quantity_costs(PP, ref_budget); drop = list(c)[:batch]; log(f'pool round {rd + 1}: removing {drop}')
@@ -106,7 +110,7 @@ class Step4:
             if not nr['terms']: continue
             X = np.stack([F.basis(t, D) for t in nr['terms']] + [np.ones(len(Zr[j]))], 1)
             sd = X.std(0); sd[-1] = 1; sd[sd == 0] = 1; Xs = X / sd
-            on = Zr[j] > 0; w = np.where(on, Wr[j], init_neg * Wr[j]); yt = Zr[j]
+            on = is_on(Zr[j]); w = np.where(on, Wr[j], init_neg * Wr[j]); yt = Zr[j]
             for _ in range(iters):
                 Xw = Xs * w[:, None]; G = Xw.T @ Xs
                 beta = np.linalg.solve(G + ridge * np.trace(G) * np.eye(X.shape[1]), Xw.T @ yt)
@@ -131,7 +135,7 @@ class Step4:
         Xq1, Xq2 = X[:, jnp.asarray(q1)], X[:, jnp.asarray(q2)]
         basis = lambda p: fac(Xq1, k1, t1 + p['d1'] * s1) * jnp.where(has2, fac(Xq2, k2, t2 + p['d2'] * s2), 1.0)
         bstd = jnp.asarray(np.asarray(basis(dict(d1=jnp.zeros_like(t1), d2=jnp.zeros_like(t2)))).std(0) + 1e-9)
-        Zrj, Wj = jnp.asarray(Zr), jnp.asarray(Wm); on = Zrj > 0
+        Zrj, Wj = jnp.asarray(Zr), jnp.asarray(Wm); on = jnp.asarray(is_on(Zr))
 
         def loss(p):
             z = jax.ops.segment_sum((basis(p) * (p['c'] / bstd)).T, nj, num_segments=len(f)).T + p['b']
@@ -269,6 +273,7 @@ def sort_formula(f):
 def run(start, jets, last, metric, total_budgets=BUDGETS, snapshots=(0, 1), log=log):
     """all candidates (budgets below the START size, pool rounds 0 and 1, 2 and 3 significant digits) and the choice"""
     S = Step4(start, jets, last, metric); PPs = S.pools(log=log); cands = []
+    total_budgets = total_budgets or tuple(int(round(f * F.n_terms(start))) for f in FRACTIONS)
     for r in snapshots:
         for b in total_budgets:
             if b >= F.n_terms(start): continue

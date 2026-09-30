@@ -10,6 +10,7 @@ that both give the same values. Every observable with units of mass has 'mass' i
 observables remove them by that rule, see config.py)."""
 import itertools
 from typing import NamedTuple
+from ..config import n_particles
 
 KH, KS = 15, 10            # per-particle observables: the KH hardest; the KS softest real particles beyond them (N > KH)
 TOPK = (2, 3, 5, 10, 15, 20, 30, 40, 50)
@@ -27,7 +28,8 @@ def ring_tag(lo, hi):
 
 
 def library(n):
-    """{id: Observable} for a network with n particles"""
+    """{id: Observable} for a network n (JEDI: n particles; ParT: 'kin' or 'full', 128 particles plus jet and particle extras)"""
+    net, n = n, n_particles(n)
     L = {}
 
     def add(id_, label, expr, desc):
@@ -164,7 +166,38 @@ def library(n):
     add('sd_zg', 'soft-drop z_g', 'softdrop("zg")', 'momentum sharing of the soft-drop splitting')
     add('sd_rg', 'soft-drop R_g', 'softdrop("rg")', 'angle of the soft-drop splitting')
     add('sd_nremoved', 'soft-drop: number of removed branches', 'softdrop("removed")', 'number of branches removed by soft drop')
+    if not isinstance(net, int): extras(add, net)
     return L
+
+
+def extras(add, net):
+    """ParT: the tagger also sees each particle's energy (so the jet's η) and, for 'full', particle type, charge and the
+    track impact parameters. Particle i's energy: pTᵢ cosh(η_jet + Δηᵢ) (massless)."""
+    add('jet_abs_eta', '|η_jet|', 'abs(jet_eta)', 'absolute pseudorapidity of the jet axis')
+    add('sum_e', 'Σᵢ Eᵢ', 'sum(pt[i] * math.cosh(jet_eta + eta[i]) for i in real)', 'total energy of the particles (massless) [GeV]')
+    add('log_sum_e', 'log Σᵢ Eᵢ', 'math.log(sum(pt[i] * math.cosh(jet_eta + eta[i]) for i in real))', 'natural log of the total energy')
+    if net != 'full': return
+    for k, (nm, cond) in PTYPES.items():
+        add(f'n_{k}', f'number of {nm}', f'sum(1 for i in real if {cond})', f'number of {nm}')
+        add(f'z_{k}', f'pT share of {nm}', f'sum(z[i] for i in real if {cond})', f'pT share of {nm}')
+    add('n_lepton', 'number of leptons', 'sum(1 for i in real if ptype[i] in (4, 5))', 'number of electrons and muons')
+    add('lep_z', 'pT share of the hardest lepton', 'max([z[i] for i in real if ptype[i] in (4, 5)] or [0.0])', 'pT share of the hardest electron or muon (0 if none)')
+    add('lep_dr', 'ΔR of the hardest lepton', 'lepton_dr()', 'ΔR from the jet axis of the hardest electron or muon (0 if none)')
+    add('jet_charge', 'Σᵢ qᵢ zᵢ', 'sum(charge[i] * z[i] for i in real)', 'pT-weighted jet charge')
+    add('jet_charge_k05', 'Σᵢ qᵢ zᵢ^½', 'sum(charge[i] * math.sqrt(z[i]) for i in real)', 'jet charge with κ = 0.5')
+    add('sum_charge', 'Σᵢ qᵢ', 'sum(charge[i] for i in real)', 'total charge of the particles')
+    for w, lab in (('d0', 'd0'), ('dz', 'dz')):
+        for r in (1, 2, 3):
+            add(f's{w}_{r}', f'{lab}/σ of track {r}', f'sip({w!r}, {r})', f'the {r}. largest |{lab}|/σ({lab}) among the charged particles, with the sign of {lab} (0 if fewer tracks)')
+        for c in (2, 5):
+            add(f'n_s{w}_above_{c}', f'Σᵢ [|{lab}ᵢ/σᵢ| > {c}]', f'sum(1 for i in real if charge[i] != 0 and abs({w}[i]) > {c} * {w}err[i])', f'number of charged particles with |{lab}|/σ > {c}')
+        add(f'max_abs_{w}', f'max |{lab}| [mm]', f'max([abs({w}[i]) for i in real if charge[i] != 0] or [0.0])', f'largest |{lab}| among the charged particles [mm]')
+    add('z_displaced', 'pT share of displaced tracks', 'sum(z[i] for i in real if charge[i] != 0 and abs(d0[i]) > 3 * d0err[i])', 'pT share of charged particles with |d0|/σ > 3')
+    add('mass_displaced', 'mass of displaced tracks', 'displaced_mass()', 'invariant mass of the charged particles with |d0|/σ > 3 (massless) [GeV]')
+
+
+PTYPES = dict(charged_had=('charged hadrons', 'ptype[i] == 1'), neutral_had=('neutral hadrons', 'ptype[i] == 2'), photon=('photons', 'ptype[i] == 3'),
+              electron=('electrons', 'ptype[i] == 4'), muon=('muons', 'ptype[i] == 5'), charged=('charged particles', 'charge[i] != 0'))
 
 
 def mass_ids(n):

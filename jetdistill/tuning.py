@@ -1,15 +1,15 @@
 """Steps 2 and 3: all coefficients tuned together, then pruning with retraining.
 
 Step 2 keeps the terms and thresholds of step 1 (the first K terms of each neuron, coefficients refitted by least squares)
-and trains every coefficient and intercept at once with Adam, full batch, on 100,000 fitting jets. Targets:
+and trains every coefficient and intercept at once with Adam, full batch, on 100,000 fitting jets (ParT: 50,000). Targets:
   probabilities  soft cross-entropy to the network's class probabilities, through the network's own last layer
-                 (formula neurons rounded to the network's fixed-point grid, straight-through gradient)
+                 (JEDI: formula neurons rounded to the network's fixed-point grid, straight-through gradient)
   decisions      cross-entropy to the network's class (one-hot)
   labels         cross-entropy to the true class
   neurons        no class scores: only R (below)
 plus λ·R for the first three, R = mean over neurons of (h_j − h_j,network)² / Var(h_j,network) (keeps each formula neuron
-close to the network's; the 16 neurons reach the probabilities only through 5 class scores, so without R the tuning can
-move them in directions the probabilities do not see).
+close to the network's; the neurons (16 / 128) reach the probabilities only through 5 / 10 class scores, so without R the
+tuning can move them in directions the probabilities do not see).
 The kept step (checked every 50 of 800) is the one with the best validation score: agreement with the network's class
 (probabilities, decisions), accuracy (labels) or mean neuron R² (neurons).
 Step 3 removes the weakest terms (|coefficient| × spread of the term), 15 % at a time, retraining after each cut; a cut is
@@ -18,7 +18,7 @@ is halved, down to 2 %."""
 import numpy as np
 from . import formula as F
 
-from .config import SMOKE
+from .config import SMOKE, RELU, NC
 
 
 def log(*a):
@@ -32,7 +32,7 @@ def refit(neurons, Q, Z, ridge=1e-6):
     """least-squares coefficients of the given terms to each neuron's pre-activation Z (clipped below as in step 1)"""
     out = []
     for nr, B in zip(neurons, F.bases(neurons, Q)):
-        z = Z[:, nr['neuron']]; zp = z[z > 0]; tgt = np.maximum(z, -0.2 * (zp.std() if len(zp) > 50 else z.std()))
+        z = Z[:, nr['neuron']]; zp = z[z > 0]; tgt = np.maximum(z, -0.2 * (zp.std() if len(zp) > 50 else z.std())) if RELU else z
         if not nr['terms']: out.append(dict(nr, intercept=float(tgt.mean()))); continue
         sd = B.std(0) + 1e-12; Bn = (B - B.mean(0)) / sd
         c = np.linalg.solve(Bn.T @ Bn + ridge * len(Bn) * np.eye(Bn.shape[1]), Bn.T @ (tgt - tgt.mean())) / sd
@@ -52,21 +52,25 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, h
     steps, the loss and the score on the training and on the validation jets (analysis/convergence.py)."""
     import jax, jax.numpy as jnp
     steps = steps or STEPS_BY_TARGET.get(target, STEPS)
-    K7, b7, i7, f7 = (jnp.asarray(x, jnp.float32) for x in last)
+    K7, b7 = (jnp.asarray(x, jnp.float32) for x in last[:2]); rounds = last[2] is not None
+    if rounds: i7, f7 = (jnp.asarray(x, jnp.float32) for x in last[2:])
+    a = jax.nn.relu if RELU else (lambda x: x)
     B = [jnp.asarray(b, jnp.float32) for b in F.bases(formula, Qf)]; Bd = [jnp.asarray(b, jnp.float32) for b in F.bases(formula, Qd)]
     sd = [jnp.asarray(np.asarray(b).std(0) + 1e-9) for b in B]
     th = [(jnp.asarray(c, jnp.float32) * s, jnp.asarray(c0, jnp.float32)) for (c, c0), s in zip(F.coefs(formula), sd)]   # scaled coefficients
 
     def hidden(th, Bs):
-        return jnp.stack([jax.nn.relu(b @ (c / s) + c0) for (c, c0), b, s in zip(th, Bs, sd)], 1)
+        return jnp.stack([a(b @ (c / s) + c0) for (c, c0), b, s in zip(th, Bs, sd)], 1)
 
     def logits(th, Bs):
-        h = hidden(th, Bs); sc = 2.0 ** f7; hq = (jnp.floor(h * sc + 0.5) / sc) % (2.0 ** i7)
+        h = hidden(th, Bs)
+        if not rounds: return h @ K7 + b7
+        sc = 2.0 ** f7; hq = (jnp.floor(h * sc + 0.5) / sc) % (2.0 ** i7)
         return (h + jax.lax.stop_gradient(hq - h)) @ K7 + b7
 
     Hn = jnp.asarray(fit['H'], jnp.float32); vn = jnp.asarray(np.asarray(fit['H']).var(0) + 1e-6, jnp.float32)
     R = lambda th: jnp.mean((hidden(th, B) - Hn) ** 2 / vn)
-    T = {'probabilities': fit['P'], 'decisions': np.eye(5)[fit['net']], 'labels': np.eye(5)[fit['y']]}.get(target)
+    T = {'probabilities': fit['P'], 'decisions': np.eye(NC)[fit['net']], 'labels': np.eye(NC)[fit['y']]}.get(target)
     if target == 'neurons':
         loss = R
     else:
@@ -112,4 +116,4 @@ def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=
 def targets(net_run, y):
     """the tuning targets of a set of jets from the network's outputs"""
     L = net_run['logits']; P = np.exp(L - L.max(1, keepdims=True)); P /= P.sum(1, keepdims=True)
-    return dict(P=P, net=L.argmax(1), y=y, H=np.maximum(net_run['z'], 0))
+    return dict(P=P, net=L.argmax(1), y=y, H=F.act(net_run['z']))

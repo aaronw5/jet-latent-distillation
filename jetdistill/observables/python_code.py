@@ -182,6 +182,36 @@ V2 = '''
 '''
 V2_TOKENS = ('ecf(', 'kaxes(', 'tau_n(', 'subjets(', 'softdrop(', 'softp(', 'ncum(', 'm4(')
 
+TRACKS = '''
+    def lepton_dr():
+        lep = [i for i in real if ptype[i] in (4, 5)]
+        if not lep:
+            return 0.0
+        i = max(lep, key=lambda i: z[i])
+        return math.hypot(eta[i], phi[i])
+
+    def sip(w, r):
+        v, e = (d0, d0err) if w == 'd0' else (dz, dzerr)
+        s = sorted((v[i] / max(e[i], 1e-6) for i in real if charge[i] != 0), key=lambda x: -abs(x))
+        return s[r - 1] if len(s) >= r else 0.0
+
+    def displaced_mass():
+        E = px = py = pz = 0.0
+        for i in real:
+            if charge[i] != 0 and abs(d0[i]) > 3 * d0err[i]:
+                E += pt[i] * math.cosh(eta[i]); px += pt[i] * math.cos(phi[i]); py += pt[i] * math.sin(phi[i]); pz += pt[i] * math.sinh(eta[i])
+        return math.sqrt(max(E * E - px * px - py * py - pz * pz, 0.0))
+'''
+TRACK_TOKENS = ('lepton_dr(', 'sip(', 'displaced_mass(')
+# the arguments of quantities() / classify() of each kind of network (jedi: pT, Δη, Δφ; ParT adds the jet η, and 'full'
+# the particle types, charges and impact parameters)
+ARGS = dict(jedi=('pt', 'eta', 'phi'), kin=('pt', 'eta', 'phi', 'jet_eta'),
+            full=('pt', 'eta', 'phi', 'jet_eta', 'charge', 'ptype', 'd0', 'd0err', 'dz', 'dzerr'))
+
+
+def args_of(n):
+    return ARGS['jedi' if isinstance(n, int) else n]
+
 
 def helper_code(exprs):
     """the helper blocks the expressions use"""
@@ -189,7 +219,8 @@ def helper_code(exprs):
     if 'tau(' in exprs: body += TAU
     if any(w in exprs for w in ('ta ', 'ta + tc', 'lam1', 'lam2', 'tb')): body += TENSOR
     if any(re.search(rf'\b{w}\b', exprs) for w in ('e2', 'e3')): body += ECF
-    if any(t in exprs for t in V2_TOKENS): body += V2
+    if any(t in exprs for t in V2_TOKENS) or any(t in exprs for t in TRACK_TOKENS): body += V2
+    if any(t in exprs for t in TRACK_TOKENS): body += TRACKS
     return body
 
 
@@ -197,8 +228,9 @@ def quantities_source(ids, n):
     lib = library(n); missing = [q for q in ids if q not in lib]
     if missing: raise KeyError(missing)
     exprs = ' '.join(lib[q].expr for q in ids)
-    return '\n'.join(['def quantities(pt, eta, phi):',
-                      '    pt, eta, phi = [float(x) for x in pt], [float(x) for x in eta], [float(x) for x in phi]',
+    a = args_of(n); per = [x for x in a if x != 'jet_eta']
+    return '\n'.join([f'def quantities({", ".join(a)}):',
+                      f'    {", ".join(per)} = ' + ', '.join(f'[float(x) for x in {x}]' for x in per)] + (['    jet_eta = float(jet_eta)'] if 'jet_eta' in a else []) + [
                       helper_code(exprs).rstrip('\n'), '', '    return SimpleNamespace(']
                      + [f'        {q}={lib[q].expr},' for q in ids] + ['    )'])
 

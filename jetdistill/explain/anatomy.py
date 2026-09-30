@@ -8,7 +8,7 @@ Per neuron: jets where it is off / on and low / on and high; every if-statement 
 groups of jets formed only from what each if-statement adds (k-means, 10 groups, split further where mixed); regimes (a
 depth-3 tree on the neuron's own observables). Per class score: what each neuron adds for jets of each true class."""
 import numpy as np
-from ..config import CLASSES as CL
+from ..config import CLASSES as CL, NC, RELU
 from .. import formula as F
 from .pack import neurons_and_logits
 from ..observables import library
@@ -39,7 +39,7 @@ def profile(sel, z, ix, iy, rb, Q, y):
     img = np.zeros((NB, NB)); zz = z[sel]; np.add.at(img, (iy[sel].ravel(), ix[sel].ravel()), zz.ravel()); img /= n
     rad = np.zeros(len(RB) - 1); np.add.at(rad, rb[sel].ravel(), zz.ravel()); rad /= n
     zs = -np.sort(-zz, 1)[:, :min(8, zz.shape[1])].mean(0)
-    return dict(n=n, frac=round(n / len(y), 4), classes=[round(float((y[sel] == c).mean()), 4) for c in range(5)],
+    return dict(n=n, frac=round(n / len(y), 4), classes=[round(float((y[sel] == c).mean()), 4) for c in range(NC)],
                 image=[[round(float(v), 5) for v in row] for row in img], radial=[round(float(v), 4) for v in rad], zshare=[round(float(v), 4) for v in zs],
                 means={q: round(float(Q[q][sel].mean()), 4) for q in ('mass', 'width', 'sum_pt') if q in Q},
                 pt_rank=[round(float(v), 2) for v in CTX['PT'][0][sel][:, :min(8, CTX['PT'][0].shape[1])].mean(0)],                     # mean pT [GeV] of the hardest particles
@@ -54,7 +54,7 @@ def hist(Q, y, q, passing=None, nb=30):
     x = Q[q].astype(np.float64); lo, hi = np.quantile(x, [.01, .99])
     if hi <= lo: hi = lo + 1e-6
     e = np.linspace(lo, hi, nb + 1); xc = np.clip(x, lo, hi); out = dict(edges=[round(float(v), 6) for v in e],
-        per_class=[[round(float(v), 4) for v in np.histogram(xc[y == c], e)[0] / max((y == c).sum(), 1)] for c in range(5)],
+        per_class=[[round(float(v), 4) for v in np.histogram(xc[y == c], e)[0] / max((y == c).sum(), 1)] for c in range(NC)],
         all=[round(float(v), 5) for v in np.histogram(xc, e)[0] / len(x)])
     if passing is not None: out['passing'] = [round(float(v), 5) for v in np.histogram(xc[passing], e)[0] / len(x)]
     return out
@@ -74,8 +74,8 @@ def group_object(sel, nr, terms, fires, adds, h, Q, y, PRED, wrow, z, ix, iy, rb
                 mean_neuron=round(float(h[sel].mean()), 3), neuron_on=round(float((h[sel] > 0).mean()), 3), example=example,
                 added_by_each=[round(float(adds[sel, i].mean()), 3) for i in range(KT)],
                 added_p10_p90=[[round(float(np.quantile(adds[sel, i], .1)), 3), round(float(np.quantile(adds[sel, i], .9)), 3)] for i in range(KT)],
-                formula_decides=[round(float((pf == c).mean()), 3) for c in range(5)], formula_right=round(float((pf == y[sel]).mean()), 3),
-                adds_to_scores=[round(float((h[sel] * wrow[c]).mean()), 3) for c in range(5)], **{k2: pr[k2] for k2 in keys if k2 in pr})
+                formula_decides=[round(float((pf == c).mean()), 3) for c in range(NC)], formula_right=round(float((pf == y[sel]).mean()), 3),
+                adds_to_scores=[round(float((h[sel] * wrow[c]).mean()), 3) for c in range(NC)], **{k2: pr[k2] for k2 in keys if k2 in pr})
 
 
 def split_by_mixed(sel, fires, adds, depth, obj, min_n, share_min=0.15, max_depth=3):
@@ -110,8 +110,8 @@ def neuron_regimes(nr, h, Q, y, pred, wrow, z, ix, iy, rb, depth=3):
         if T.children_left[i] == -1:
             sel = leaf == i; hv = h[sel]; pr = profile(sel, z, ix, iy, rb, Q, y)
             out.append(dict(conditions=conds, frac=round(float(sel.mean()), 4), mean=round(float(hv.mean()), 3), p10=round(float(np.quantile(hv, .1)), 3),
-                            p90=round(float(np.quantile(hv, .9)), 3), on=round(float((hv > 0).mean()), 3), classes=[round(float((y[sel] == c).mean()), 4) for c in range(5)],
-                            formula_right=round(float((pred[sel] == y[sel]).mean()), 3), adds_to_scores=[round(float(hv.mean() * wrow[c]), 3) for c in range(5)],
+                            p90=round(float(np.quantile(hv, .9)), 3), on=round(float((hv > 0).mean()), 3), classes=[round(float((y[sel] == c).mean()), 4) for c in range(NC)],
+                            formula_right=round(float((pred[sel] == y[sel]).mean()), 3), adds_to_scores=[round(float(hv.mean() * wrow[c]), 3) for c in range(NC)],
                             means=pr['means'] if pr else None, pt_rank=pr['pt_rank'] if pr else None)); return
         q = qs[T.feature[i]]; t = float(T.threshold[i])
         walk(T.children_left[i], conds + [[q, '<=', round(t, 5)]]); walk(T.children_right[i], conds + [[q, '>', round(t, 5)]])
@@ -134,7 +134,9 @@ def build(f, normalized, n, last, jets, X):
     H, Lg = neurons_and_logits(f, Q, last); PRED = Lg.argmax(1); K7 = last[0]; normT = {nr['neuron']: nr for nr in normalized[0]}
     neurons = []
     for nr in f:
-        j = nr['neuron']; h = H[:, j]; on = h > 0; hi = on & (h >= np.quantile(h[on], 0.75)) if on.any() else on
+        j = nr['neuron']; h = H[:, j]
+        if RELU: on = h > 0; hi = on & (h >= np.quantile(h[on], 0.75)) if on.any() else on
+        else: on = h > np.quantile(h, 0.25); hi = h >= np.quantile(h, 0.75)      # no activation: 'off' = lowest quarter, 'on_high' = highest quarter
         groups = dict(off=profile(~on, z, ix, iy, rb, Q, y), on_low=profile(on & ~hi, z, ix, iy, rb, Q, y), on_high=profile(hi, z, ix, iy, rb, Q, y))
         terms = sorted(normT[j]['terms'], key=lambda t: -abs(t['share'])); tl = []
         for k, t in enumerate(terms):
@@ -159,11 +161,11 @@ def build(f, normalized, n, last, jets, X):
         regimes, r2 = neuron_regimes(nr, h, Q, y, PRED, K7[j], z, ix, iy, rb)
         neurons.append(dict(neuron=j, intercept=float(nr['intercept']), groups=groups, terms=tl, combo_tests=[t['test'] for t in tl], combos=combos, regimes=regimes, regime_r2=r2))
     comp = {c: sorted([dict(neuron=nn['neuron'], regime=k, conditions=r['conditions'], frac=r['frac'], adds=r['adds_to_scores'][c], weighted=round(r['frac'] * r['adds_to_scores'][c], 4),
-                            classes=r['classes'], value=r['mean']) for nn in neurons for k, r in enumerate(nn['regimes']) if abs(r['adds_to_scores'][c]) > 1e-4], key=lambda x: -abs(x['weighted'])) for c in range(5)}
+                            classes=r['classes'], value=r['mean']) for nn in neurons for k, r in enumerate(nn['regimes']) if abs(r['adds_to_scores'][c]) > 1e-4], key=lambda x: -abs(x['weighted'])) for c in range(NC)}
     scores = []
-    for c in range(5):
+    for c in range(NC):
         top = Lg[:, c] >= np.quantile(Lg[:, c], 0.9)
-        scores.append(dict(cls=CL[c], bias=float(last[1][c]), contrib_by_true_class=[[round(float((H[y == k, j] * K7[j, c]).mean()), 4) for j in range(H.shape[1])] for k in range(5)],
+        scores.append(dict(cls=CL[c], bias=float(last[1][c]), contrib_by_true_class=[[round(float((H[y == k, j] * K7[j, c]).mean()), 4) for j in range(H.shape[1])] for k in range(NC)],
                            top10=profile(top, z, ix, iy, rb, Q, y), composition=comp[c][:12]))
     return dict(formula=F.tag(f), n_particles=n, n_jets=len(y), image_range=0.8, image_bins=NB, radial_bins=RB, pt_bins=[round(float(v), 3) for v in PBIN],
                 jetpt_bins=[round(float(v), 1) for v in JB], leadpt_bins=[round(float(v), 1) for v in LB], all=allp, neurons=neurons, class_scores=scores)

@@ -1,6 +1,6 @@
 """Stand-alone Python files of a formula (plain Python, `math` only) and their check.
 
-  <name>.py             particles -> observables -> 16 neurons as if-statements -> the network's last layer -> class.
+  <name>.py             particles -> observables -> the neurons as if-statements -> the network's last layer -> class.
                         The terms of one observable in a neuron are merged exactly into one piecewise-linear chain
                         (if Q < t1: … elif …), products are written as they are.
   <name>_normalized.py  the same function with every weight rescaled to read as "how much this matters" (below).
@@ -8,15 +8,21 @@ Both files are run jet by jet on test jets and must give the formula's class (ch
 
 Normalized weights: each term is measured by its average absolute size on the training jets (avg_k), so
   neuron j:  z_j = S_j · (c_j + Σ_k share_k · term_k / avg_k),  Σ_k |share_k| = 1   (share_k = a_k·avg_k / S_j)
-  class c:   logit_c = B_c + T_c · Σ_j share_jc · h_j / avg_j,  Σ_j |share_jc| = 1  (h_j after the network's rounding)."""
+  class c:   logit_c = B_c + T_c · Σ_j share_jc · h_j / avg_j,  Σ_j |share_jc| = 1  (h_j after the network's rounding;
+             avg_j = the average |h_j|).
+JEDI files take classify(pt, eta, phi); ParT files classify(pt, eta, phi, jet_eta) ('kin') and, for 'full', also each
+particle's charge, type, d0, σ(d0), dz, σ(dz) (observables/python_code.ARGS)."""
 import hashlib, importlib.util, json, os, pickle
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 import numpy as np
 from . import formula as F
-from .config import CLASSES
+from .config import CLASSES, NC, RELU, TAGGER, n_particles
 from .network import round_wrap
 from .observables import library, quantities_source, code_names
+from .observables.python_code import args_of
+
+LAYER = 'jet_layer_4' if TAGGER == 'jedi' else 'class_token'   # the name of the neurons' function in the files
 
 SIG = 7   # significant digits of printed numbers
 
@@ -77,40 +83,62 @@ def neuron_code(ch):
 
 def header(title, n, used, stats):
     lib = library(n)
-    return [f'"""JEDI-linear jet tagger, {n} particles, 3 features: {title}, as if-statements.', '',
-            f'Input:  the {n} hardest particles of a jet, hardest first, each (pT [GeV], Δη, Δφ) relative to the jet axis;',
-            '        empty slots have pT = 0.', 'Output: the class (g, q, W, Z or t), the 5 logits and the 5 probabilities.', '',
-            '1. quantities():  physics quantities of the particles.',
-            "2. jet_layer_4(): the 16 neurons of the network's last hidden layer, each max(0, z) with z built from if-statements.",
-            "3. logits():      the network's own last layer: each neuron is rounded to the network's fixed-point grid",
-            '                  (round to a multiple of 2^-f, then wrap modulo 2^i), multiplied by the weights, plus the biases.',
+    if TAGGER == 'jedi':
+        return [f'"""JEDI-linear jet tagger, {n} particles, 3 features: {title}, as if-statements.', '',
+                f'Input:  the {n} hardest particles of a jet, hardest first, each (pT [GeV], Δη, Δφ) relative to the jet axis;',
+                '        empty slots have pT = 0.', 'Output: the class (g, q, W, Z or t), the 5 logits and the 5 probabilities.', '',
+                '1. quantities():  physics quantities of the particles.',
+                "2. jet_layer_4(): the 16 neurons of the network's last hidden layer, each max(0, z) with z built from if-statements.",
+                "3. logits():      the network's own last layer: each neuron is rounded to the network's fixed-point grid",
+                '                  (round to a multiple of 2^-f, then wrap modulo 2^i), multiplied by the weights, plus the biases.',
+                '4. classify():    softmax of the logits; the class is the largest logit.', '', stats, '', 'Quantities:',
+                *[f'  Q.{q:22s} {lib[q].desc}' for q in used], '"""']
+    extra = ['        jet_eta = the pseudorapidity of the jet axis.'] + (['        charge, ptype (1 charged hadron, 2 neutral hadron, 3 photon, 4 electron, 5 muon), d0, d0err, dz, dzerr:',
+                                                                           '        per particle, as JetClass stores them (impact parameters in mm).'] if n == 'full' else [])
+    return [f'"""Particle Transformer (ParT) jet tagger, JetClass, input features \'{n}\': {title}, as if-statements.', '',
+            f'Input:  the particles of a jet (up to {n_particles(n)}), hardest first, each (pT [GeV], Δη, Δφ) relative to the jet axis;',
+            '        empty slots have pT = 0.', *extra, f'Output: the class ({", ".join(CLASSES)}), the {NC} logits and the {NC} probabilities.', '',
+            '1. quantities():  physics quantities of the jet.',
+            "2. class_token(): the 128 numbers the network's last layer reads (its class token after the last LayerNorm), each",
+            '                  built from if-statements.',
+            "3. logits():      the network's own last layer: the 128 numbers multiplied by the weights, plus the biases.",
             '4. classify():    softmax of the logits; the class is the largest logit.', '', stats, '', 'Quantities:',
             *[f'  Q.{q:22s} {lib[q].desc}' for q in used], '"""']
 
 
 def tail(n):
-    ex = lambda v: str(v[:n] + [0.0] * max(0, n - 8))
-    return ['def classify(pt, eta, phi):', '    s = logits(jet_layer_4(quantities(pt, eta, phi)))', '    m = max(s)', '    e = [math.exp(x - m) for x in s]',
+    N = n_particles(n); ex = lambda v: str(v[:N] + [0.0] * max(0, N - 8)) if isinstance(n, int) else str(v)
+    a = ', '.join(args_of(n)); demo = dict(jet_eta='    jet_eta = 0.4', charge=f'    charge = {ex([1.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0])}',
+                                           ptype=f'    ptype = {ex([1.0, 1.0, 3.0, 1.0, 2.0, 1.0, 3.0, 4.0])}', d0=f'    d0 = {ex([0.01, -0.3, 0.0, 0.02, 0.0, 0.2, 0.0, -0.01])}',
+                                           d0err=f'    d0err = {ex([0.01, 0.02, 0.0, 0.03, 0.0, 0.02, 0.0, 0.01])}', dz=f'    dz = {ex([0.02, 0.1, 0.0, -0.02, 0.0, 0.3, 0.0, 0.01])}',
+                                           dzerr=f'    dzerr = {ex([0.01, 0.02, 0.0, 0.03, 0.0, 0.02, 0.0, 0.01])}')
+    return [f'def classify({a}):', f'    s = logits({LAYER}(quantities({a})))', '    m = max(s)', '    e = [math.exp(x - m) for x in s]',
             '    p = [x / sum(e) for x in e]', '    return CLASSES[s.index(m)], s, p', '', '', "if __name__ == '__main__':",
             f'    pt = {ex([412.0, 230.5, 101.2, 40.3, 22.8, 10.1, 6.4, 3.3])}', f'    eta = {ex([0.01, -0.12, 0.25, 0.05, -0.31, 0.2, -0.05, 0.4])}',
-            f'    phi = {ex([-0.02, 0.18, -0.1, 0.33, 0.07, -0.25, 0.12, -0.36])}', '    c, s, p = classify(pt, eta, phi)', "    print('class:', c)",
+            f'    phi = {ex([-0.02, 0.18, -0.1, 0.33, 0.07, -0.25, 0.12, -0.36])}', *[demo[k] for k in args_of(n)[3:]], f'    c, s, p = classify({a})', "    print('class:', c)",
             "    print('logits:', dict(zip(CLASSES, [round(x, 4) for x in s])))", "    print('probabilities:', dict(zip(CLASSES, [round(x, 4) for x in p])))", '']
 
 
 def constants(last):
     K, b, i_, f_ = last
-    return [f'CLASSES = {CLASSES!r}', f'W = {json.dumps([[float(v) for v in row] for row in K])}', f'B = {json.dumps([float(v) for v in b])}',
-            f'INT_BITS = {json.dumps([int(v) for v in i_])}', f'FRAC_BITS = {json.dumps([int(v) for v in f_])}', '', '']
+    return [f'CLASSES = {CLASSES!r}', f'W = {json.dumps([[float(v) for v in row] for row in K])}', f'B = {json.dumps([float(v) for v in b])}'] + \
+           ([f'INT_BITS = {json.dumps([int(v) for v in i_])}', f'FRAC_BITS = {json.dumps([int(v) for v in f_])}'] if i_ is not None else []) + ['', '']
+
+
+RET = '    return max(0.0, z)' if RELU else '    return z'
+
+
+def logits_code(rounds):
+    return ['def logits(h):'] + (['    h = [(math.floor(x * 2 ** f + 0.5) / 2 ** f) % 2 ** i for x, i, f in zip(h, INT_BITS, FRAC_BITS)]'] if rounds else [])
 
 
 def write_formula(formula, n, last, ranges, title, stats, path):
     used = F.observables_used(formula)
     L = header(title, n, used, stats) + ['import math', 'from types import SimpleNamespace', ''] + constants(last) + [quantities_source(used, n), '', '']
     for nr in formula:
-        L += [f'def neuron_{nr["neuron"]}(Q):'] + neuron_code(chains(nr, ranges)) + ['    return max(0.0, z)', '', '']
-    L += ['def jet_layer_4(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in formula)) + ']', '', '',
-          'def logits(h):', '    h = [(math.floor(x * 2 ** f + 0.5) / 2 ** f) % 2 ** i for x, i, f in zip(h, INT_BITS, FRAC_BITS)]',
-          '    return [B[c] + sum(h[j] * W[j][c] for j in range(len(h))) for c in range(5)]', '', ''] + tail(n)
+        L += [f'def neuron_{nr["neuron"]}(Q):'] + neuron_code(chains(nr, ranges)) + [RET, '', '']
+    L += [f'def {LAYER}(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in formula)) + ']', '', ''] + logits_code(last[2] is not None) + \
+         [f'    return [B[c] + sum(h[j] * W[j][c] for j in range(len(h))) for c in range({NC})]', '', ''] + tail(n)
     Path(path).parent.mkdir(parents=True, exist_ok=True); Path(path).write_text(code_names('\n'.join(L))); return Path(path)
 
 
@@ -119,10 +147,10 @@ def normalize(formula, Qtrain, last):
     K, b, i_, f_ = last; out = []
     for nr, B in zip(formula, F.bases(formula, Qtrain)):
         a = np.array([t['coef'] for t in nr['terms']]); avg = np.abs(B).mean(0); avg = np.where(avg > 0, avg, 1.0)
-        S = float((np.abs(a) * avg).sum()) or 1.0; z = nr['intercept'] + (B @ a if len(a) else 0.0)
-        h = round_wrap(np.maximum(z, 0), i_[nr['neuron']], f_[nr['neuron']])
+        S = float((np.abs(a) * avg).sum()) or 1.0; z = nr['intercept'] + (B @ a if len(a) else 0.0) + np.zeros(len(B))
+        j = nr['neuron']; h = round_wrap(F.act(z), None if i_ is None else i_[j], None if f_ is None else f_[j])
         terms = sorted([dict(t, avg=float(v), share=float(c * v / S)) for t, c, v in zip(nr['terms'], a, avg)], key=lambda t: -abs(t['share']))
-        out.append(dict(neuron=nr['neuron'], scale=S, c=nr['intercept'] / S, terms=terms, h_avg=float(np.mean(h)) or 1.0, on=float(np.mean(z > 0))))
+        out.append(dict(neuron=j, scale=S, c=nr['intercept'] / S, terms=terms, h_avg=float(np.mean(np.abs(h))) or 1.0, on=float(np.mean(F.is_on(z)))))
     hav = np.array([nr['h_avg'] for nr in out]); V = K * hav[:, None]; T = np.abs(V).sum(0)
     return out, dict(T=T.tolist(), share=(V / T).tolist(), neuron_importance=(np.abs(V).sum(1) / np.abs(V).sum()).tolist(), h_avg=hav.tolist())
 
@@ -145,19 +173,19 @@ def write_normalized(formula, n, last, norm, title, stats, path):
                '             average input that comes from that if-statement (sign: pushes it up / down).',
                '  class c:   logit_c = B_c + T_c * sum_j share_jc * h_j / avg_j   with  sum_j |share_jc| = 1', '',
                'How much each neuron matters (share of all class scores, averaged over the training jets):',
-               *[f'  neuron {j:2d}: {100 * v:5.1f}%   (on for {100 * neurons[j]["on"]:.0f}% of jets)' for j, v in sorted(enumerate(cls['neuron_importance']), key=lambda x: -x[1])]]
+               *[f'  neuron {j:2d}: {100 * v:5.1f}%' + (f'   (on for {100 * neurons[j]["on"]:.0f}% of jets)' if RELU else '') for j, v in sorted(enumerate(cls['neuron_importance']), key=lambda x: -x[1])]]
     L = H + ['import math', 'from types import SimpleNamespace', ''] + constants(last) + [quantities_source(used, n), '', '']
     for nr in neurons:
         L += [f'def neuron_{nr["neuron"]}(Q):', f'    # scale S = {nr["scale"]:.4g}; each line: share * term / its average size', f'    z = {g(nr["scale"])} * ({g(nr["c"])}']
         for t in nr['terms']:
             ex = _piece(t['q'], t['kind'], t.get('t')) + (' * ' + _piece(t['q2'], t['kind2'], t.get('t2')) if t.get('q2') else '')
             L.append(f"        {'+' if t['share'] >= 0 else '-'} {g(abs(t['share']))} * {ex} / {g(t['avg'])}   # {100 * t['share']:+.1f}%  {_readable(t)}")
-        L += ['    )', '    return max(0.0, z)', '', '']
-    L += ['def jet_layer_4(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in neurons)) + ']', '', '',
+        L += ['    )', RET, '', '']
+    L += [f'def {LAYER}(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in neurons)) + ']', '', '',
           f'H_AVG = {json.dumps(cls["h_avg"])}', f'T = {json.dumps(cls["T"])}', '', '',
-          'def logits(h):', '    h = [(math.floor(x * 2 ** f + 0.5) / 2 ** f) % 2 ** i for x, i, f in zip(h, INT_BITS, FRAC_BITS)]',
+          *logits_code(last[2] is not None),
           '    # rounded to a multiple of 2^-20 (the formula\'s class scores are exact binary fractions): removes floating-point noise', '    return [round(v * 2 ** 20) / 2 ** 20 for v in [']
-    for c in range(5):
+    for c in range(NC):
         sh = sorted([(j, cls['share'][j][c]) for j in range(len(neurons)) if cls['share'][j][c] != 0], key=lambda x: -abs(x[1]))
         L.append(f'        {g(last[1][c])} + T[{c}] * (   # class {CLASSES[c]}')
         L += [f"            {'+' if s >= 0 else '-'} {g(abs(s))} * h[{j}] / H_AVG[{j}]" for j, s in sh] + ['        ),']
@@ -170,21 +198,30 @@ def _load(path):
     spec = importlib.util.spec_from_file_location(Path(path).stem, path); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
 
 
+def jet_args(x, jet=None, ext=None):
+    """per jet, the arguments of classify(): (pt, eta, phi) [+ jet_eta [+ charge, type, d0, σ(d0), dz, σ(dz)]]"""
+    x = np.asarray(x, np.float32); cols = [x[..., 0], x[..., 1], x[..., 2]]
+    if jet is not None: cols.append(np.asarray(jet, np.float32)[:, 1])
+    if ext is not None: cols += [np.asarray(ext, np.float32)[..., i] for i in range(6)]
+    return cols
+
+
 def _work(args):
-    path, X = args; m = _load(path); return [m.classify(x[:, 0], x[:, 1], x[:, 2]) for x in X]
+    path, cols = args; m = _load(path); return [m.classify(*(float(c[i]) if c.ndim == 1 else c[i] for c in cols)) for i in range(len(cols[0]))]
 
 
-def run_file(path, x, workers=None):
-    """[(class, logits, probabilities)] of the file for every jet of x (J, n, 3); parallel, cached by file content and jets"""
-    path = Path(path); x = np.asarray(x, np.float32)
-    key = hashlib.sha1(path.read_bytes() + x.tobytes()).hexdigest()[:20]; cache = path.parent / '.check_cache' / f'{path.stem}_{key}.pkl'
+def run_file(path, x, workers=None, jet=None, ext=None):
+    """[(class, logits, probabilities)] of the file for every jet of x (J, n, 3) (ParT: with its jet and ext arrays);
+    parallel, cached by file content and jets"""
+    path = Path(path); cols = jet_args(x, jet, ext)
+    key = hashlib.sha1(path.read_bytes() + b''.join(c.tobytes() for c in cols)).hexdigest()[:20]; cache = path.parent / '.check_cache' / f'{path.stem}_{key}.pkl'
     if cache.exists(): return pickle.loads(cache.read_bytes())
-    workers = workers or int(os.environ.get('CHECK_WORKERS', '6'))
-    with ProcessPoolExecutor(workers) as ex: out = [r for o in ex.map(_work, [(str(path), p) for p in np.array_split(x, workers * 4)]) for r in o]
+    workers = workers or int(os.environ.get('CHECK_WORKERS', '6')); parts = np.array_split(np.arange(len(cols[0])), workers * 4)
+    with ProcessPoolExecutor(workers) as ex: out = [r for o in ex.map(_work, [(str(path), [c[p] for c in cols]) for p in parts]) for r in o]
     cache.parent.mkdir(exist_ok=True); cache.write_bytes(pickle.dumps(out)); return out
 
 
-def check(path, x, expected):
+def check(path, x, expected, jet=None, ext=None):
     """share of jets on which the file gives the expected class, and the file's logits"""
-    R = run_file(path, x); cls = np.array([CLASSES.index(r[0]) for r in R])
+    R = run_file(path, x, jet=jet, ext=ext); cls = np.array([CLASSES.index(r[0]) for r in R])
     return float((cls == expected[:len(cls)]).mean()), np.array([r[1] for r in R])

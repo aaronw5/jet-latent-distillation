@@ -8,6 +8,7 @@ Usage (each prints every problem and exits 1 if there is any):
   python -m jetdistill.explain.check numbers <combos_pack.json> <combos.json>
   python -m jetdistill.explain.check nolabels <explain.json or combos.json>"""
 import json, re, sys
+from ..config import CLASSES
 
 CL = {'g': 'g', 'gluon': 'g', 'gluons': 'g', 'q': 'q', 'quark': 'q', 'quarks': 'q', 'light-quark': 'q', 'w': 'W', 'z': 'Z',
       't': 't', 'top': 't', 'tops': 't'}
@@ -64,12 +65,12 @@ def main(pack_f, expl_f):
 def check_combos(pack_f, combos_f):
     """combination texts: 'mostly X' / 'mainly X' / 'dominated by X' must name the largest true class (>= 35 %); 'the formula calls
     them X' / 'decided as X' must name the class the formula decides most; 'the neuron is off / on' must match its on-rate."""
-    P = json.load(open(pack_f)); C = json.load(open(combos_f)); probs = []; names = ['g', 'q', 'W', 'Z', 't']
+    P = json.load(open(pack_f)); C = json.load(open(combos_f)); probs = []; names = list(CLASSES)
     for n in P['neurons']:
         for i, pat in enumerate(n['patterns']):
             x = C.get('neurons', {}).get(str(n['neuron']), {}).get(str(i))
             if not x: probs.append(f"neuron {n['neuron']} pattern {i}: no text"); continue
-            txt = ' '.join(str(v) for v in x.values()); top = names[max(range(5), key=lambda c: pat['classes'][c])]; dec = names[max(range(5), key=lambda c: pat['formula_decides'][c])]
+            txt = ' '.join(str(v) for v in x.values()); top = names[max(range(len(names)), key=lambda c: pat['classes'][c])]; dec = names[max(range(len(names)), key=lambda c: pat['formula_decides'][c])]
             for m in re.finditer(r'(?i:mostly|mainly|dominated by|predominantly)\s+(?:(?i:true)[- ])?(?i:(gluons?|quarks?|light-quark|tops?)|([gqWZt]))(?=[\s,/)\-;.]|$)', txt):
                 c = CL.get((m.group(1) or m.group(2) or "").lower())
                 if c and (c != top or pat['classes'][names.index(c)] < 0.35) and not re.search(r'\b(and|/|or)\s*$', txt[m.end():m.end() + 6]):

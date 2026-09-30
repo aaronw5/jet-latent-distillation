@@ -6,3 +6,7 @@ __pycache__/
 /.venv/
 /site/
 /models/
+/data_part/
+/results_part/
+/site_part/
+/models_part/
