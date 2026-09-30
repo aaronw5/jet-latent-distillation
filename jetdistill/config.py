@@ -40,6 +40,9 @@ else:
     N_STEP4_FIT, N_EXPLAIN, N_FULL_TEST = 80000, 40000, None
 if SMOKE:
     N_STEP1_FIT, N_TUNE_FIT, N_DEV, N_TEST_SPLIT, N_STEP4_FIT, N_EXPLAIN, N_FULL_TEST = 3000, 3000, 2000, 2000, 3000, 3000, 4000
+# JETDISTILL_SIZES overrides the numbers of jets, e.g. "step1_fit=40000,tune_fit=100000,dev=25000,step4_fit=150000,explain=60000"
+for _kv in filter(None, os.environ.get('JETDISTILL_SIZES', '').split(',')):
+    _k, _v = _kv.split('='); globals()['N_' + _k.strip().upper()] = int(_v)
 NC = len(CLASSES)
 
 

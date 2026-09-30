@@ -12,7 +12,8 @@ close to the network's; the neurons (16 / 128) reach the probabilities only thro
 tuning can move them in directions the probabilities do not see).
 The kept step (checked every 50 of 800) is the one with the best validation score: agreement with the network's class
 (probabilities, decisions), accuracy (labels) or mean neuron R² (neurons).
-Step 3 removes the weakest terms (|coefficient| × spread of the term; ParT: × the norm of the neuron's weights in the last
+Step 3 (ParT) first replaces whole neurons by constants (prune_neurons: 114 of ParT's 128 neurons change no decision),
+then removes the weakest terms (|coefficient| × spread of the term; ParT: × the norm of the neuron's weights in the last
 layer, i.e. the size of the term's effect on the class scores: 114 of ParT's 128 neurons change no decision), 15 % at a time, retraining after each cut; a cut is
 kept while the validation score stays within TOL of step 2's (0.1 point; 0.005 of R² for 'neurons'), else the cut size
 is halved, down to 2 %."""
@@ -102,6 +103,8 @@ def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=
     """step 3; returns (pruned formula, path of (terms, validation score))"""
     cur, ref = train(formula, Qf, Qd, target, fit, dev, last, lam); path = [(F.n_terms(cur), ref)]
     log(f'step 2: {path[-1][0]} terms, validation {ref:.4f}')
+    if TAGGER == 'part' and target != 'neurons':
+        cur = prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log)
     while frac >= min_frac:
         wn = np.linalg.norm(np.asarray(last[0]), axis=1) if TAGGER == 'part' else np.ones(len(cur))   # ParT: size of the term's effect on the class scores
         imp = sorted((abs(t['coef']) * float(b[:, i].std()) * float(wn[nr['neuron']]), j, i) for j, (nr, b) in enumerate(zip(cur, F.bases(cur, Qf))) for i, t in enumerate(nr['terms']))
@@ -113,6 +116,34 @@ def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=
         else:
             frac /= 2
     return cur, path
+
+
+def decision_flips(formula, Q, last):
+    """per neuron: the share of jets whose class (the formula's) changes when that neuron is fixed at its mean"""
+    H = F.hidden(formula, Q); L = F.logits_from_h(H, *last); pred = L.argmax(1); K = np.asarray(last[0])
+    return np.array([((L + np.outer(H[:, j].mean() - H[:, j], K[j])).argmax(1) != pred).mean() if np.ptp(H[:, j]) > 0 else 0.0 for j in range(H.shape[1])])
+
+
+def prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log=log):
+    """step 3a (ParT): whole neurons replaced by constants (no terms; the intercept is retrained), the neurons whose
+    fixing changes fewest validation decisions first; the first batch is every neuron that changes fewer than 0.1 %
+    of them; a batch is kept while the validation score stays within TOL of step 2's, else it is halved"""
+    k = None
+    while True:
+        fl = decision_flips(cur, Qd, last); live = [j for j, nr in enumerate(cur) if nr['terms']]
+        order = sorted(live, key=lambda j: fl[j])
+        if k is None: k = max(1, int((fl[live] < 0.001).sum()))
+        k = min(k, len(order))
+        if k < 1: break
+        drop = set(order[:k]); Hf = F.hidden(cur, Qf)
+        trial = [dict(nr, terms=[], intercept=float(Hf[:, j].mean())) if j in drop else nr for j, nr in enumerate(cur)]
+        trial, sc = train(trial, Qf, Qd, target, fit, dev, last, lam)
+        if sc >= ref - TOL[target]:
+            cur = trial; path.append((F.n_terms(cur), sc))
+            log(f'  kept {sum(1 for nr in cur if nr["terms"])} of {len(cur)} neurons (cut {k}): {path[-1][0]} terms, validation {sc:.4f}')
+        else:
+            k //= 2
+    return cur
 
 
 def targets(net_run, y):
