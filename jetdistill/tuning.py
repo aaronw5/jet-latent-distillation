@@ -72,31 +72,34 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, h
         sc = 2.0 ** f7; hq = (jnp.floor(h * sc + 0.5) / sc) % (2.0 ** i7)
         return (h + jax.lax.stop_gradient(hq - h)) @ K7 + b7
 
+    # the jets' matrices and targets are arguments of the jitted functions, not closure constants: jax embeds closed-over
+    # arrays in the compiled program (about 3x their size in memory: 25 GB for 8 GB of matrices at 100k jets)
     Hn = jnp.asarray(fit['H'], jnp.float32); vn = jnp.asarray(np.asarray(fit['H']).var(0) + 1e-6, jnp.float32)
-    R = lambda th: jnp.mean((hidden(th, B) - Hn) ** 2 / vn)
+    R = lambda th, Bs, Hs: jnp.mean((hidden(th, Bs) - Hs) ** 2 / vn)
     T = {'probabilities': fit['P'], 'decisions': np.eye(NC)[fit['net']], 'labels': np.eye(NC)[fit['y']]}.get(target)
+    data = (B, Hn, None if T is None else jnp.asarray(T, jnp.float32))
     if target == 'neurons':
-        loss = R
+        loss = lambda th, D: R(th, D[0], D[1])
     else:
-        Tj = jnp.asarray(T, jnp.float32)
-        loss = (lambda th: -jnp.mean(jnp.sum(Tj * jax.nn.log_softmax(logits(th, B)), 1)) + lam * R(th)) if lam > 0 else \
-               (lambda th: -jnp.mean(jnp.sum(Tj * jax.nn.log_softmax(logits(th, B)), 1)))
+        loss = (lambda th, D: -jnp.mean(jnp.sum(D[2] * jax.nn.log_softmax(logits(th, D[0])), 1)) + lam * R(th, D[0], D[1])) if lam > 0 else \
+               (lambda th, D: -jnp.mean(jnp.sum(D[2] * jax.nn.log_softmax(logits(th, D[0])), 1)))
+    out = jax.jit(lambda th, Bs: hidden(th, Bs) if target == 'neurons' else logits(th, Bs))
     if target == 'neurons':
-        ev = jax.jit(lambda th: hidden(th, Bd)); score = lambda th: neuron_r2(np.asarray(ev(th)), dev['H'])
+        score = lambda th: neuron_r2(np.asarray(out(th, Bd)), dev['H'])
     else:
-        ev = jax.jit(lambda th: logits(th, Bd)); ref = dev['y'] if target == 'labels' else dev['net']
-        score = lambda th: float((np.asarray(ev(th)).argmax(1) == ref).mean())
+        ref = dev['y'] if target == 'labels' else dev['net']
+        score = lambda th: float((np.asarray(out(th, Bd)).argmax(1) == ref).mean())
     if history is not None:
-        evf = jax.jit(lambda th: hidden(th, B) if target == 'neurons' else logits(th, B)); ref_f = fit['y'] if target == 'labels' else fit['net']
-        score_fit = (lambda th: neuron_r2(np.asarray(evf(th)), fit['H'])) if target == 'neurons' else (lambda th: float((np.asarray(evf(th)).argmax(1) == ref_f).mean()))
-    g = jax.jit(jax.value_and_grad(loss)); tm = jax.tree_util.tree_map
+        ref_f = fit['y'] if target == 'labels' else fit['net']
+        score_fit = (lambda th: neuron_r2(np.asarray(out(th, B)), fit['H'])) if target == 'neurons' else (lambda th: float((np.asarray(out(th, B)).argmax(1) == ref_f).mean()))
+    vg = jax.jit(jax.value_and_grad(loss)); g = lambda th: vg(th, data); tm = jax.tree_util.tree_map
     m_, v_ = tm(jnp.zeros_like, th), tm(jnp.zeros_like, th); best = (-np.inf, th)
     for i in range(steps):
         _, gr = g(th); m_ = tm(lambda a, b: .9 * a + .1 * b, m_, gr); v_ = tm(lambda a, b: .999 * a + .001 * b * b, v_, gr)
         th = tm(lambda p, a, b: p - lr * (a / (1 - .9 ** (i + 1))) / (jnp.sqrt(b / (1 - .999 ** (i + 1))) + 1e-8), th, m_, v_)
         if i % 50 == 49 or i == steps - 1:
             s = score(th)
-            if history is not None: history.append(dict(step=i + 1, loss=float(loss(th)), train=score_fit(th), val=s))
+            if history is not None: history.append(dict(step=i + 1, loss=float(loss(th, data)), train=score_fit(th), val=s))
             if s > best[0]: best = (s, th)
     return F.with_coefs(formula, [(np.asarray(c / s, np.float64), float(c0)) for (c, c0), s in zip(best[1], sd)]), best[0]
 
