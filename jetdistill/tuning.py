@@ -46,9 +46,10 @@ def neuron_r2(H, Hn):
     return float(np.mean(1 - ((H - Hn) ** 2).mean(0)[ok] / v[ok]))
 
 
-def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR):
+def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, history=None):
     """fit/dev: dict(P=network probabilities, y=true class, net=network class, H=network neurons (ReLU)) of those jets.
-    Returns (formula with trained coefficients, validation score of the kept step)."""
+    Returns (formula with trained coefficients, validation score of the kept step). history: a list that receives, every 50
+    steps, the loss and the score on the training and on the validation jets (analysis/convergence.py)."""
     import jax, jax.numpy as jnp
     steps = steps or STEPS_BY_TARGET.get(target, STEPS)
     K7, b7, i7, f7 = (jnp.asarray(x, jnp.float32) for x in last)
@@ -77,6 +78,9 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR):
     else:
         ev = jax.jit(lambda th: logits(th, Bd)); ref = dev['y'] if target == 'labels' else dev['net']
         score = lambda th: float((np.asarray(ev(th)).argmax(1) == ref).mean())
+    if history is not None:
+        evf = jax.jit(lambda th: hidden(th, B) if target == 'neurons' else logits(th, B)); ref_f = fit['y'] if target == 'labels' else fit['net']
+        score_fit = (lambda th: neuron_r2(np.asarray(evf(th)), fit['H'])) if target == 'neurons' else (lambda th: float((np.asarray(evf(th)).argmax(1) == ref_f).mean()))
     g = jax.jit(jax.value_and_grad(loss)); tm = jax.tree_util.tree_map
     m_, v_ = tm(jnp.zeros_like, th), tm(jnp.zeros_like, th); best = (-np.inf, th)
     for i in range(steps):
@@ -84,6 +88,7 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR):
         th = tm(lambda p, a, b: p - lr * (a / (1 - .9 ** (i + 1))) / (jnp.sqrt(b / (1 - .999 ** (i + 1))) + 1e-8), th, m_, v_)
         if i % 50 == 49 or i == steps - 1:
             s = score(th)
+            if history is not None: history.append(dict(step=i + 1, loss=float(loss(th)), train=score_fit(th), val=s))
             if s > best[0]: best = (s, th)
     return F.with_coefs(formula, [(np.asarray(c / s, np.float64), float(c0)) for (c, c0), s in zip(best[1], sd)]), best[0]
 
