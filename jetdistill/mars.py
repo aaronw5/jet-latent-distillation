@@ -11,6 +11,9 @@ Each step adds the candidate that lowers the squared error most (on 12,000 of th
 by least squares on all 40,000 fitting jets, and scores R² of max(0, formula) against the neuron on 25,000 validation jets;
 the kept length is the best validation R² (stop after 5 steps without improvement, or 100 terms; 60 for ParT). Only the network's
 neuron values are used, never the classes.
+ParT: the jet-level observables are candidates as above; ParT's per-particle and pair inputs (~35,000 quantities) are
+screened at every step: the 100 whose value or distance from its median correlates most with the current residual (on
+6,000 of the selection jets) join the candidates. Neurons are fitted in parallel processes.
 Output: results/<setup>/n<N>/step1.json (terms in the order chosen; later steps take the first K of each neuron)."""
 import json, re, sys, time
 import numpy as np
@@ -19,12 +22,14 @@ from .config import SETUPS, MASSES, MASS_MULT, RESULTS, RELU, TAGGER, net_dir
 from .formula import act
 from .network import Network
 from .observables import library, compute, mass_ids
+from .observables.library import is_block
 
 
 def log(*a):
     print(*a, flush=True)
 
 N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (10 if config.SMOKE else 100 if TAGGER == 'jedi' else 60), 12000, 5
+N_SCREEN, N_TOP, N_CACHE = 6000, 100, 700      # ParT blocks: screening jets, screened candidates per step, kept candidate matrices
 
 
 def splits(n, untrained=False, sizes=None):
@@ -44,7 +49,7 @@ def candidate_observables(setup, n, Q, lowlevel=False, log=log):
     """the observables step 1 may use in this setup (finite and not constant on every split)"""
     lib = library(n); drop = mass_ids(n) if setup.no_mass else set()
     if setup.strict: drop |= strict_equivalents(Q['fit'], drop, log)   # also every observable that is (m / ΣpT)² in disguise
-    keep = [k for k in lib if k not in drop and (not lowlevel or re.fullmatch(r'(pt|eta|phi)_\d+', k))]
+    keep = [k for k in lib if k not in drop and not is_block(k) and (not lowlevel or re.fullmatch(r'(pt|eta|phi)_\d+', k))]
     return [k for k in keep if all(np.isfinite(Q[s][k]).all() for s in Q) and np.ptp(Q['fit'][k]) > 0]
 
 
@@ -77,7 +82,31 @@ def term_value(tm, Q):
     return v * _one(Q[tm['q2']], tm['kind2'], tm.get('t2')) if tm.get('q2') else v
 
 
-def fit_neuron(z, Q, keys, knots, sel, log=None):
+class Screen:
+    """ParT's per-particle and pair inputs on the first N_SCREEN selection jets, standardised, for the screening; their
+    candidate terms are built when a quantity is screened in (the last N_CACHE are kept)"""
+    def __init__(self, n, J, sel, Qfit, drop, offer_masses):
+        from .observables.compute import block_matrix
+        rows = sel[:N_SCREEN]; ids, M = block_matrix(n, J['x'][rows], J['jet'][rows], J['ext'][rows])
+        ok = (np.ptp(M, 0) > 0) & np.array([k not in drop for k in ids]); self.ids = [k for k, o in zip(ids, ok) if o]; M = M[:, ok]
+        A = np.abs(M - np.median(M, 0)); self.V = ((M - M.mean(0)) / M.std(0)).astype(np.float32); del M
+        self.A = ((A - A.mean(0)) / np.maximum(A.std(0), 1e-12)).astype(np.float32); del A
+        self.Qfit, self.sel, self.offer, self.mids, self.cache, self.knots = Qfit, sel, offer_masses, mass_ids(n), {}, {}
+
+    def top(self, r):
+        rs = (r[:N_SCREEN] - r[:N_SCREEN].mean()).astype(np.float32)
+        sc = np.maximum(np.abs(rs @ self.V), np.abs(rs @ self.A)); return [self.ids[i] for i in np.argsort(-sc)[:N_TOP]]
+
+    def cand(self, k):
+        if k not in self.cache:
+            v = self.Qfit[k]; kn = self.knots.setdefault(k, thresholds(v, k in self.mids, self.offer)); vs = v[self.sel]
+            if len(self.cache) >= N_CACHE: self.cache.pop(next(iter(self.cache)))
+            self.cache[k] = (np.stack([vs] + [np.maximum(0, vs - t) for t in kn] + [np.maximum(0, t - vs) for t in kn], 1).astype(np.float32),
+                             [('lin', None)] + [('gt', t) for t in kn] + [('lt', t) for t in kn])
+        return self.cache[k]
+
+
+def fit_neuron(z, Q, keys, knots, sel, log=None, screen=None):
     """forward selection for one neuron; z = {split: pre-activation}. Returns (terms, coefficients incl. intercept, path)"""
     zf, zd = z['fit'], z['dev']; NF = len(zf)
     zpos = zf[zf > 0]; floor = -0.2 * (zpos.std() if len(zpos) > 50 else zf.std()); target = np.maximum(zf, floor) if RELU else zf
@@ -93,16 +122,17 @@ def fit_neuron(z, Q, keys, knots, sel, log=None):
     for _ in range(MAX_TERMS):
         Qb, _ = np.linalg.qr(np.stack(Bsel, 1)); r = ys - Qb @ (Qb.T @ ys); Qb32, r32 = Qb.astype(np.float32), r.astype(np.float32)
         cand, rel = [], []
-        for k in keys:
-            C, D = cache[k]; g, i = gain(C, Qb32, r32); cand.append((g, dict(q=k, kind=D[i][0], t=D[i][1])))
-            v = Q['fit'][k][sel]; rel.append((abs(np.corrcoef(v, r)[0, 1]) if np.ptp(v) > 0 else 0, k))
+        get = lambda k: cache[k] if k in cache else screen.cand(k)
+        for k in keys + (screen.top(r) if screen else []):
+            C, D = get(k); g, i = gain(C, Qb32, r32); cand.append((g, dict(q=k, kind=D[i][0], t=D[i][1])))
+            v = C[:, 0]; rel.append((abs(np.corrcoef(v, r)[0, 1]) if np.ptp(v) > 0 else 0, k))
         top = [k for _, k in sorted(rel, reverse=True)[:10]]
         for tm in chosen:                                   # products: a chosen threshold term × a threshold term of a related observable
             if tm.get('q2') is not None or tm['kind'] == 'lin': continue
             pv = term_value(tm, {tm['q']: Q['fit'][tm['q']][sel]}).astype(np.float32)
             for k in top:
                 if k == tm['q']: continue
-                C, D = cache[k]; g, i = gain(C[:, 1:] * pv[:, None], Qb32, r32)
+                C, D = get(k); g, i = gain(C[:, 1:] * pv[:, None], Qb32, r32)
                 cand.append((g, dict(q=tm['q'], kind=tm['kind'], t=tm['t'], q2=k, kind2=D[i + 1][0], t2=D[i + 1][1])))
         g, tm = max(cand, key=lambda c: c[0])
         if g <= 0: break
@@ -121,26 +151,49 @@ def _lstsq(terms, Qf, target, NF):
     B = np.stack([np.ones(NF)] + [term_value(t, Qf) for t in terms], 1); return np.linalg.lstsq(B, target, rcond=None)[0]
 
 
-def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log):
+_G = {}          # the state the neuron fits share (inherited by the worker processes)
+
+
+def _one_neuron(j):
+    Q, Z, keys, knots, sel, screen = (_G[k] for k in ('Q', 'Z', 'keys', 'knots', 'sel', 'screen'))
+    zj = {s: Z[s][:, j] for s in Z}; t0 = time.time()
+    if np.ptp(zj['fit']) < 1e-9: return dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True)
+    terms, coef, path = fit_neuron(zj, Q, keys, knots, sel, screen=screen)
+    Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = act(zj['test']); zt = Bt @ coef
+    r2h = lambda z: float(1 - ((ht - act(z)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
+    imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
+    log(f'neuron {j}: {len(terms)} terms, R² on test jets {r2:.4f}, {time.time() - t0:.0f} s')
+    return dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c), importance=m) for t, c, m in zip(terms, coef[1:], imp)], dev_r2_path=path, test_r2=r2)
+
+
+def _one_thread():
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(1)          # one BLAS thread per worker process (no oversubscription)
+
+
+def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log, workers=None):
     t0 = time.time(); setup = SETUPS[setup_name]
     S, net = splits(n, untrained)
     Q = {s: S[s][2] for s in S}; Z = {s: S[s][1]['z'] for s in S}
     keys = candidate_observables(setup, n, Q, lowlevel, log); mids = mass_ids(n)
     knots = {k: thresholds(Q['fit'][k], k in mids, setup.masses_as_thresholds) for k in keys}
-    sel = np.random.default_rng(0).choice(len(Z['fit']), min(N_SELECT, len(Z['fit'])), replace=False)
+    sel = np.random.default_rng(0).choice(len(Z['fit']), min(N_SELECT, len(Z['fit'])), replace=False); screen = None
+    if TAGGER == 'part' and not lowlevel:
+        from .pipeline import jets, sub
+        drop = mids if setup.no_mass else set()
+        screen = Screen(n, sub(jets(n, 'fit'), config.N_STEP1_FIT), sel, Q['fit'], drop, setup.masses_as_thresholds)
+        log(f'screening: {len(screen.ids)} per-particle and pair quantities, {time.time() - t0:.0f} s')
     log(f'{len(keys)} observables, {sum(1 + 2 * len(v) for v in knots.values())} candidate terms, {time.time() - t0:.0f} s')
-    neurons = []
-    for j in range(Z['fit'].shape[1]):
-        zj = {s: Z[s][:, j] for s in Z}
-        if np.ptp(zj['fit']) < 1e-9:
-            neurons.append(dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True)); continue
-        terms, coef, path = fit_neuron(zj, Q, keys, knots, sel)
-        Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = act(zj['test']); zt = Bt @ coef
-        r2h = lambda z: float(1 - ((ht - act(z)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
-        imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
-        neurons.append(dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c), importance=m) for t, c, m in zip(terms, coef[1:], imp)], dev_r2_path=path, test_r2=r2))
-        log(f'neuron {j}: {len(terms)} terms, R² on test jets {r2:.4f}, {time.time() - t0:.0f} s')
+    _G.update(Q=Q, Z=Z, keys=keys, knots=knots, sel=sel, screen=screen)
+    workers = workers or (4 if TAGGER == 'part' else 1)
+    if workers > 1:
+        import multiprocessing as mp
+        with mp.get_context('fork').Pool(workers, initializer=_one_thread) as pool: neurons = pool.map(_one_neuron, range(Z['fit'].shape[1]), chunksize=1)
+    else:
+        neurons = [_one_neuron(j) for j in range(Z['fit'].shape[1])]
+    used = sorted({t['q'] for nr in neurons for t in nr['terms']} | {t['q2'] for nr in neurons for t in nr['terms'] if t.get('q2')})
     res = dict(setup=setup_name, n=n, untrained=untrained, lowlevel=lowlevel, observables=keys, n_thresholds={k: len(v) for k, v in knots.items()},
+               screened=dict(n=len(screen.ids), used=[k for k in used if is_block(k)]) if screen else None,
                jets=dict(fit=len(Z['fit']), dev=len(Z['dev']), test=len(Z['test'])), neurons=neurons)
     out = out or RESULTS / setup_name / net_dir(n) / 'step1.json'; out.parent.mkdir(parents=True, exist_ok=True); out.write_text(json.dumps(res, indent=1))
     return res

@@ -86,9 +86,10 @@ def build(f, normalized, n, last, jets, dev, title=''):
                 neurons=neurons, class_scores=scores)
 
 
-def network_match(f, Q, H_net, last):
-    """per neuron: the formula's neuron (after rounding) against the network's own neuron, on the given jets"""
-    H, _ = neurons_and_logits(f, Q, last); out = {}
+def network_match(f, Q, H_net, last, H=None):
+    """per neuron: the formula's neuron (after rounding) against the network's own neuron, on the given jets (H: the
+    formula's neurons, when already computed)"""
+    H = neurons_and_logits(f, Q, last)[0] if H is None else H; out = {}
     for j in range(H.shape[1]):
         a, b = H[:, j], H_net[:, j]; hi = float(max(np.quantile(a, .998), np.quantile(b, .998), 1e-6))
         lo = 0.0 if RELU else float(min(np.quantile(a, .002), np.quantile(b, .002))); lo = min(lo, hi - 1e-6); e = np.linspace(lo, hi, 31)

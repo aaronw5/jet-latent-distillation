@@ -76,4 +76,13 @@ SETUPS = {
     'all_agree': Setup(label='All observables, tuned for agreement', page_desc='as “All observables”; step 2 is tuned toward the network’s decision for each jet (its class) instead of its probabilities',
                        masses_as_thresholds=True, step1_from='all', target='decisions', truth_family=False),
 }
+if TAGGER == 'part':      # ParT: the best JEDI recipe (tuned on the network's probabilities), no mass values as thresholds
+    SETUPS = {
+        'all': Setup(label='All quantities', page_desc='all jet quantities, ParT’s per-particle inputs (128 particles) and its pair inputs (all pairs); candidate thresholds: the 5–95% quantiles of each quantity (no W, Z, H or top mass values offered)',
+                     masses_as_thresholds=False),
+        'nomass': Setup(label='No mass quantities', page_desc='as “All quantities” without any mass quantity (jet and subjet masses, masses of particle subsets, pair masses ln m², ratios of masses)',
+                        masses_as_thresholds=False, no_mass=True),
+        'nomass_strict': Setup(label='No mass quantities or exact equivalents', page_desc='as “No mass quantities”, and also no quantity equal to (m/ΣpT)² in disguise (|correlation| > 0.98)',
+                               masses_as_thresholds=False, no_mass=True, strict=True),
+    }
 FIDELITY_LAMBDA = 0.01    # weight of the neuron-closeness term R in steps 2 and 3

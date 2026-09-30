@@ -66,7 +66,15 @@ def jets(n, which, log=log):
 
 
 def sub(J, stop):
-    return {k: ({q: v[:stop] for q, v in J[k].items()} if k == 'Q' else J[k][:stop]) for k in J}
+    return {k: ((J[k].sub(stop) if hasattr(J[k], 'sub') else {q: v[:stop] for q, v in J[k].items()}) if k == 'Q' else J[k][:stop]) for k in J}
+
+
+def on_jets(fn, Q):
+    """fn(Q) over a set of jets (ParT's test jets: chunk by chunk)"""
+    if TAGGER == 'part':
+        from .part.jets import evaluate
+        return evaluate(fn, Q)
+    return fn(Q)
 
 
 # ---------------------------------------------------------------- formulas on disk
@@ -136,10 +144,10 @@ def stage_step4(setup, n, log=log):
 
 def stage_export(setup, n, check_jets=5000, log=log):
     last = Network(n).last; test = jets(n, 'full_test', log); fit = jets(n, 'fit', log); used = set().union(*[F.observables_used(load_formula(setup, n, t)) for t in formulas(setup, n)])
-    ranges = {q: (float(min(test['Q'][q].min(), fit['Q'][q].min())), float(max(test['Q'][q].max(), fit['Q'][q].max()))) for q in test['Q'] if q in used}
+    ranges = {q: (float(min(on_jets(lambda Q: np.array([Q[q].min()]), test['Q']).min(), fit['Q'][q].min())), float(max(on_jets(lambda Q: np.array([Q[q].max()]), test['Q']).max(), fit['Q'][q].max()))) for q in sorted(used)}
     extra = dict(jet=test['jet'][:check_jets], ext=test['ext'][:check_jets], full=n == 'full') if TAGGER == 'part' else {}
     for tag, m in formulas(setup, n).items():
-        f = load_formula(setup, n, tag); d = out_dir(setup, n) / 'formulas' / tag; L = F.logits(f, test['Q'], last); pred = L.argmax(1)
+        f = load_formula(setup, n, tag); d = out_dir(setup, n) / 'formulas' / tag; L = on_jets(lambda Q: F.logits(f, Q, last), test['Q']); pred = L.argmax(1)
         stats = (f'Whole test file ({len(pred):,} jets): accuracy {100 * (pred == test["y"]).mean():.2f}% (the network: {100 * (test["net"] == test["y"]).mean():.2f}%); '
                  f'same class as the network for {100 * (pred == test["net"]).mean():.2f}% of jets.')
         norm = export.normalize(f, fit['Q'], last); (d / 'normalized.json').write_text(json.dumps(dict(neurons=norm[0], classes=norm[1])))
@@ -156,7 +164,7 @@ def stage_explain(setup, n, log=log):
     last = Network(n).last; ex = jets(n, 'explain', log); dev = jets(n, 'dev', log); test = jets(n, 'full_test', log)
     for tag, m in formulas(setup, n).items():
         f = load_formula(setup, n, tag); d = out_dir(setup, n) / 'formulas' / tag; N = json.loads((d / 'normalized.json').read_text()); norm = (N['neurons'], N['classes'])
-        pk = P.build(f, norm, n, last, ex, dev, m['title']); match = P.network_match(f, test['Q'], test['H'], last)
+        pk = P.build(f, norm, n, last, ex, dev, m['title']); match = P.network_match(f, test['Q'], test['H'], last, H=on_jets(lambda Q: P.neurons_and_logits(f, Q, last)[0], test['Q']))
         for nr in pk['neurons']: nr['network_match'] = match[nr['neuron']]
         (d / 'pack.json').write_text(json.dumps(pk, indent=1))
         (d / 'anatomy.json').write_text(json.dumps(A.build(f, norm, n, last, ex, ex['x']), separators=(',', ':')))
@@ -170,10 +178,10 @@ def stage_metrics(setup, n, log=log):
     rows = [dict(family='network', name='the network', **metrics.metrics(test['L'], test['y'], test['net']))]
     for tag, m in formulas(setup, n).items():
         rows.append(dict(family=m['family'], formula=tag, name=m['title'], terms=m['terms'], parent=m.get('parent'),
-                         **metrics.metrics(F.logits(load_formula(setup, n, tag), test['Q'], last), test['y'], test['net'])))
+                         **metrics.metrics(on_jets(lambda Q: F.logits(load_formula(setup, n, tag), Q, last), test['Q']), test['y'], test['net'])))
     long = mars.load(setup, n); fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT)          # step 1 alone: 100 terms per neuron, least squares
     step1 = tuning.refit([dict(nr, terms=nr['terms'][:FAMILIES['network'][0][0]]) for nr in long], fit['Q'], fit['Z'])
-    s1 = dict(name=f'{F.n_terms(step1)} (step 1: if-statements fitted to each neuron separately)', terms=F.n_terms(step1), **metrics.metrics(F.logits(step1, test['Q'], last), test['y'], test['net']))
+    s1 = dict(name=f'{F.n_terms(step1)} (step 1: if-statements fitted to each neuron separately)', terms=F.n_terms(step1), **metrics.metrics(on_jets(lambda Q: F.logits(step1, Q, last), test['Q']), test['y'], test['net']))
     (out_dir(setup, n) / 'metrics.json').write_text(json.dumps(dict(n_jets=int(len(test['y'])), models=rows, step1=s1)))
     for r in rows: log(f"{r['name'][:70]:70s} accuracy {100 * r['accuracy']:.2f}%  same as the network {100 * r['same_as_network']:.2f}%")
 

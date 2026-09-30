@@ -353,20 +353,42 @@ def _combos(h, k):
 
 
 def block_values(ids, X, jet=None, ext=None):
-    """blocks A (per-particle ParT inputs) and B (pair inputs) of the jets X (J, 128, 3), for the given ids"""
-    X = np.asarray(X, np.float64); pt, eta, phi = X[..., 0], X[..., 1], X[..., 2]; real = pt > 0; out = {}
-    E = None if ext is None else np.asarray(ext[..., 0], np.float64); jet = None if jet is None else np.asarray(jet, np.float64)
+    """blocks A (per-particle ParT inputs) and B (pair inputs) of the jets X (J, 128, 3) (may be memory-mapped: only the
+    slots an id needs are read), for the given ids"""
+    out = {}; jet = None if jet is None else np.asarray(jet, np.float64); col = {}
+    def part(i):
+        if i not in col: col[i] = (np.asarray(X[:, i], np.float64), None if ext is None else np.asarray(ext[:, i], np.float64))
+        return col[i]
+    pairs = {}
     for q in ids:
         m = BLOCK_RX.fullmatch(q); f = q.split('_')[0]
         if m.group(1) is not None:
-            i = int(m.group(1)); r = real[:, i]; lg = lambda x: np.where(r, np.log(np.maximum(np.where(r, x, 1.0), 1e-300)), LNEPS)
-            e = None if ext is None else np.asarray(ext[:, i], np.float64)
-            v = dict(lnpt=lambda: lg(pt[:, i]), lne=lambda: lg(E[:, i]), lnptrel=lambda: lg(pt[:, i] / jet[:, 0]), lnerel=lambda: lg(E[:, i] / jet[:, 3]),
-                     dr=lambda: np.where(r, np.hypot(eta[:, i], phi[:, i]), 0.0), eta=lambda: eta[:, i], phi=lambda: phi[:, i],
+            i = int(m.group(1)); x, e = part(i); pt = x[:, 0]; r = pt > 0
+            lg = lambda v: np.where(r, np.log(np.maximum(np.where(r, v, 1.0), 1e-300)), LNEPS)
+            v = dict(lnpt=lambda: lg(pt), lne=lambda: lg(e[:, 0]), lnptrel=lambda: lg(pt / jet[:, 0]), lnerel=lambda: lg(e[:, 0] / jet[:, 3]),
+                     dr=lambda: np.hypot(x[:, 1], x[:, 2]), eta=lambda: x[:, 1], phi=lambda: x[:, 2],
                      charge=lambda: e[:, 1], ischhad=lambda: (e[:, 2] == 1) * 1.0, isnhad=lambda: (e[:, 2] == 2) * 1.0, isphoton=lambda: (e[:, 2] == 3) * 1.0,
                      iselectron=lambda: (e[:, 2] == 4) * 1.0, ismuon=lambda: (e[:, 2] == 5) * 1.0, td0=lambda: np.tanh(e[:, 3]), d0err=lambda: np.clip(e[:, 4], 0, 1),
                      tdz=lambda: np.tanh(e[:, 5]), dzerr=lambda: np.clip(e[:, 6], 0, 1))[f]()
             out[q] = np.where(r, v, LNEPS if f.startswith('ln') else 0.0)
         else:
-            i, j = int(m.group(2)), int(m.group(3)); out[q] = _pairs(pt, eta, phi, (np.array([i]), np.array([j])))[f][:, 0]
+            i, j = int(m.group(2)), int(m.group(3))
+            if (i, j) not in pairs:
+                (a, _), (b, _) = part(i), part(j); P = np.stack([a, b], 1)
+                pairs[i, j] = _pairs(P[..., 0], P[..., 1], P[..., 2], (np.array([0]), np.array([1])))
+            out[q] = pairs[i, j][f][:, 0]
     return out
+
+
+def block_matrix(n, X, jet, ext, dtype=np.float32):
+    """every block quantity of the jets X at once: (ids, (J, ids) array); for step 1's screening of blocks A and B"""
+    X = np.asarray(X, np.float64); J = len(X); lib = library(n); ids = [k for k in lib if is_block(k)]; col = {k: c for c, k in enumerate(ids)}
+    M = np.empty((J, len(ids)), dtype); pt = X[..., 0]
+    if any(BLOCK_RX.fullmatch(k).group(1) is None for k in ids):
+        iu = np.triu_indices(X.shape[1], 1); P = _pairs(pt, X[..., 1], X[..., 2], iu)
+        for f in PPAIR:
+            for c, (i, j) in enumerate(zip(*iu)): M[:, col[f'{f}_{i}_{j}']] = P[f][:, c]
+        del P
+    per = [k for k in ids if BLOCK_RX.fullmatch(k).group(1) is not None]
+    for k, v in block_values(per, X, jet, ext).items(): M[:, col[k]] = v
+    return ids, M

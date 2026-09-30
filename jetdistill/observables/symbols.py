@@ -3,6 +3,7 @@ quantities whose ids are jargon (girth, width, e2_sq; used in the exported Pytho
 symbol(qid) -> str;  CODE_RENAME: {old code name: new code name};  relabel(obj): the same JSON object with every quantity
 name replaced by its symbol (dict keys and exact values; inside text, code names containing '_' or digits and the jargon names)."""
 import re
+from ..config import TAGGER
 
 SUB = str.maketrans('0123456789', '₀₁₂₃₄₅₆₇₈₉')
 FIXED = {
@@ -26,7 +27,51 @@ CODE_RENAME = {'girth': 'sum_z_dr', 'girth2': 'sum_z_dr2', 'width': 'lam1_plus_l
 CODE_RENAME.update({f'girth2_top{k}': f'sum_z_dr2_top{k}' for k in (2, 3, 5, 10, 15, 20, 30, 40, 50)})
 
 
+PART_FIXED = {
+    'jet_pt': 'pT(jet)', 'jet_abs_eta': '|η(jet)|', 'jet_e': 'E(jet)', 'sum_e': 'ΣE', 'pair_mean_lndelta': '⟨ln Δ⟩ᵢⱼ', 'pair_mean_lnkt': '⟨ln kT⟩ᵢⱼ',
+    'pair_mean_lnz': '⟨ln z⟩ᵢⱼ', 'pair_mean_lnm2': '⟨ln m²⟩ᵢⱼ', 'pair_max_lnkt': 'max ln kTᵢⱼ', 'pair_max_lnm2': 'max ln m²ᵢⱼ',
+    'lund_max_lnkt': 'max ln kT(Lund)', 'lund_max_lndelta': 'ln Δ(Lund, max kT)', 'n_lund': 'n(Lund)', 'tau5': 'τ₅', 'tau54': 'τ₅₄',
+    'tau32_b2': 'τ₃₂(β=2)', 'tau43_b2': 'τ₄₃(β=2)', 'sj4_zsoft': 'z(softest of 4 subjets)', 'sj4_dr_min': 'min ΔR(4 subjets)',
+    'sj4_pair_mass_min': 'min m_pair(4 subjets)', 'sj4_pair_mass_max': 'max m_pair(4 subjets)', 'n_lepton': 'n(leptons)',
+    'jet_charge': 'Σqz', 'jet_charge_k05': 'Σqz^0.5', 'jet_charge_k03': 'Σqz^0.3', 'sum_charge': 'Σq', 'lead_charge': 'q(hardest charged)',
+    'lep_z': 'z(lepton)', 'lep_dr': 'ΔR(lepton)', 'lep_ptrel': 'pT·ΔR(lepton)', 'lep_sd0': 'd0/σ(lepton)', 'lep_iso': 'iso(lepton)',
+    'max_abs_d0': 'max|d0|', 'max_abs_dz': 'max|dz|', 'lead_ch_sd0': 'd0/σ(hardest track)', 'lead_ch_sdz': 'dz/σ(hardest track)',
+    'mass_charged': 'm(charged)', 'mass_neutral': 'm(neutral)', 'mass_2photon': 'm(2 photons)', 'mass_2charged': 'm(2 hardest charged)',
+    'ecf_g31': '₁e₃', 'ecf_g32': '₂e₃', 'ecf_g41': '₁e₄', 'ecf_g42': '₂e₄', 'ecf_g43': '₃e₄'}
+PNAME = dict(charged_had='charged hadrons', neutral_had='neutral hadrons', photon='photons', electron='electrons', muon='muons', charged='charged', neutral='neutral')
+PPSYM = dict(lnpt='ln pT', lne='ln E', lnptrel='ln(pT/pT_jet)', lnerel='ln(E/E_jet)', charge='q', ischhad='is h±', isnhad='is h⁰', isphoton='is γ',
+             iselectron='is e', ismuon='is μ', td0='tanh d0', d0err='σ(d0)', tdz='tanh dz', dzerr='σ(dz)')
+
+
+def part_symbol(q):
+    if q in PART_FIXED: return PART_FIXED[q]
+    m = re.fullmatch(r'(lnpt|lne|lnptrel|lnerel|charge|ischhad|isnhad|isphoton|iselectron|ismuon|td0|d0err|tdz|dzerr)_(\d+)', q)
+    if m: return f'{PPSYM[m.group(1)]}{m.group(2).translate(SUB)}'
+    m = re.fullmatch(r'(lndelta|lnkt|lnz|lnm2)_(\d+)_(\d+)', q)
+    if m: return {'lndelta': 'ln Δ', 'lnkt': 'ln kT', 'lnz': 'ln z', 'lnm2': 'ln m²'}[m.group(1)] + f'({m.group(2)},{m.group(3)})'
+    m = re.fullmatch(r'n_pairs_kt_above_(\d+)', q)
+    if m: return f'n(pairs, kT > {m.group(1)} GeV)'
+    m = re.fullmatch(r'lund(\d)_(lndelta|lnkt|lnz)', q)
+    if m: return {'lndelta': 'ln Δ', 'lnkt': 'ln kT', 'lnz': 'ln z'}[m.group(2)] + f'(Lund {m.group(1)})'
+    m = re.fullmatch(r'n_lund_kt_above_(\d+)', q)
+    if m: return f'n(Lund, kT > {m.group(1)} GeV)'
+    m = re.fullmatch(r'(e2|e3|e4|C2|D2|C3|D3|N2|N3|M2|M3)_b(05|2)', q)
+    if m: return f'{m.group(1)[0]}{m.group(1)[1].translate(SUB)}(β={"0.5" if m.group(2) == "05" else "2"})'
+    m = re.fullmatch(r'(n|z)_(charged_had|neutral_had|photon|electron|muon|charged|neutral)', q)
+    if m: return f'{m.group(1)}({PNAME[m.group(2)]})'
+    m = re.fullmatch(r'n_charged_pt_above_(\d+)', q)
+    if m: return f'n(charged, pT > {m.group(1)} GeV)'
+    m = re.fullmatch(r'sip_(d0|dz|3d)_(\d)', q)
+    if m: return f'{"d0/σ" if m.group(1) == "d0" else "dz/σ" if m.group(1) == "dz" else "3D sig."} (track {m.group(2)})'
+    m = re.fullmatch(r'n_s(d0|dz|3d)_above_(\d+)', q)
+    if m: return f'n({"d0/σ" if m.group(1) == "d0" else "dz/σ" if m.group(1) == "dz" else "3D sig."} > {m.group(2)})'
+    m = re.fullmatch(r'(z|mass)_displaced(\d)', q)
+    if m: return f'{"z" if m.group(1) == "z" else "m"}(tracks, |d0/σ| > {m.group(2)})'
+    return None
+
+
 def symbol(q):
+    if TAGGER == 'part' and (s := part_symbol(q)): return s
     if q in FIXED: return FIXED[q]
     for pat, f in ((r'girth2_top(\d+)', lambda k: f'ΣzΔR²({k} hardest)'), (r'mass_top(\d+)', lambda k: f'm({k} hardest)'),
                    (r'sum_pt_top(\d+)', lambda k: f'ΣpT({k} hardest)'), (r'z_top(\d+)_slots', lambda k: f'z({k} hardest)'),
