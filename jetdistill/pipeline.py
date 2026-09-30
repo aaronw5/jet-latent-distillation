@@ -137,7 +137,7 @@ def stage_step4(setup, n, log=log):
 def stage_export(setup, n, check_jets=5000, log=log):
     last = Network(n).last; test = jets(n, 'full_test', log); fit = jets(n, 'fit', log); used = set().union(*[F.observables_used(load_formula(setup, n, t)) for t in formulas(setup, n)])
     ranges = {q: (float(min(test['Q'][q].min(), fit['Q'][q].min())), float(max(test['Q'][q].max(), fit['Q'][q].max()))) for q in test['Q'] if q in used}
-    extra = dict(jet=test['jet'][:check_jets], ext=test['ext'][:check_jets] if n == 'full' else None) if TAGGER == 'part' else {}
+    extra = dict(jet=test['jet'][:check_jets], ext=test['ext'][:check_jets], full=n == 'full') if TAGGER == 'part' else {}
     for tag, m in formulas(setup, n).items():
         f = load_formula(setup, n, tag); d = out_dir(setup, n) / 'formulas' / tag; L = F.logits(f, test['Q'], last); pred = L.argmax(1)
         stats = (f'Whole test file ({len(pred):,} jets): accuracy {100 * (pred == test["y"]).mean():.2f}% (the network: {100 * (test["net"] == test["y"]).mean():.2f}%); '

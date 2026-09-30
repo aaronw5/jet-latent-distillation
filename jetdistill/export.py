@@ -93,8 +93,9 @@ def header(title, n, used, stats):
                 '                  (round to a multiple of 2^-f, then wrap modulo 2^i), multiplied by the weights, plus the biases.',
                 '4. classify():    softmax of the logits; the class is the largest logit.', '', stats, '', 'Quantities:',
                 *[f'  Q.{q:22s} {lib[q].desc}' for q in used], '"""']
-    extra = ['        jet_eta = the pseudorapidity of the jet axis.'] + (['        charge, ptype (1 charged hadron, 2 neutral hadron, 3 photon, 4 electron, 5 muon), d0, d0err, dz, dzerr:',
-                                                                           '        per particle, as JetClass stores them (impact parameters in mm).'] if n == 'full' else [])
+    extra = ['        energy: each particle\'s energy [GeV]; jet_pt, jet_eta, jet_energy: the jet\'s pT [GeV], pseudorapidity, energy [GeV].'] + \
+            (['        charge, ptype (1 charged hadron, 2 neutral hadron, 3 photon, 4 electron, 5 muon), d0, d0err, dz, dzerr:',
+              '        per particle, as JetClass stores them (impact parameters in mm).'] if n == 'full' else [])
     return [f'"""Particle Transformer (ParT) jet tagger, JetClass, input features \'{n}\': {title}, as if-statements.', '',
             f'Input:  the particles of a jet (up to {n_particles(n)}), hardest first, each (pT [GeV], Δη, Δφ) relative to the jet axis;',
             '        empty slots have pT = 0.', *extra, f'Output: the class ({", ".join(CLASSES)}), the {NC} logits and the {NC} probabilities.', '',
@@ -108,7 +109,9 @@ def header(title, n, used, stats):
 
 def tail(n):
     N = n_particles(n); ex = lambda v: str(v[:N] + [0.0] * max(0, N - 8)) if isinstance(n, int) else str(v)
-    a = ', '.join(args_of(n)); demo = dict(jet_eta='    jet_eta = 0.4', charge=f'    charge = {ex([1.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0])}',
+    import math
+    E = [round(p * math.cosh(0.4 + e), 3) for p, e in zip([412.0, 230.5, 101.2, 40.3, 22.8, 10.1, 6.4, 3.3], [0.01, -0.12, 0.25, 0.05, -0.31, 0.2, -0.05, 0.4])]
+    a = ', '.join(args_of(n)); demo = dict(energy=f'    energy = {ex(E)}', jet_pt='    jet_pt = 830.0', jet_eta='    jet_eta = 0.4', jet_energy=f'    jet_energy = {round(sum(E), 3)}', charge=f'    charge = {ex([1.0, -1.0, 0.0, 1.0, 0.0, -1.0, 0.0, 1.0])}',
                                            ptype=f'    ptype = {ex([1.0, 1.0, 3.0, 1.0, 2.0, 1.0, 3.0, 4.0])}', d0=f'    d0 = {ex([0.01, -0.3, 0.0, 0.02, 0.0, 0.2, 0.0, -0.01])}',
                                            d0err=f'    d0err = {ex([0.01, 0.02, 0.0, 0.03, 0.0, 0.02, 0.0, 0.01])}', dz=f'    dz = {ex([0.02, 0.1, 0.0, -0.02, 0.0, 0.3, 0.0, 0.01])}',
                                            dzerr=f'    dzerr = {ex([0.01, 0.02, 0.0, 0.03, 0.0, 0.02, 0.0, 0.01])}')
@@ -198,11 +201,13 @@ def _load(path):
     spec = importlib.util.spec_from_file_location(Path(path).stem, path); m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m); return m
 
 
-def jet_args(x, jet=None, ext=None):
-    """per jet, the arguments of classify(): (pt, eta, phi) [+ jet_eta [+ charge, type, d0, σ(d0), dz, σ(dz)]]"""
+def jet_args(x, jet=None, ext=None, full=False):
+    """per jet, the arguments of classify(): (pt, eta, phi); ParT: + (energy, jet_pt, jet_eta, jet_energy) and, for
+    'full', + (charge, type, d0, σ(d0), dz, σ(dz)) (observables/python_code.ARGS)"""
     x = np.asarray(x, np.float32); cols = [x[..., 0], x[..., 1], x[..., 2]]
-    if jet is not None: cols.append(np.asarray(jet, np.float32)[:, 1])
-    if ext is not None: cols += [np.asarray(ext, np.float32)[..., i] for i in range(6)]
+    if jet is not None:
+        e, j = np.asarray(ext, np.float32), np.asarray(jet, np.float32); cols += [e[..., 0], j[:, 0], j[:, 1], j[:, 3]]
+        if full: cols += [e[..., i] for i in range(1, 7)]
     return cols
 
 
@@ -210,10 +215,10 @@ def _work(args):
     path, cols = args; m = _load(path); return [m.classify(*(float(c[i]) if c.ndim == 1 else c[i] for c in cols)) for i in range(len(cols[0]))]
 
 
-def run_file(path, x, workers=None, jet=None, ext=None):
+def run_file(path, x, workers=None, jet=None, ext=None, full=False):
     """[(class, logits, probabilities)] of the file for every jet of x (J, n, 3) (ParT: with its jet and ext arrays);
     parallel, cached by file content and jets"""
-    path = Path(path); cols = jet_args(x, jet, ext)
+    path = Path(path); cols = jet_args(x, jet, ext, full)
     key = hashlib.sha1(path.read_bytes() + b''.join(c.tobytes() for c in cols)).hexdigest()[:20]; cache = path.parent / '.check_cache' / f'{path.stem}_{key}.pkl'
     if cache.exists(): return pickle.loads(cache.read_bytes())
     workers = workers or int(os.environ.get('CHECK_WORKERS', '6')); parts = np.array_split(np.arange(len(cols[0])), workers * 4)
@@ -221,7 +226,7 @@ def run_file(path, x, workers=None, jet=None, ext=None):
     cache.parent.mkdir(exist_ok=True); cache.write_bytes(pickle.dumps(out)); return out
 
 
-def check(path, x, expected, jet=None, ext=None):
+def check(path, x, expected, jet=None, ext=None, full=False):
     """share of jets on which the file gives the expected class, and the file's logits"""
-    R = run_file(path, x, jet=jet, ext=ext); cls = np.array([CLASSES.index(r[0]) for r in R])
+    R = run_file(path, x, jet=jet, ext=ext, full=full); cls = np.array([CLASSES.index(r[0]) for r in R])
     return float((cls == expected[:len(cls)]).mean()), np.array([r[1] for r in R])

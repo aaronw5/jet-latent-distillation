@@ -8,7 +8,7 @@ hardest first, empty slots (pT = 0) at the end. Each entry has
 The numpy implementation (compute.py) follows the same algorithms and tie-breaking; tests/test_observables.py checks
 that both give the same values. Every observable with units of mass has 'mass' in its id (the setups without mass
 observables remove them by that rule, see config.py)."""
-import itertools
+import functools, itertools, re
 from typing import NamedTuple
 from ..config import n_particles, TAGGER
 
@@ -29,6 +29,7 @@ def ring_tag(lo, hi):
     return (f'{lo:g}_{hi:g}' if hi else f'{lo:g}_up').replace('.', 'p')
 
 
+@functools.lru_cache(maxsize=None)
 def library(n):
     """{id: Observable} for a network n (JEDI: n particles; ParT: 'kin' or 'full', 128 particles plus jet and particle extras)"""
     net, n = n, n_particles(n)
@@ -172,34 +173,125 @@ def library(n):
     return L
 
 
+LNEPS = -18.420680743952367          # ln(1e-8): ParT's floor for its logarithms; also the value of a missing particle or pair
+BETAS = ((0.5, 'b05'), (2, 'b2'))   # the extra angular exponents of the energy correlations
+PPART = dict(kin=['lnpt', 'lne', 'lnptrel', 'lnerel', 'dr', 'eta', 'phi'],
+             full=['lnpt', 'lne', 'lnptrel', 'lnerel', 'dr', 'eta', 'phi', 'charge', 'ischhad', 'isnhad', 'isphoton', 'iselectron', 'ismuon',
+                   'td0', 'd0err', 'tdz', 'dzerr'])
+PPAIR = ['lndelta', 'lnkt', 'lnz', 'lnm2']
+PDESC = dict(lnpt='ln pT [GeV]', lne='ln E [GeV]', lnptrel='ln(pT / pT of the jet)', lnerel='ln(E / E of the jet)', dr='ΔR from the jet axis', eta='Δη',
+             phi='Δφ', charge='charge', ischhad='1 if a charged hadron', isnhad='1 if a neutral hadron', isphoton='1 if a photon', iselectron='1 if an electron',
+             ismuon='1 if a muon', td0='tanh(d0 [mm])', d0err='σ(d0), clipped to [0, 1]', tdz='tanh(dz [mm])', dzerr='σ(dz), clipped to [0, 1]')
+QDESC = dict(lndelta='ln ΔRᵢⱼ', lnkt='ln kT = ln(min(pTᵢ, pTⱼ)·ΔRᵢⱼ)', lnz='ln z = ln(min(pTᵢ, pTⱼ)/(pTᵢ + pTⱼ))', lnm2='ln mᵢⱼ² (massless)')
+PTYPES = dict(charged_had=('charged hadrons', 'ptype[i] == 1'), neutral_had=('neutral hadrons', 'ptype[i] == 2'), photon=('photons', 'ptype[i] == 3'),
+              electron=('electrons', 'ptype[i] == 4'), muon=('muons', 'ptype[i] == 5'), charged=('charged particles', 'charge[i] != 0'),
+              neutral=('neutral particles', 'charge[i] == 0'))
+BLOCK_RX = re.compile(r'(?:' + '|'.join(PPART['full']) + r')_(\d+)|(?:' + '|'.join(PPAIR) + r')_(\d+)_(\d+)')
+
+
+def is_block(q):
+    """ParT's per-particle inputs (block A) and pair inputs (block B): computed from the particles when used"""
+    return TAGGER == 'part' and BLOCK_RX.fullmatch(q) is not None
+
+
 def extras(add, net):
-    """ParT: the tagger also sees each particle's energy (so the jet's η) and, for 'full', particle type, charge and the
-    track impact parameters. Particle i's energy: pTᵢ cosh(η_jet + Δηᵢ) (massless)."""
+    """ParT: everything the network sees beyond (pT, Δη, Δφ). Block A: its per-particle inputs for all 128 slots; block B:
+    its pair inputs for all pairs; then jet-level quantities: the jet, pair summaries, the primary Lund plane, more energy
+    correlations and N-subjettiness, and for 'full' particle types, charges and track impact parameters.
+    Energies and the jet pT / η / energy are the file's values."""
+    N = 128
+    for i in range(N):                                            # ---- block A: per particle
+        for f in PPART[net]:
+            add(f'{f}_{i}', f'{PDESC[f]} of particle {i}', f'pfeat({i}, {f!r})', f'{PDESC[f]} of particle {i} (ParT input; empty slot: {"ln 1e-8" if f.startswith("ln") else "0"})')
+    for i in range(N):                                            # ---- block B: every pair
+        for j in range(i + 1, N):
+            for f in PPAIR:
+                add(f'{f}_{i}_{j}', f'{QDESC[f]} of particles {i}, {j}', f'pairf({i}, {j}, {f!r})', f'{QDESC[f]} of particles {i} and {j} (ParT pair input; either slot empty: ln 1e-8)')
+    # ---- the jet ----
+    add('jet_pt', 'pT of the jet', 'jet_pt', 'jet pT [GeV]')
     add('jet_abs_eta', '|η_jet|', 'abs(jet_eta)', 'absolute pseudorapidity of the jet axis')
-    add('sum_e', 'Σᵢ Eᵢ', 'sum(pt[i] * math.cosh(jet_eta + eta[i]) for i in real)', 'total energy of the particles (massless) [GeV]')
-    add('log_sum_e', 'log Σᵢ Eᵢ', 'math.log(sum(pt[i] * math.cosh(jet_eta + eta[i]) for i in real))', 'natural log of the total energy')
+    add('jet_e', 'E of the jet', 'jet_energy', 'jet energy [GeV]')
+    add('sum_e', 'Σᵢ Eᵢ', 'sum(energy[i] for i in real)', 'total energy of the particles [GeV]')
+    # ---- pair summaries (over all pairs of real particles; weights zᵢzⱼ) ----
+    for f in PPAIR:
+        add(f'pair_mean_{f}', f'Σ zᵢzⱼ {QDESC[f].split(" =")[0]} / Σ zᵢzⱼ', f'pairsum({f!r})', f'zᵢzⱼ-weighted mean of {QDESC[f]} over all pairs')
+    add('pair_max_lnkt', 'max ln kT of a pair', "pairmax('lnkt')", 'largest ln kT among all pairs')
+    add('pair_max_lnm2', 'max ln m² of a pair', "pairmax('lnm2')", 'largest ln m² among all pairs')
+    for c in (1, 3, 10, 30):
+        add(f'n_pairs_kt_above_{c}', f'Σᵢ<ⱼ [kTᵢⱼ > {c} GeV]', f'paircount({c})', f'number of pairs with kT = min(pTᵢ, pTⱼ)·ΔRᵢⱼ > {c} GeV')
+    # ---- primary Lund plane (C/A on all particles, follow the harder branch) ----
+    for k in (1, 2, 3):
+        for f, d in (('lndelta', 'ln Δ'), ('lnkt', 'ln kT'), ('lnz', 'ln z')):
+            add(f'lund{k}_{f}', f'{d} of primary splitting {k}', f'lund({k}, {f!r})', f'{d} of the {k}. primary C/A splitting (ln 1e-8 if none)')
+    add('lund_max_lnkt', 'max ln kT of the primary splittings', "lund(0, 'maxkt')", 'largest ln kT among the primary splittings')
+    add('lund_max_lndelta', 'ln Δ of the hardest-kT splitting', "lund(0, 'maxdelta')", 'ln Δ of the primary splitting with the largest kT')
+    add('n_lund', 'number of primary splittings', "lund(0, 'n')", 'number of primary C/A splittings')
+    for c in (1, 5):
+        add(f'n_lund_kt_above_{c}', f'primary splittings with kT > {c} GeV', f"lund(0, 'n{c}')", f'number of primary splittings with kT > {c} GeV')
+    # ---- more energy correlations (3- and 4-point; β = 0.5 and 2) ----
+    for g, d in (('g31', '₁e₃'), ('g32', '₂e₃'), ('g41', '₁e₄'), ('g42', '₂e₄'), ('g43', '₃e₄')):
+        add(f'ecf_{g}', d, f"ecfb({g!r}, 1)", f'generalized energy correlation {d} (β=1; products of the smallest angles)')
+    for b, t in BETAS:
+        E = lambda nm: f'ecfb({nm!r}, {b})'; mx = lambda x: f'max({x}, 1e-30)'
+        add(f'e2_{t}', f'e₂ (β={b})', E('e2'), f'energy correlation e2 with β = {b}')
+        add(f'e3_{t}', f'e₃ (β={b})', E('e3'), f'energy correlation e3 with β = {b}')
+        add(f'e4_{t}', f'e₄ (β={b})', E('e4'), f'energy correlation e4 with β = {b}')
+        if b != 2:
+            add(f'C2_{t}', f'C₂ (β={b})', f"{E('e3')} / {mx(E('e2') + ' ** 2')}", f'e3/e2² with β = {b}')
+            add(f'D2_{t}', f'D₂ (β={b})', f"{E('e3')} / {mx(E('e2') + ' ** 3')}", f'e3/e2³ with β = {b}')
+        add(f'C3_{t}', f'C₃ (β={b})', f"{E('e4')} * {E('e2')} / {mx(E('e3') + ' ** 2')}", f'e4·e2/e3² with β = {b}')
+        add(f'D3_{t}', f'D₃ (β={b})', f"{E('e4')} * {E('e2')} ** 3 / {mx(E('e3') + ' ** 3')}", f'e4·e2³/e3³ with β = {b}')
+        add(f'N2_{t}', f'N₂ (β={b})', f"{E('g32')} / {mx(E('e2') + ' ** 2')}", f'₂e₃/(e2)² with β = {b}')
+        add(f'N3_{t}', f'N₃ (β={b})', f"{E('g42')} / {mx(E('g31') + ' ** 2')}", f'₂e₄/(₁e₃)² with β = {b}')
+        add(f'M2_{t}', f'M₂ (β={b})', f"{E('g31')} / {mx(E('e2'))}", f'₁e₃/e2 with β = {b}')
+        add(f'M3_{t}', f'M₃ (β={b})', f"{E('g41')} / {mx(E('g31'))}", f'₁e₄/₁e₃ with β = {b}')
+    # ---- N-subjettiness and subjets (more prongs) ----
+    add('tau5', 'τ5', 'tau_n(5)', 'N-subjettiness τ5 (β=1)')
+    add('tau54', 'τ54', 'tau_n(5) / max(tau_n(4), 1e-12)', 'N-subjettiness τ5/τ4')
+    add('tau32_b2', 'τ32 (β=2)', 'tau_n(3, 2) / max(tau_n(2, 2), 1e-12)', 'N-subjettiness τ3/τ2 with β = 2')
+    add('tau43_b2', 'τ43 (β=2)', 'tau_n(4, 2) / max(tau_n(3, 2), 1e-12)', 'N-subjettiness τ4/τ3 with β = 2')
+    add('sj4_zsoft', 'pT share of the softest of 4 subjets', 'subjets(4)["z"][3]', 'pT share of the softest of 4 subjets')
+    add('sj4_dr_min', 'smallest ΔR among 4 subjets', 'min(subjets(4)["dr"])', 'smallest distance among the 4 subjet axes')
+    add('sj4_pair_mass_min', 'smallest pair mass among 4 subjets', 'min(subjets(4)["mpair"])', 'smallest mass of two of the 4 subjets [GeV]')
+    add('sj4_pair_mass_max', 'largest pair mass among 4 subjets', 'max(subjets(4)["mpair"])', 'largest mass of two of the 4 subjets [GeV]')
     if net != 'full': return
+    # ---- particle types and charge ----
     for k, (nm, cond) in PTYPES.items():
         add(f'n_{k}', f'number of {nm}', f'sum(1 for i in real if {cond})', f'number of {nm}')
         add(f'z_{k}', f'pT share of {nm}', f'sum(z[i] for i in real if {cond})', f'pT share of {nm}')
+    for c in (1, 10):
+        add(f'n_charged_pt_above_{c}', f'charged particles with pT > {c} GeV', f'sum(1 for i in real if charge[i] != 0 and pt[i] > {c})', f'number of charged particles with pT > {c} GeV')
     add('n_lepton', 'number of leptons', 'sum(1 for i in real if ptype[i] in (4, 5))', 'number of electrons and muons')
-    add('lep_z', 'pT share of the hardest lepton', 'max([z[i] for i in real if ptype[i] in (4, 5)] or [0.0])', 'pT share of the hardest electron or muon (0 if none)')
-    add('lep_dr', 'ΔR of the hardest lepton', 'lepton_dr()', 'ΔR from the jet axis of the hardest electron or muon (0 if none)')
-    add('jet_charge', 'Σᵢ qᵢ zᵢ', 'sum(charge[i] * z[i] for i in real)', 'pT-weighted jet charge')
-    add('jet_charge_k05', 'Σᵢ qᵢ zᵢ^½', 'sum(charge[i] * math.sqrt(z[i]) for i in real)', 'jet charge with κ = 0.5')
+    add('jet_charge', 'Σᵢ qᵢ zᵢ', 'sum(charge[i] * z[i] for i in real)', 'pT-weighted jet charge (κ = 1)')
+    add('jet_charge_k05', 'Σᵢ qᵢ zᵢ^0.5', 'sum(charge[i] * z[i] ** 0.5 for i in real)', 'jet charge with κ = 0.5')
+    add('jet_charge_k03', 'Σᵢ qᵢ zᵢ^0.3', 'sum(charge[i] * z[i] ** 0.3 for i in real)', 'jet charge with κ = 0.3')
     add('sum_charge', 'Σᵢ qᵢ', 'sum(charge[i] for i in real)', 'total charge of the particles')
-    for w, lab in (('d0', 'd0'), ('dz', 'dz')):
+    add('lead_charge', 'charge of the hardest charged particle', 'next((charge[i] for i in real if charge[i] != 0), 0.0)', 'charge of the hardest charged particle')
+    # ---- the hardest lepton ----
+    add('lep_z', 'pT share of the hardest lepton', "lepton('z')", 'pT share of the hardest electron or muon (0 if none)')
+    add('lep_dr', 'ΔR of the hardest lepton', "lepton('dr')", 'ΔR of the hardest lepton from the jet axis (0 if none)')
+    add('lep_ptrel', 'pT·ΔR of the hardest lepton', "lepton('ptrel')", 'pT × ΔR from the jet axis of the hardest lepton [GeV] (0 if none)')
+    add('lep_sd0', 'd0/σ of the hardest lepton', "lepton('sd0')", 'signed d0/σ(d0) of the hardest lepton (0 if none)')
+    add('lep_iso', 'isolation of the hardest lepton', "lepton('iso')", 'Σ pT of the other particles within ΔR < 0.2 of the hardest lepton / its pT (0 if none)')
+    # ---- tracks: impact parameters (charged particles; σ floored at 1e-6) ----
+    for w, lab in (('d0', 'd0'), ('dz', 'dz'), ('3d', '3D')):
         for r in (1, 2, 3):
-            add(f's{w}_{r}', f'{lab}/σ of track {r}', f'sip({w!r}, {r})', f'the {r}. largest |{lab}|/σ({lab}) among the charged particles, with the sign of {lab} (0 if fewer tracks)')
-        for c in (2, 5):
-            add(f'n_s{w}_above_{c}', f'Σᵢ [|{lab}ᵢ/σᵢ| > {c}]', f'sum(1 for i in real if charge[i] != 0 and abs({w}[i]) > {c} * {w}err[i])', f'number of charged particles with |{lab}|/σ > {c}')
-        add(f'max_abs_{w}', f'max |{lab}| [mm]', f'max([abs({w}[i]) for i in real if charge[i] != 0] or [0.0])', f'largest |{lab}| among the charged particles [mm]')
-    add('z_displaced', 'pT share of displaced tracks', 'sum(z[i] for i in real if charge[i] != 0 and abs(d0[i]) > 3 * d0err[i])', 'pT share of charged particles with |d0|/σ > 3')
-    add('mass_displaced', 'mass of displaced tracks', 'displaced_mass()', 'invariant mass of the charged particles with |d0|/σ > 3 (massless) [GeV]')
-
-
-PTYPES = dict(charged_had=('charged hadrons', 'ptype[i] == 1'), neutral_had=('neutral hadrons', 'ptype[i] == 2'), photon=('photons', 'ptype[i] == 3'),
-              electron=('electrons', 'ptype[i] == 4'), muon=('muons', 'ptype[i] == 5'), charged=('charged particles', 'charge[i] != 0'))
+            add(f'sip_{w}_{r}', f'{lab} significance of track {r}', f'sip({w!r}, {r})', f'the {r}. largest {lab} significance among the charged particles' + (' (√((d0/σ)² + (dz/σ)²))' if w == '3d' else f', signed ({lab}/σ)') + ' (0 if fewer)')
+    for w, cs in (('d0', (2, 3, 5, 10)), ('dz', (2, 5)), ('3d', (3, 10))):
+        for c in cs:
+            add(f'n_s{w}_above_{c}', f'tracks with {w} significance > {c}', f'nsig({w!r}, {c})', f'number of charged particles with {w} significance > {c}')
+    add('max_abs_d0', 'max |d0| [mm]', 'max([abs(d0[i]) for i in real if charge[i] != 0] or [0.0])', 'largest |d0| among the charged particles [mm]')
+    add('max_abs_dz', 'max |dz| [mm]', 'max([abs(dz[i]) for i in real if charge[i] != 0] or [0.0])', 'largest |dz| among the charged particles [mm]')
+    add('lead_ch_sd0', 'd0/σ of the hardest track', "leadtrack('d0')", 'signed d0/σ of the hardest charged particle (0 if none)')
+    add('lead_ch_sdz', 'dz/σ of the hardest track', "leadtrack('dz')", 'signed dz/σ of the hardest charged particle (0 if none)')
+    for c in (3, 5):
+        add(f'z_displaced{c}', f'pT share of tracks with |d0/σ| > {c}', f"displaced({c}, 'z')", f'pT share of the charged particles with |d0|/σ > {c}')
+        add(f'mass_displaced{c}', f'mass of tracks with |d0/σ| > {c}', f"displaced({c}, 'mass')", f'invariant mass of the charged particles with |d0|/σ > {c} [GeV]')
+    # ---- masses of particle subsets ----
+    add('mass_charged', 'mass of the charged particles', "subset_mass('charged')", 'invariant mass of all charged particles [GeV]')
+    add('mass_neutral', 'mass of the neutral particles', "subset_mass('neutral')", 'invariant mass of all neutral particles [GeV]')
+    add('mass_2photon', 'mass of the 2 hardest photons', "subset_mass('photon2')", 'invariant mass of the 2 hardest photons [GeV] (0 if fewer)')
+    add('mass_2charged', 'mass of the 2 hardest charged', "subset_mass('charged2')", 'invariant mass of the 2 hardest charged particles [GeV]')
 
 
 def mass_ids(n):

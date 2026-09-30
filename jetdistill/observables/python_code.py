@@ -131,35 +131,46 @@ V2 = '''
                                   mpair=[m4([V[order[p]][c] + V[order[q]][c] for c in range(4)]) for p, q in pairs])
         return _memo['sj', k]
 
-    def softdrop(what):
-        if 'sd' not in _memo:
+    def ca_dR2(u, v):
+        ya, pa = 0.5 * math.log(max(u[3] + u[2], 1e-300) / max(u[3] - u[2], 1e-300)), math.atan2(u[1], u[0])
+        yb, pb = 0.5 * math.log(max(v[3] + v[2], 1e-300) / max(v[3] - v[2], 1e-300)), math.atan2(v[1], v[0])
+        return (ya - yb) ** 2 + ((pa - pb + math.pi) % (2 * math.pi) - math.pi) ** 2
+
+    def ca_tree():
+        if 'ca' not in _memo:
             node = {i: (pt[i] * math.cos(phi[i]), pt[i] * math.sin(phi[i]), pt[i] * math.sinh(eta[i]), pt[i] * math.cosh(eta[i])) for i in range(min(n, HSD_)) if pt[i] > 0}
             live, kids, new = list(node), {}, 1000
-
-            def dR2(u, v):
-                ya, pa = 0.5 * math.log(max(u[3] + u[2], 1e-300) / max(u[3] - u[2], 1e-300)), math.atan2(u[1], u[0])
-                yb, pb = 0.5 * math.log(max(v[3] + v[2], 1e-300) / max(v[3] - v[2], 1e-300)), math.atan2(v[1], v[0])
-                return (ya - yb) ** 2 + ((pa - pb + math.pi) % (2 * math.pi) - math.pi) ** 2
+            yp = {i: (0.5 * math.log(max(v[3] + v[2], 1e-300) / max(v[3] - v[2], 1e-300)), math.atan2(v[1], v[0])) for i, v in node.items()}
             while len(live) > 1:                                  # Cambridge/Aachen: merge the closest pair
                 best = None
                 for a in range(len(live)):
+                    ya, pa = yp[live[a]]
                     for b in range(a + 1, len(live)):
-                        d = dR2(node[live[a]], node[live[b]])
+                        yb, pb = yp[live[b]]
+                        d = (ya - yb) ** 2 + ((pa - pb + math.pi) % (2 * math.pi) - math.pi) ** 2
                         if best is None or d < best[0]:
                             best = (d, a, b)
                 _, a, b = best
-                node[new] = tuple(x + y for x, y in zip(node[live[a]], node[live[b]]))
+                v = tuple(x + y for x, y in zip(node[live[a]], node[live[b]]))
+                node[new] = v
+                yp[new] = (0.5 * math.log(max(v[3] + v[2], 1e-300) / max(v[3] - v[2], 1e-300)), math.atan2(v[1], v[0]))
                 kids[new] = (live[a], live[b])
                 live[a] = new
                 live.pop(b)
                 new += 1
-            cur, removed, res = live[0], 0, (0.0, 0.0, 0.0)
+            _memo['ca'] = (node, kids, live[0])
+        return _memo['ca']
+
+    def softdrop(what):
+        if 'sd' not in _memo:
+            node, kids, cur = ca_tree()
+            removed, res = 0, (0.0, 0.0, 0.0)
             while cur in kids:                                    # soft drop, beta = 0, z_cut = 0.1
                 c1, c2 = kids[cur]
                 p1, p2 = math.hypot(node[c1][0], node[c1][1]), math.hypot(node[c2][0], node[c2][1])
                 zz = min(p1, p2) / max(p1 + p2, 1e-300)
                 if zz > 0.1:
-                    res = (m4(node[cur]), zz, math.sqrt(dR2(node[c1], node[c2])))
+                    res = (m4(node[cur]), zz, math.sqrt(ca_dR2(node[c1], node[c2])))
                     break
                 cur = c1 if p1 >= p2 else c2
                 removed += 1
@@ -182,31 +193,193 @@ V2 = '''
 '''
 V2_TOKENS = ('ecf(', 'kaxes(', 'tau_n(', 'subjets(', 'softdrop(', 'softp(', 'ncum(', 'm4(')
 
-TRACKS = '''
-    def lepton_dr():
+PART = '''
+    LNEPS = math.log(1e-8)
+
+    def lg(x):
+        return math.log(max(x, 1e-8))
+
+    def pairv(i, j, f):
+        if pt[i] <= 0 or pt[j] <= 0:
+            return LNEPS
+        de, dp = eta[i] - eta[j], phi[i] - phi[j]
+        d, pm = math.hypot(de, dp), min(pt[i], pt[j])
+        if f == 'lndelta':
+            return lg(d)
+        if f == 'lnkt':
+            return lg(pm * d)
+        if f == 'lnz':
+            return lg(pm / max(pt[i] + pt[j], 1e-8))
+        return lg(2 * pt[i] * pt[j] * (math.cosh(de) - math.cos(dp)))
+
+    def pairf(i, j, f):
+        return pairv(i, j, f)
+
+    def pfeat(i, f):
+        if pt[i] <= 0:
+            return LNEPS if f.startswith('ln') else 0.0
+        if f == 'lnpt':
+            return math.log(pt[i])
+        if f == 'lne':
+            return math.log(energy[i])
+        if f == 'lnptrel':
+            return math.log(pt[i] / jet_pt)
+        if f == 'lnerel':
+            return math.log(energy[i] / jet_energy)
+        if f == 'dr':
+            return math.hypot(eta[i], phi[i])
+        if f in ('eta', 'phi'):
+            return eta[i] if f == 'eta' else phi[i]
+        if f == 'charge':
+            return charge[i]
+        if f.startswith('is'):
+            return 1.0 if ptype[i] == dict(ischhad=1, isnhad=2, isphoton=3, iselectron=4, ismuon=5)[f] else 0.0
+        return dict(td0=lambda: math.tanh(d0[i]), d0err=lambda: min(max(d0err[i], 0.0), 1.0), tdz=lambda: math.tanh(dz[i]),
+                    dzerr=lambda: min(max(dzerr[i], 0.0), 1.0))[f]()
+
+    def pairstats():
+        if 'pairs' not in _memo:
+            s = {f: 0.0 for f in ('lndelta', 'lnkt', 'lnz', 'lnm2')}
+            w_sum, mx, cnt = 0.0, {'lnkt': LNEPS, 'lnm2': LNEPS}, {1: 0, 3: 0, 10: 0, 30: 0}
+            for a in range(len(real)):
+                for b in range(a + 1, len(real)):
+                    i, j = real[a], real[b]
+                    w = z[i] * z[j]
+                    w_sum += w
+                    for f in s:
+                        v = pairv(i, j, f)
+                        s[f] += w * v
+                        if f in mx and v > mx[f]:
+                            mx[f] = v
+                    kt = min(pt[i], pt[j]) * math.hypot(eta[i] - eta[j], phi[i] - phi[j])
+                    for c in cnt:
+                        if kt > c:
+                            cnt[c] += 1
+            _memo['pairs'] = dict(mean={f: v / max(w_sum, 1e-300) for f, v in s.items()}, max=mx, count=cnt)
+        return _memo['pairs']
+
+    def pairsum(f):
+        return pairstats()['mean'][f]
+
+    def pairmax(f):
+        return pairstats()['max'][f]
+
+    def paircount(c):
+        return float(pairstats()['count'][c])
+
+    def lund(k, what):
+        if 'lund' not in _memo:
+            node, kids, cur = ca_tree()
+            seq = []
+            while cur in kids:
+                c1, c2 = kids[cur]
+                p1, p2 = math.hypot(node[c1][0], node[c1][1]), math.hypot(node[c2][0], node[c2][1])
+                d, pm = math.sqrt(ca_dR2(node[c1], node[c2])), min(p1, p2)
+                seq.append((lg(d), lg(pm * d), lg(pm / max(p1 + p2, 1e-8)), pm * d))
+                cur = c1 if p1 >= p2 else c2
+            best = None
+            for s in seq:
+                if best is None or s[1] > best[1]:
+                    best = s
+            _memo['lund'] = dict(seq=seq, maxkt=best[1] if best else LNEPS, maxdelta=best[0] if best else LNEPS, n=float(len(seq)),
+                                 n1=float(sum(1 for s in seq if s[3] > 1)), n5=float(sum(1 for s in seq if s[3] > 5)))
+        L = _memo['lund']
+        if k == 0:
+            return L[what]
+        if len(L['seq']) < k:
+            return LNEPS
+        return L['seq'][k - 1][('lndelta', 'lnkt', 'lnz').index(what)]
+
+    def ecfb(name, beta):
+        if ('ecfb', beta) not in _memo:
+            h3, h4 = min(n, H3_), min(n, H4_)
+            Rb = {(i, j): math.sqrt(dist2(i, j)) ** beta for i in range(h3) for j in range(h3)}
+            o = dict(e2=0.0, e3=0.0, g31=0.0, g32=0.0, e4=0.0, g41=0.0, g42=0.0, g43=0.0)
+            for i in range(h3):
+                for j in range(i + 1, h3):
+                    o['e2'] += z[i] * z[j] * Rb[i, j]
+                    for k in range(j + 1, h3):
+                        a, b, c = Rb[i, j], Rb[i, k], Rb[j, k]
+                        w3 = z[i] * z[j] * z[k]
+                        s = sorted((a, b, c))
+                        o['e3'] += w3 * a * b * c
+                        o['g31'] += w3 * s[0]
+                        o['g32'] += w3 * s[0] * s[1]
+            for i in range(h4):
+                for j in range(i + 1, h4):
+                    for k in range(j + 1, h4):
+                        for l in range(k + 1, h4):
+                            d = (Rb[i, j], Rb[i, k], Rb[i, l], Rb[j, k], Rb[j, l], Rb[k, l])
+                            w4 = z[i] * z[j] * z[k] * z[l]
+                            s = sorted(d)
+                            o['e4'] += w4 * d[0] * d[1] * d[2] * d[3] * d[4] * d[5]
+                            o['g41'] += w4 * s[0]
+                            o['g42'] += w4 * s[0] * s[1]
+                            o['g43'] += w4 * s[0] * s[1] * s[2]
+            _memo['ecfb', beta] = o
+        return _memo['ecfb', beta][name]
+'''
+FULL = '''
+    ch = [i for i in real if charge[i] != 0]
+    sd0 = {i: d0[i] / max(d0err[i], 1e-6) for i in ch}
+    sdz = {i: dz[i] / max(dzerr[i], 1e-6) for i in ch}
+
+    def sig(w, i):
+        return sd0[i] if w == 'd0' else sdz[i] if w == 'dz' else math.sqrt(sd0[i] ** 2 + sdz[i] ** 2)
+
+    def sip(w, r):
+        s = sorted(ch, key=lambda i: -abs(sig(w, i)))
+        return sig(w, s[r - 1]) if len(s) >= r else 0.0
+
+    def nsig(w, c):
+        return float(sum(1 for i in ch if abs(sig(w, i)) > c))
+
+    def leadtrack(w):
+        return sig(w, ch[0]) if ch else 0.0
+
+    def lepton(what):
         lep = [i for i in real if ptype[i] in (4, 5)]
         if not lep:
             return 0.0
-        i = max(lep, key=lambda i: z[i])
-        return math.hypot(eta[i], phi[i])
+        i = lep[0]
+        if what == 'z':
+            return z[i]
+        if what == 'dr':
+            return dr[i]
+        if what == 'ptrel':
+            return pt[i] * dr[i]
+        if what == 'sd0':
+            return d0[i] / max(d0err[i], 1e-6) if charge[i] != 0 else 0.0
+        return sum(pt[j] for j in real if j != i and math.hypot(eta[j] - eta[i], phi[j] - phi[i]) < 0.2) / max(pt[i], 1e-9)
 
-    def sip(w, r):
-        v, e = (d0, d0err) if w == 'd0' else (dz, dzerr)
-        s = sorted((v[i] / max(e[i], 1e-6) for i in real if charge[i] != 0), key=lambda x: -abs(x))
-        return s[r - 1] if len(s) >= r else 0.0
-
-    def displaced_mass():
-        E = px = py = pz = 0.0
-        for i in real:
-            if charge[i] != 0 and abs(d0[i]) > 3 * d0err[i]:
-                E += pt[i] * math.cosh(eta[i]); px += pt[i] * math.cos(phi[i]); py += pt[i] * math.sin(phi[i]); pz += pt[i] * math.sinh(eta[i])
+    def set_mass(ids):
+        E = sum(pt[i] * math.cosh(eta[i]) for i in ids)
+        px = sum(pt[i] * math.cos(phi[i]) for i in ids)
+        py = sum(pt[i] * math.sin(phi[i]) for i in ids)
+        pz = sum(pt[i] * math.sinh(eta[i]) for i in ids)
         return math.sqrt(max(E * E - px * px - py * py - pz * pz, 0.0))
+
+    def displaced(c, what):
+        ids = [i for i in ch if abs(sd0[i]) > c]
+        return sum(z[i] for i in ids) if what == 'z' else set_mass(ids)
+
+    def subset_mass(what):
+        if what == 'charged':
+            return set_mass(ch)
+        if what == 'neutral':
+            return set_mass([i for i in real if charge[i] == 0])
+        if what == 'photon2':
+            ph = [i for i in real if ptype[i] == 3]
+            return set_mass(ph[:2]) if len(ph) >= 2 else 0.0
+        return set_mass(ch[:2])
 '''
-TRACK_TOKENS = ('lepton_dr(', 'sip(', 'displaced_mass(')
-# the arguments of quantities() / classify() of each kind of network (jedi: pT, Δη, Δφ; ParT adds the jet η, and 'full'
-# the particle types, charges and impact parameters)
-ARGS = dict(jedi=('pt', 'eta', 'phi'), kin=('pt', 'eta', 'phi', 'jet_eta'),
-            full=('pt', 'eta', 'phi', 'jet_eta', 'charge', 'ptype', 'd0', 'd0err', 'dz', 'dzerr'))
+PART_TOKENS = ('pfeat(', 'pairf(', 'pairsum(', 'pairmax(', 'paircount(', 'lund(', 'ecfb(')
+FULL_TOKENS = ('sip(', 'nsig(', 'leadtrack(', 'lepton(', 'displaced(', 'subset_mass(')
+# the arguments of quantities() / classify() of each kind of network (jedi: pT, Δη, Δφ; ParT adds each particle's energy
+# and the jet's pT, η and energy; 'full' also each particle's charge, type and impact parameters)
+ARGS = dict(jedi=('pt', 'eta', 'phi'), kin=('pt', 'eta', 'phi', 'energy', 'jet_pt', 'jet_eta', 'jet_energy'),
+            full=('pt', 'eta', 'phi', 'energy', 'jet_pt', 'jet_eta', 'jet_energy', 'charge', 'ptype', 'd0', 'd0err', 'dz', 'dzerr'))
+SCALARS = ('jet_pt', 'jet_eta', 'jet_energy')
 
 
 def args_of(n):
@@ -219,8 +392,9 @@ def helper_code(exprs):
     if 'tau(' in exprs: body += TAU
     if any(w in exprs for w in ('ta ', 'ta + tc', 'lam1', 'lam2', 'tb')): body += TENSOR
     if any(re.search(rf'\b{w}\b', exprs) for w in ('e2', 'e3')): body += ECF
-    if any(t in exprs for t in V2_TOKENS) or any(t in exprs for t in TRACK_TOKENS): body += V2
-    if any(t in exprs for t in TRACK_TOKENS): body += TRACKS
+    if any(t in exprs for t in V2_TOKENS + PART_TOKENS + FULL_TOKENS): body += V2
+    if any(t in exprs for t in PART_TOKENS + FULL_TOKENS): body += PART
+    if any(t in exprs for t in FULL_TOKENS): body += FULL
     return body.replace('H3_', str(H3)).replace('H4_', str(H4)).replace('HSD_', str(HSD))
 
 
@@ -228,9 +402,9 @@ def quantities_source(ids, n):
     lib = library(n); missing = [q for q in ids if q not in lib]
     if missing: raise KeyError(missing)
     exprs = ' '.join(lib[q].expr for q in ids)
-    a = args_of(n); per = [x for x in a if x != 'jet_eta']
+    a = args_of(n); per = [x for x in a if x not in SCALARS]; sc = [x for x in a if x in SCALARS]
     return '\n'.join([f'def quantities({", ".join(a)}):',
-                      f'    {", ".join(per)} = ' + ', '.join(f'[float(x) for x in {x}]' for x in per)] + (['    jet_eta = float(jet_eta)'] if 'jet_eta' in a else []) + [
+                      f'    {", ".join(per)} = ' + ', '.join(f'[float(x) for x in {x}]' for x in per)] + ([f'    {", ".join(sc)} = ' + ', '.join(f'float({x})' for x in sc)] if sc else []) + [
                       helper_code(exprs).rstrip('\n'), '', '    return SimpleNamespace(']
                      + [f'        {q}={lib[q].expr},' for q in ids] + ['    )'])
 
