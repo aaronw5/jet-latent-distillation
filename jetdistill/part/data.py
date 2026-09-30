@@ -2,8 +2,8 @@
 
 Each split is a folder config.DATA/<split>/ (made once by the commands below):
   x_f16.npy      (J, 128, 3) float16  pT [GeV], Δη, Δφ of each particle (relative to the jet axis), hardest first, pT = 0 after
-  ext_f16.npy    (J, 128, 6) float16  charge, particle type (0 none, 1 charged hadron, 2 neutral hadron, 3 photon,
-                                      4 electron, 5 muon), d0 [mm], σ(d0), dz [mm], σ(dz) (the tagger 'full' sees them)
+  ext_f16.npy    (J, 128, 7) float16  energy [GeV], charge, particle type (0 none, 1 charged hadron, 2 neutral hadron,
+                                      3 photon, 4 electron, 5 muon), d0 [mm], σ(d0), dz [mm], σ(dz) (as the files store them)
   jet.npy        (J, 4) float32       jet pT [GeV], jet η, jet φ, jet energy [GeV]
   label.npy      (J,) int8            index into config.CLASSES
   net_<n>.npz    Z (J, 128), L (J, 10) float32: the network's neurons and class scores, computed from the file's own
@@ -49,13 +49,13 @@ def stored(J):
     pt = np.hypot(J['px'], J['py']) * J['mask']
     x = np.stack([pt, J['deta'] * J['mask'], J['dphi'] * J['mask']], -1).astype(np.float16)
     typ = sum((i + 1) * J[k] for i, k in enumerate(PID))
-    ext = np.stack([J['charge'], typ, J['d0val'], J['d0err'], J['dzval'], J['dzerr']], -1) * J['mask'][..., None]
+    ext = np.stack([J['energy'], J['charge'], typ, J['d0val'], J['d0err'], J['dzval'], J['dzerr']], -1) * J['mask'][..., None]
     return dict(x_f16=x, ext_f16=ext.astype(np.float16), jet=np.stack([J[k] for k in JBR], 1).astype(np.float32), label=J['label'])
 
 
 class Writer:
     """the folder of a split, filled chunk by chunk (memory-mapped: the test folder has millions of jets)"""
-    SHAPES = dict(x_f16=((P, 3), np.float16), ext_f16=((P, 6), np.float16), jet=((4,), np.float32), label=((), np.int8))
+    SHAPES = dict(x_f16=((P, 3), np.float16), ext_f16=((P, 7), np.float16), jet=((4,), np.float32), label=((), np.int8))
 
     def __init__(self, split, N):
         self.d = DATA / split; self.d.mkdir(parents=True, exist_ok=True); self.N, self.i = N, 0

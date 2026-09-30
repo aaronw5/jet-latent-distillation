@@ -11,7 +11,7 @@ Stages (default: all, in this order):
   page     the setup's page                                              site/<setup>/n<N>/index.html
 Families: 'network' (tuned on the network's probabilities, or its decisions for all_agree; from 100 and 60 terms per
 neuron), 'labels' (tuned on the true labels, from 60), 'neurons' (tuned on the network's neuron values, from 100); ParT:
-60 and 30, 30, 60 (128 neurons instead of 16). Each
+only 'network' from 60 (128 neurons instead of 16). Each
 formula is named by its number of terms (its tag). The written explanations (explain.json, combos.json) are added to
 formulas/<tag>/ separately (see README) and picked up by the page.
 Jets (observables and network outputs) are computed once per network and cached in results/_jets/n<N>/ (ParT: part/jets.py)."""
@@ -28,7 +28,7 @@ def log(*a):
 
 FAMILIES = dict(network=((8, 5), None), labels=((5,), 'labels'), neurons=((8,), 'neurons')) if config.SMOKE else \
            dict(network=((100, 60), None), labels=((60,), 'labels'), neurons=((100,), 'neurons')) if TAGGER == 'jedi' else \
-           dict(network=((60, 30), None), labels=((30,), 'labels'), neurons=((60,), 'neurons'))
+           dict(network=((60,), None))      # ParT: only the best JEDI recipe (all observables, tuned on the network's probabilities, λ = 0.01)
 PREFIX = 'jedi_n{n}' if TAGGER == 'jedi' else 'part_{n}'      # exported file names: <prefix>_formula<tag>.py
 STEP4_METRIC = dict(network='agree', labels='acc', neurons='neuron')
 TITLES = dict(network="tuned on the network's predictions", decisions="tuned on the network's decisions", labels='tuned on the true labels', neurons="tuned on the network's neuron values")

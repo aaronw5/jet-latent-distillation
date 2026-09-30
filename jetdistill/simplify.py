@@ -23,6 +23,7 @@ from .network import round_wrap
 from .formula import act, is_on
 
 TOL = dict(agree=0.005, acc=0.004, neuron=0.01)
+ACC_TOL = 0.001            # ParT: validation accuracy within 0.1 point of the START formula's
 KC = {'lin': 0, 'gt': 1, 'lt': 2}
 from .config import SMOKE, TAGGER
 
@@ -180,10 +181,16 @@ class Step4:
         if steps: g = self.refit_onesided(self.canon(self.refine_t(g, Wr, steps=steps)), Wr)
         return {nd: sort_formula(round_coefs(self.refit_onesided(self.canon(round_thresholds(g, nd)), Wr), 3)) for nd in (2, 3)}
 
+    def accuracy(self, f, split='dev'):
+        return float((self.logits_from_z(self.zs(f, split)).argmax(1) == self.jets[split]['y']).mean())
+
     def choose(self, candidates):
-        """smallest candidate within TOL of the START formula's validation score (ties: higher score)"""
+        """smallest candidate within TOL of the START formula's validation score (ties: higher score); ParT, tuned on the
+        network: also within ACC_TOL of the START formula's validation accuracy (the simplest formula with the same accuracy)"""
         ref = self.score(self.start); rows = sorted((F.n_terms(f), -self.score(f), i) for i, f in enumerate(candidates))
         ok = [r for r in rows if -r[1] >= ref - TOL[self.metric]]
+        if TAGGER == 'part' and self.metric == 'agree':
+            a0 = self.accuracy(self.start); ok = [r for r in ok if self.accuracy(candidates[r[2]]) >= a0 - ACC_TOL]
         return (candidates[ok[0][2]] if ok else None), dict(reference=ref, tolerance=TOL[self.metric], candidates=[dict(terms=t, score=-s) for t, s, _ in rows])
 
 
