@@ -13,8 +13,8 @@ config.DATA/splits.npz: 'fit', 'dev', 'explain' (rows of 'train'), 'test' (rows 
 Nothing is fitted or chosen on the test folder.
 
   python -m jetdistill.part.data example JetClass_example_100k.root      # the notebook's 100k jets: 50k train, 50k test
-  python -m jetdistill.part.data build train <ROOT files ...> [--per-file K]
-  python -m jetdistill.part.data build test  <ROOT files ...> [--per-file K]
+  python -m jetdistill.part.data build train <ROOT files ...> [--per-file K] [--nets full]
+  python -m jetdistill.part.data build test  <ROOT files ...> [--per-file K] [--nets full]
   python -m jetdistill.part.data splits"""
 import json, sys, time
 import numpy as np
@@ -57,11 +57,11 @@ class Writer:
     """the folder of a split, filled chunk by chunk (memory-mapped: the test folder has millions of jets)"""
     SHAPES = dict(x_f16=((P, 3), np.float16), ext_f16=((P, 7), np.float16), jet=((4,), np.float32), label=((), np.int8))
 
-    def __init__(self, split, N):
-        self.d = DATA / split; self.d.mkdir(parents=True, exist_ok=True); self.N, self.i = N, 0
+    def __init__(self, split, N, nets=NETWORKS):
+        self.d = DATA / split; self.d.mkdir(parents=True, exist_ok=True); self.N, self.i, self.nets = N, 0, nets
         mm = lambda k, shp, dt: np.lib.format.open_memmap(self.d / f'{k}.npy', 'w+', dt, (N,) + shp)
         self.a = {k: mm(k, shp, dt) for k, (shp, dt) in self.SHAPES.items()}
-        for n in NETWORKS: self.a[f'Z_{n}'] = mm(f'_Z_{n}', (128,), np.float32); self.a[f'L_{n}'] = mm(f'_L_{n}', (10,), np.float32)
+        for n in nets: self.a[f'Z_{n}'] = mm(f'_Z_{n}', (128,), np.float32); self.a[f'L_{n}'] = mm(f'_L_{n}', (10,), np.float32)
 
     def add(self, part):
         k = len(part['label'])
@@ -71,7 +71,7 @@ class Writer:
     def close(self, files):
         assert self.i == self.N, (self.i, self.N)
         for arr in self.a.values(): arr.flush()
-        for n in NETWORKS:        # the network outputs as one file per network
+        for n in self.nets:        # the network outputs as one file per network
             np.savez(self.d / f'net_{n}.npz', Z=np.load(self.d / f'_Z_{n}.npy'), L=np.load(self.d / f'_L_{n}.npy'))
             (self.d / f'_Z_{n}.npy').unlink(); (self.d / f'_L_{n}.npy').unlink()
         (self.d / 'files.json').write_text(json.dumps(files, indent=1))
@@ -84,16 +84,16 @@ def process(J, nets, log=log):
     return out
 
 
-def networks():
+def networks(nets=NETWORKS):
     from .network import ParTNetwork
-    return {n: ParTNetwork(n) for n in NETWORKS}
+    return {n: ParTNetwork(n) for n in nets}
 
 
-def build(split, paths, per_file=None, chunk=20000, log=log):
+def build(split, paths, per_file=None, chunk=20000, log=log, nets=NETWORKS):
     """every jet (or the first per_file jets) of each ROOT file, with the network outputs"""
     import uproot
-    nets = networks(); sizes = [min(uproot.open(p)['tree'].num_entries, per_file or 10 ** 12) for p in paths]
-    W = Writer(split, sum(sizes)); files = []
+    names = nets; nets = networks(names); sizes = [min(uproot.open(p)['tree'].num_entries, per_file or 10 ** 12) for p in paths]
+    W = Writer(split, sum(sizes), names); files = []
     for p, N in zip(paths, sizes):
         t0 = time.time()
         for s in range(0, N, chunk): W.add(process(read_root(p, s, min(N, s + chunk)), nets, log))
@@ -130,7 +130,8 @@ if __name__ == '__main__':
     cmd, *args = sys.argv[1:]
     if cmd == 'example': example(args[0]); make_splits()
     elif cmd == 'build':
-        per = None
+        per, nets = None, NETWORKS
         if '--per-file' in args: i = args.index('--per-file'); per = int(args[i + 1]); args = args[:i] + args[i + 2:]
-        build(args[0], args[1:], per)
+        if '--nets' in args: i = args.index('--nets'); nets = tuple(args[i + 1].split(',')); args = args[:i] + args[i + 2:]
+        build(args[0], args[1:], per, nets=nets)
     elif cmd == 'splits': make_splits()
