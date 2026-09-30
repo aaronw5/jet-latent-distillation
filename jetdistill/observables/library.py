@@ -274,7 +274,7 @@ def extras(add, net):
     add('lep_ptrel', 'pT·ΔR of the hardest lepton', "lepton('ptrel')", 'pT × ΔR from the jet axis of the hardest lepton [GeV] (0 if none)')
     add('lep_sd0', 'd0/σ of the hardest lepton', "lepton('sd0')", 'signed d0/σ(d0) of the hardest lepton (0 if none)')
     add('lep_iso', 'isolation of the hardest lepton', "lepton('iso')", 'Σ pT of the other particles within ΔR < 0.2 of the hardest lepton / its pT (0 if none)')
-    # ---- tracks: impact parameters (charged particles; σ floored at 1e-6) ----
+    # ---- tracks: impact parameters (charged particles with a measured uncertainty σ > 0) ----
     for w, lab in (('d0', 'd0'), ('dz', 'dz'), ('3d', '3D')):
         for r in (1, 2, 3):
             add(f'sip_{w}_{r}', f'{lab} significance of track {r}', f'sip({w!r}, {r})', f'the {r}. largest {lab} significance among the charged particles' + (' (√((d0/σ)² + (dz/σ)²))' if w == '3d' else f', signed ({lab}/σ)') + ' (0 if fewer)')

@@ -321,18 +321,23 @@ PART = '''
 '''
 FULL = '''
     ch = [i for i in real if charge[i] != 0]
-    sd0 = {i: d0[i] / max(d0err[i], 1e-6) for i in ch}
-    sdz = {i: dz[i] / max(dzerr[i], 1e-6) for i in ch}
+    # tracks with a measured uncertainty (a few charged particles have sigma = 0: left out of every significance)
+    tk = dict(d0=[i for i in ch if d0err[i] > 0], dz=[i for i in ch if dzerr[i] > 0])
+    tk['3d'] = [i for i in tk['d0'] if dzerr[i] > 0]
+    sd0 = {i: d0[i] / d0err[i] for i in tk['d0']}
+    sdz = {i: dz[i] / dzerr[i] for i in tk['dz']}
 
     def sig(w, i):
+        if i not in tk[w]:
+            return 0.0
         return sd0[i] if w == 'd0' else sdz[i] if w == 'dz' else math.sqrt(sd0[i] ** 2 + sdz[i] ** 2)
 
     def sip(w, r):
-        s = sorted(ch, key=lambda i: -abs(sig(w, i)))
+        s = sorted(tk[w], key=lambda i: -abs(sig(w, i)))
         return sig(w, s[r - 1]) if len(s) >= r else 0.0
 
     def nsig(w, c):
-        return float(sum(1 for i in ch if abs(sig(w, i)) > c))
+        return float(sum(1 for i in tk[w] if abs(sig(w, i)) > c))
 
     def leadtrack(w):
         return sig(w, ch[0]) if ch else 0.0
@@ -349,7 +354,7 @@ FULL = '''
         if what == 'ptrel':
             return pt[i] * dr[i]
         if what == 'sd0':
-            return d0[i] / max(d0err[i], 1e-6) if charge[i] != 0 else 0.0
+            return sig('d0', i)
         return sum(pt[j] for j in real if j != i and math.hypot(eta[j] - eta[i], phi[j] - phi[i]) < 0.2) / max(pt[i], 1e-9)
 
     def set_mass(ids):
@@ -360,7 +365,7 @@ FULL = '''
         return math.sqrt(max(E * E - px * px - py * py - pz * pz, 0.0))
 
     def displaced(c, what):
-        ids = [i for i in ch if abs(sd0[i]) > c]
+        ids = [i for i in tk['d0'] if abs(sd0[i]) > c]
         return sum(z[i] for i in ids) if what == 'z' else set_mass(ids)
 
     def subset_mass(what):

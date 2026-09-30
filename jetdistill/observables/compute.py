@@ -300,20 +300,21 @@ def _extras(X, net, jet, ext):
     O['jet_charge'] = (qq * z).sum(1); O['jet_charge_k05'] = (qq * z ** 0.5).sum(1); O['jet_charge_k03'] = (qq * z ** 0.3).sum(1); O['sum_charge'] = qq.sum(1)
     ich = ch.argmax(1); hasch = ch.any(1); O['lead_charge'] = np.where(hasch, q[rows, ich], 0.0)
     il = lep.argmax(1); has = lep.any(1); dr = np.hypot(eta, phi)
-    sd0, sdz = np.where(ch, d0 / np.maximum(d0e, 1e-6), 0.0), np.where(ch, dz / np.maximum(dze, 1e-6), 0.0); s3 = np.sqrt(sd0 ** 2 + sdz ** 2)
+    t0, tz = ch & (d0e > 0), ch & (dze > 0)                  # tracks with a measured uncertainty (a few charged particles have σ = 0)
+    sd0, sdz = np.where(t0, d0 / np.where(t0, d0e, 1.0), 0.0), np.where(tz, dz / np.where(tz, dze, 1.0), 0.0); s3 = np.sqrt(sd0 ** 2 + sdz ** 2); t3 = t0 & tz
     near_l = real & (np.hypot(eta - eta[rows, il][:, None], phi - phi[rows, il][:, None]) < 0.2); near_l[rows, il] = False
     O['lep_z'] = np.where(has, z[rows, il], 0.0); O['lep_dr'] = np.where(has, dr[rows, il], 0.0); O['lep_ptrel'] = np.where(has, pt[rows, il] * dr[rows, il], 0.0)
-    O['lep_sd0'] = np.where(has, np.where(q[rows, il] != 0, d0[rows, il] / np.maximum(d0e[rows, il], 1e-6), 0.0), 0.0)
+    O['lep_sd0'] = np.where(has, sd0[rows, il], 0.0)
     O['lep_iso'] = np.where(has, (pt * near_l).sum(1) / np.maximum(pt[rows, il], 1e-9), 0.0)
-    for w, v, signed in (('d0', sd0, True), ('dz', sdz, True), ('3d', s3, False)):
-        order = np.argsort(-np.where(ch, np.abs(v), -1.0), 1, kind='stable'); vs = np.take_along_axis(v, order, 1); cs = np.take_along_axis(ch, order, 1)
+    for w, v, tk in (('d0', sd0, t0), ('dz', sdz, tz), ('3d', s3, t3)):
+        order = np.argsort(-np.where(tk, np.abs(v), -1.0), 1, kind='stable'); vs = np.take_along_axis(v, order, 1); cs = np.take_along_axis(tk, order, 1)
         for r in (1, 2, 3): O[f'sip_{w}_{r}'] = np.where(cs[:, r - 1], vs[:, r - 1], 0.0)
-    for w, v, cs in (('d0', sd0, (2, 3, 5, 10)), ('dz', sdz, (2, 5)), ('3d', s3, (3, 10))):
-        for c in cs: O[f'n_s{w}_above_{c}'] = (ch & (np.abs(v) > c)).sum(1).astype(float)
+    for w, v, tk, cs in (('d0', sd0, t0, (2, 3, 5, 10)), ('dz', sdz, tz, (2, 5)), ('3d', s3, t3, (3, 10))):
+        for c in cs: O[f'n_s{w}_above_{c}'] = (tk & (np.abs(v) > c)).sum(1).astype(float)
     O['max_abs_d0'] = np.where(ch, np.abs(d0), 0.0).max(1); O['max_abs_dz'] = np.where(ch, np.abs(dz), 0.0).max(1)
     O['lead_ch_sd0'] = np.where(hasch, sd0[rows, ich], 0.0); O['lead_ch_sdz'] = np.where(hasch, sdz[rows, ich], 0.0)
     for c in (3, 5):
-        disp = ch & (np.abs(sd0) > c); O[f'z_displaced{c}'] = (z * disp).sum(1); O[f'mass_displaced{c}'] = _m4(*(P4 * disp[..., None]).sum(1).T)
+        disp = t0 & (np.abs(sd0) > c); O[f'z_displaced{c}'] = (z * disp).sum(1); O[f'mass_displaced{c}'] = _m4(*(P4 * disp[..., None]).sum(1).T)
     first2 = lambda m: m & (np.cumsum(m, 1) <= 2)
     for k, m in (('charged', ch), ('neutral', real & (q == 0)), ('2photon', first2(real & (typ == 3))), ('2charged', first2(ch))):
         O[f'mass_{k}'] = _m4(*(P4 * m[..., None]).sum(1).T)
