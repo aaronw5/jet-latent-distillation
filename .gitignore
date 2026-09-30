@@ -10,3 +10,4 @@ __pycache__/
 /results_part/
 /site_part/
 /models_part/
+*.egg-info/
