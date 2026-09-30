@@ -87,5 +87,7 @@ if TAGGER == 'part':      # ParT: the best JEDI recipe (tuned on the network's p
                         masses_as_thresholds=False, no_mass=True),
         'nomass_strict': Setup(label='No mass quantities or exact equivalents', page_desc='as “No mass quantities”, and also no quantity equal to (m/ΣpT)² in disguise (|correlation| > 0.98)',
                                masses_as_thresholds=False, no_mass=True, strict=True),
+        'all_truth': Setup(label='All quantities, tuned on the true labels', page_desc='as “All quantities” (the same step 1); steps 2–3 are tuned toward the true class of each jet instead of ParT’s probabilities (still with λ·R toward ParT’s neurons), pruning and step 4 keep validation accuracy',
+                           masses_as_thresholds=False, step1_from='all', families=dict(labels=((100,), 'labels'))),
     }
 FIDELITY_LAMBDA = 0.01    # weight of the neuron-closeness term R in steps 2 and 3

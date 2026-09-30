@@ -113,9 +113,9 @@ def stage_step1(setup, n, log=log):
 
 def stage_tune(setup, n, log=log):
     S = SETUPS[setup]; long = mars.load(setup, n); last = Network(n).last
-    fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT); dev = jets(n, 'dev', log); fams = dict(FAMILIES)
-    fams['network'] = (fams['network'][0], S.target or 'probabilities')
-    if S.truth_family is False: fams.pop('labels')
+    fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT); dev = jets(n, 'dev', log); fams = dict(S.families or FAMILIES)
+    if 'network' in fams: fams['network'] = (fams['network'][0], S.target or 'probabilities')
+    if S.truth_family is False: fams.pop('labels', None)
     drop_formulas(setup, n, lambda m: False)
     for fam, (Ks, target) in fams.items():
         for i, K in enumerate(Ks):
