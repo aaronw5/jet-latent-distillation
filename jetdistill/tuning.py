@@ -12,13 +12,14 @@ close to the network's; the neurons (16 / 128) reach the probabilities only thro
 tuning can move them in directions the probabilities do not see).
 The kept step (checked every 50 of 800) is the one with the best validation score: agreement with the network's class
 (probabilities, decisions), accuracy (labels) or mean neuron R² (neurons).
-Step 3 removes the weakest terms (|coefficient| × spread of the term), 15 % at a time, retraining after each cut; a cut is
+Step 3 removes the weakest terms (|coefficient| × spread of the term; ParT: × the norm of the neuron's weights in the last
+layer, i.e. the size of the term's effect on the class scores: 114 of ParT's 128 neurons change no decision), 15 % at a time, retraining after each cut; a cut is
 kept while the validation score stays within TOL of step 2's (0.1 point; 0.005 of R² for 'neurons'), else the cut size
 is halved, down to 2 %."""
 import numpy as np
 from . import formula as F
 
-from .config import SMOKE, RELU, NC
+from .config import SMOKE, RELU, NC, TAGGER
 
 
 def log(*a):
@@ -102,7 +103,8 @@ def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=
     cur, ref = train(formula, Qf, Qd, target, fit, dev, last, lam); path = [(F.n_terms(cur), ref)]
     log(f'step 2: {path[-1][0]} terms, validation {ref:.4f}')
     while frac >= min_frac:
-        imp = sorted((abs(t['coef']) * float(b[:, i].std()), j, i) for j, (nr, b) in enumerate(zip(cur, F.bases(cur, Qf))) for i, t in enumerate(nr['terms']))
+        wn = np.linalg.norm(np.asarray(last[0]), axis=1) if TAGGER == 'part' else np.ones(len(cur))   # ParT: size of the term's effect on the class scores
+        imp = sorted((abs(t['coef']) * float(b[:, i].std()) * float(wn[nr['neuron']]), j, i) for j, (nr, b) in enumerate(zip(cur, F.bases(cur, Qf))) for i, t in enumerate(nr['terms']))
         if not imp: break
         cut = {(j, i) for _, j, i in imp[:max(1, int(len(imp) * frac))]}
         trial, s = train([dict(nr, terms=[t for i, t in enumerate(nr['terms']) if (j, i) not in cut]) for j, nr in enumerate(cur)], Qf, Qd, target, fit, dev, last, lam)
