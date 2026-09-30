@@ -278,7 +278,19 @@ def sort_formula(f):
 
 
 def run(start, jets, last, metric, total_budgets=BUDGETS, snapshots=(0, 1), log=log):
-    """all candidates (budgets below the START size, pool rounds 0 and 1, 2 and 3 significant digits) and the choice"""
+    """all candidates (budgets below the START size, pool rounds 0 and 1, 2 and 3 significant digits) and the choice.
+    Neurons without terms (constants, e.g. after ParT's neuron pruning) stay constants: they are folded into the last
+    layer's biases, step 4 works on the other neurons, and the constants are put back in the chosen formula."""
+    live = [j for j, nr in enumerate(start) if nr['terms']]
+    if len(live) < len(start) and metric != 'neuron' and last[2] is None:
+        K, b = np.asarray(last[0]), np.asarray(last[1]); const = [j for j in range(len(start)) if j not in live]
+        b2 = b + sum(act(np.array(start[j]['intercept'])) * K[j] for j in const)
+        sub = [dict(start[j], neuron=i) for i, j in enumerate(live)]
+        chosen, info = run(sub, jets, (K[live], b2, None, None), metric, total_budgets, snapshots, log)
+        if chosen is not None:
+            by = {live[nr['neuron']]: dict(nr, neuron=live[nr['neuron']]) for nr in chosen}
+            chosen = [by.get(j, dict(neuron=j, intercept=start[j]['intercept'], terms=[])) for j in range(len(start))]
+        info['live_neurons'] = live; return chosen, info
     S = Step4(start, jets, last, metric); PPs = S.pools(log=log); cands = []
     total_budgets = total_budgets or tuple(int(round(f * F.n_terms(start))) for f in FRACTIONS)
     for r in snapshots:
