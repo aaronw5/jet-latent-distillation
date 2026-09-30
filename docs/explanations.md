@@ -16,9 +16,11 @@ one-line text saying so), all 5 classes.
 
 Rules:
 - Plain, academic, specific. No metaphors, no flourish, no "essentially", no "acts as". Say what is computed.
-- Titles describe the physics the neuron measures in observable terms ("jet mass between 87 and 97 GeV, narrow jets",
-  "wide jets with three hard subjets"). NO class names in neuron titles or group names, and never "-like"/"likeness"
+- Titles describe the physics the neuron measures in observable terms ("jet mass between 87 and 97 GeV, ΣzΔR² below 0.005",
+  "ΣzΔR² above 0.02 and three hard subjets"). NO class names in neuron titles or group names, and never "-like"/"likeness"
   ("quark-like", "top-likeness"): classifying is the network's job, the text says what is measured.
+- Name every quantity by its formula symbol (ΣzΔR, ΣzΔR², λ₁, λ₁+λ₂, Σ zᵢzⱼΔRᵢⱼ², τ₂₁(β=2), …; the table is
+  jetdistill/observables/symbols.py), never by jargon names (girth, width, e2_sq) or words like "wide", "narrow", "broad".
 - "measures": which if-statements dominate (quote thresholds as in the pack), what raises/lowers the neuron, the mean value
   per true class (numbers from the pack), how often it is zero.
 - "role": which class scores it raises/lowers (sign and size of its weight share from the pack), only those it enters.

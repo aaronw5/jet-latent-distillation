@@ -108,7 +108,7 @@ def library(n):
         add(f'z_{i}', f'pT share of particle {i}', f'z[{i}]', f'pT of particle {i} / total pT')
         add(f'abseta_{i}', f'|Δη| of particle {i}', f'abs(eta[{i}])', f'|Δη| of particle {i}')
         add(f'absphi_{i}', f'|Δφ| of particle {i}', f'abs(phi[{i}])', f'|Δφ| of particle {i}')
-        add(f'zdr_{i}', f'pT share × ΔR of particle {i}', f'z[{i}] * dr[{i}]', f'pT share × ΔR of particle {i} (its part of the girth)')
+        add(f'zdr_{i}', f'pT share × ΔR of particle {i}', f'z[{i}] * dr[{i}]', f'pT share × ΔR of particle {i} (its term in ΣzΔR)')
         if i >= 2:
             add(f'dr0_{i}', f'ΔR between particles 0 and {i}', f'math.sqrt(dist2(0, {i})) if pt[{i}] > 0 else 0.0', f'ΔR between particle {i} and the hardest particle')
             add(f'dr1_{i}', f'ΔR between particles 1 and {i}', f'math.sqrt(dist2(1, {i})) if pt[{i}] > 0 else 0.0', f'ΔR between particle {i} and the 2nd-hardest particle')

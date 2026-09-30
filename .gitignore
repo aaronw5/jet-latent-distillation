@@ -1,7 +1,8 @@
 __pycache__/
 *.pyc
-data/
-results/
-logs/
-.venv/
-site/
+/data/
+/results/
+/logs/
+/.venv/
+/site/
+/models/

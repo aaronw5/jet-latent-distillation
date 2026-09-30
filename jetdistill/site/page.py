@@ -7,7 +7,7 @@ import numpy as np
 from .. import pipeline as P
 from ..config import SETUPS, CLASSES, FIDELITY_LAMBDA, RESULTS
 from ..network import Network
-from ..observables import library
+from ..observables import library, relabel, symbol, CODE_RENAME
 
 TEMPLATE = Path(__file__).with_name('template.html')
 SITE = RESULTS.parent / 'site'
@@ -71,7 +71,8 @@ def build(setup, n, site=SITE):
             full = dict(anat=A, pack=dict(neurons={x['neuron']: {k: x[k] for k in keepN if k in x} for x in PK['neurons']}, class_scores=[{k: c[k] for k in keepS if k in c} for c in PK['class_scores']]),
                         expl=json.loads((d / 'explain.json').read_text()) if (d / 'explain.json').exists() else None)
             if (d / 'combos.json').exists(): full['combos'] = json.loads((d / 'combos.json').read_text())
-            fn = f'explain_n{n}_{t}.json'; (out / fn).write_text(json.dumps(rnd(slim(full)), separators=(',', ':'))); D['explain'][t] = dict(file=fn, has_text=full['expl'] is not None)
+            fn = f'explain_n{n}_{t}.json'; full = relabel(full, lib)   # quantity names shown as formula symbols
+            (out / fn).write_text(json.dumps(rnd(slim(full)), separators=(',', ':'))); D['explain'][t] = dict(file=fn, has_text=full['expl'] is not None)
         if (d / 'check.json').exists():
             C = json.loads((d / 'check.json').read_text()); r = next(x for x in M['models'] if x.get('formula') == t)
             for suffix, key in (('', f'formula {t}'), ('_normalized', f'formula {t} normalized')):
@@ -82,7 +83,8 @@ def build(setup, n, site=SITE):
         if (d / 'normalized.json').exists():
             N = json.loads((d / 'normalized.json').read_text()); D['forms'][t] = dict(norm=N, trees={}, big=[])
     D['fjets'] = example_jets(setup, n, reg, last)
-    D['defs'] = {k: f'{o.label}: {o.desc}' for k, o in lib.items()}
+    py = D.pop('py'); D = relabel(D, lib); D['py'] = py   # quantity names shown as formula symbols; the pop-up gives each definition
+    D['defs'] = {symbol(k): f'{o.label}: {o.desc} (code name: {CODE_RENAME.get(k, k)})' for k, o in lib.items()}
     page = TEMPLATE.read_text().replace('/*DATA*/', json.dumps(D, separators=(',', ':')))
     js = page[page.rfind('<script>') + 8:page.rfind('</script>')]
     if shutil.which('node'):

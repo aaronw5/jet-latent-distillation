@@ -2,7 +2,7 @@
 
 The JEDI-linear jet tagger (a small fixed-point network for FPGA triggers) sorts particle jets into gluon (g), light quark
 (q), W, Z and top (t). It decides from 16 numbers, its last hidden layer. This repository writes each of those 16 numbers as a
-sum of if-statements on jet physics observables (jet mass, widths, N-subjettiness, energy correlations, the hardest
+sum of if-statements on jet physics observables (jet mass, ΣzΔR² = Σᵢ pTᵢΔRᵢ² / Σᵢ pTᵢ, N-subjettiness, energy correlations, the hardest
 particles, …) and feeds them to the network's own, unchanged last layer. The result is a formula that makes the network's
 decision on about 9 of 10 jets (8 particles) and 19 of 20 jets (64 particles), and a stand-alone Python file of it.
 

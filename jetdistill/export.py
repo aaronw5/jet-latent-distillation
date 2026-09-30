@@ -16,7 +16,7 @@ import numpy as np
 from . import formula as F
 from .config import CLASSES
 from .network import round_wrap
-from .observables import library, quantities_source
+from .observables import library, quantities_source, code_names
 
 SIG = 7   # significant digits of printed numbers
 
@@ -111,7 +111,7 @@ def write_formula(formula, n, last, ranges, title, stats, path):
     L += ['def jet_layer_4(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in formula)) + ']', '', '',
           'def logits(h):', '    h = [(math.floor(x * 2 ** f + 0.5) / 2 ** f) % 2 ** i for x, i, f in zip(h, INT_BITS, FRAC_BITS)]',
           '    return [B[c] + sum(h[j] * W[j][c] for j in range(len(h))) for c in range(5)]', '', ''] + tail(n)
-    Path(path).parent.mkdir(parents=True, exist_ok=True); Path(path).write_text('\n'.join(L)); return Path(path)
+    Path(path).parent.mkdir(parents=True, exist_ok=True); Path(path).write_text(code_names('\n'.join(L))); return Path(path)
 
 
 # ---------------------------------------------------------------- normalized weights
@@ -162,7 +162,7 @@ def write_normalized(formula, n, last, norm, title, stats, path):
         L.append(f'        {g(last[1][c])} + T[{c}] * (   # class {CLASSES[c]}')
         L += [f"            {'+' if s >= 0 else '-'} {g(abs(s))} * h[{j}] / H_AVG[{j}]" for j, s in sh] + ['        ),']
     L += ['    ]]', '', ''] + tail(n)
-    Path(path).write_text('\n'.join(L)); return Path(path)
+    Path(path).write_text(code_names('\n'.join(L))); return Path(path)
 
 
 # ---------------------------------------------------------------- running a file on jets
