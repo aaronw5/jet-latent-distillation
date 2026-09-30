@@ -99,6 +99,19 @@ def learnable(n, n_fit=40000):
     (out_dir(n) / 'learnable.json').write_text(json.dumps(res, indent=1))
 
 
+def numbers(n):
+    """the control's summary for one network (None until every part exists): median over neurons of the test-jet R² of step 1
+    on the physics observables, of step 1 on the raw inputs and of boosted trees on the raw inputs, and the orientation share
+    of the step-1 formula; each as {'trained': x, 'untrained': x}"""
+    d = RESULTS / 'control' / f'n{n}'
+    if not all((d / f).exists() for f in ('compare.json', 'learnable.json', 'step1_lowlevel.json', 'step1_lowlevel_untrained.json')): return None
+    C = json.loads((d / 'compare.json').read_text()); L = json.loads((d / 'learnable.json').read_text()); med = lambda v: float(np.median(v))
+    low = lambda sfx: med([x['test_r2'] for x in json.loads((d / f'step1_lowlevel{sfx}.json').read_text())['neurons'] if x['terms']])
+    return dict(physics={k: med([r['r2_test'] for r in C[k]]) for k in ('trained', 'untrained')},
+                orientation={k: C.get(f'{k}_orientation_share') for k in ('trained', 'untrained')},
+                raw_inputs=dict(trained=low(''), untrained=low('_untrained')), trees={k: med([r['r2'] for r in L[k]]) for k in ('trained', 'untrained')})
+
+
 if __name__ == '__main__':
     n, *todo = sys.argv[1:]; n = int(n)
     for s in todo or ['step1', 'lowlevel', 'compare', 'learnable']:

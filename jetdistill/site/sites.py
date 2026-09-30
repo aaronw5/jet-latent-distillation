@@ -42,17 +42,9 @@ def summary(e, n):
 def control_html():
     """the untrained-network control (analysis/control.py): how well each kind of fit describes the neurons of the trained and
     of the untrained network (median over neurons, R² on test jets)"""
-    import numpy as np
-    from ..analysis.control import orientation_share
-    med = lambda v: float(np.median(v)); pc = lambda v: f'{100 * v:.0f}%'; rows = []
-    for n in NS:
-        d = RESULTS / 'control' / f'n{n}'; need = ['compare.json', 'learnable.json', 'step1_lowlevel.json', 'step1_lowlevel_untrained.json']
-        if not all((d / f).exists() for f in need): continue
-        C = json.loads((d / 'compare.json').read_text()); L = json.loads((d / 'learnable.json').read_text())
-        low = {k: med([x['test_r2'] for x in json.loads((d / f'step1_lowlevel{sfx}.json').read_text())['neurons'] if x['terms']]) for k, sfx in (('trained', ''), ('untrained', '_untrained'))}
-        ori = {k: C.get(f'{k}_orientation_share') for k in ('trained', 'untrained')}
-        rows.append((n, [[med([r['r2_test'] for r in C[k]]) for k in ('trained', 'untrained')], [ori[k] for k in ('trained', 'untrained')],
-                         [low[k] for k in ('trained', 'untrained')], [med([r['r2'] for r in L[k]]) for k in ('trained', 'untrained')]]))
+    from ..analysis.control import numbers
+    pc = lambda v: f'{100 * v:.0f}%'; keys = ('physics', 'orientation', 'raw_inputs', 'trees')
+    rows = [(n, [[N[k]['trained'], N[k]['untrained']] for k in keys]) for n in NS if (N := numbers(n))]
     if not rows: return '<p class="cnt">Not run (python -m jetdistill.analysis.control 8, and 64).</p>'
     labels = ['R², step 1 on the physics observables', 'orientation share of the step-1 formula', 'R², step 1 on the raw inputs (pT, Δη, Δφ)',
               'R², boosted decision trees on the raw inputs']
