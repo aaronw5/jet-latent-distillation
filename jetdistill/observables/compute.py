@@ -250,7 +250,7 @@ def _extras(X, net, jet, ext):
     for c in (1, 3, 10, 30): O[f'n_pairs_kt_above_{c}'] = (ok & (kt > c)).sum(1).astype(float)
     del P, w, kt
     # ---- primary Lund plane ----
-    hs = min(n, HSD); V, kids, cur = _ca_tree(pt[:, :hs], eta[:, :hs], phi[:, :hs])
+    hs = min(n, HSD); V, kids, cur = _ca_tree(pt[:, :hs], eta[:, :hs], phi[:, :hs]); root = cur.copy()
     L = {(k, f): np.full(J, LNEPS) for k in (1, 2, 3) for f in ('lndelta', 'lnkt', 'lnz')}
     maxkt, maxd, nsp, n1, n5 = np.full(J, LNEPS), np.full(J, LNEPS), np.zeros(J), np.zeros(J), np.zeros(J); done = np.zeros(J, bool)
     for step in range(hs):
@@ -319,6 +319,231 @@ def _extras(X, net, jet, ext):
     for k, m in (('charged', ch), ('neutral', real & (q == 0)), ('2photon', first2(real & (typ == 3))), ('2charged', first2(ch))):
         O[f'mass_{k}'] = _m4(*(P4 * m[..., None]).sum(1).T)
     O['mass_2photon'] = np.where((real & (typ == 3)).sum(1) >= 2, O['mass_2photon'], 0.0)
+    O.update(_plus(pt, eta, phi, jet, ext, (V, kids, root), ax, mp, P4))
+    return O
+
+
+# ---------------------------------------------------------------- more quantities of 'full' (library.plus; python_code.PLUS)
+def _genkt(pt, eta, phi, sel, p, R, nstop=0, snap=0, batch=256):
+    """generalized kT (p = 1 kT, -1 anti-kT) of the selected particles, as python_code.genkt: returns the (J, n) label of
+    each particle (its pseudojet; -1 if not selected) and the exclusive merging scales dm[:, m] (m + 1 -> m pseudojets)"""
+    J, n = pt.shape; cnt = sel.sum(1); order = np.argsort(cnt, kind='stable')
+    lab = -np.ones((J, n), int); dm = np.zeros((J, 4)); dk = np.zeros((J, 4), bool)
+    for i0 in range(0, J, batch):
+        idx = order[i0:i0 + batch]; h = int(cnt[idx].max())
+        if h == 0: continue
+        pos = np.argsort(~sel[idx], 1, kind='stable')[:, :h]; live = np.take_along_axis(sel[idx], pos, 1)
+        tk = lambda a: np.take_along_axis(a[idx], pos, 1)
+        l, d, k = _genkt_batch(tk(pt), tk(eta), tk(phi), live, p, R, nstop, snap)
+        sub = lab[idx]; np.put_along_axis(sub, pos, np.where(live, l, -1), 1); lab[idx] = sub; dm[idx] = d; dk[idx] = k
+    return lab, dm, dk
+
+
+def _genkt_batch(pt, eta, phi, live, p, R, nstop, snap):
+    J, h = pt.shape; rows = np.arange(J); R2 = R * R; cols = np.arange(h)
+    V = _p4(pt, eta, phi); Y, PH = _yphi(V); PT = np.hypot(V[..., 0], V[..., 1])
+    kp = lambda t: t * t if p == 1 else 1.0 / np.maximum(t * t, 1e-300)
+    KP = kp(PT)
+    def d2(ya, pa, yb, pb):
+        dp = np.mod(pa - pb + np.pi, 2 * np.pi) - np.pi; return (ya - yb) ** 2 + dp ** 2
+    D = np.where(live[:, :, None] & live[:, None] & np.triu(np.ones((h, h), bool), 1),
+                 np.minimum(KP[:, :, None], KP[:, None]) * d2(Y[:, :, None], PH[:, :, None], Y[:, None], PH[:, None]) / R2, np.inf)
+    mem = np.tile(cols, (J, 1)); act = live.copy(); part = mem.copy(); jid = -np.ones((J, h), int); nj = np.zeros(J, int)
+    dm = np.zeros((J, 4)); dk = np.zeros((J, 4), bool)
+    for _ in range(h + 1):
+        na = act.sum(1)
+        if snap: part = np.where((na == snap)[:, None], mem, part)
+        go = na > nstop
+        if not go.any(): break
+        flat = D.reshape(J, -1); f = flat.argmin(1); dpair = flat[rows, f]; a, b = f // h, f % h
+        if nstop:
+            mg = go
+            for m in (1, 2, 3): w = mg & (na == m + 1); dm[w, m] = dpair[w]; dk[w, m] = True
+        else:
+            DB = np.where(act, KP, np.inf); ab = DB.argmin(1); mg = go & (dpair <= DB[rows, ab]); fin = go & ~mg
+        g = np.flatnonzero(mg)
+        if len(g):
+            ag, bg = a[g], b[g]; V[g, ag] = V[g, ag] + V[g, bg]; act[g, bg] = False; D[g, bg, :] = np.inf; D[g, :, bg] = np.inf
+            mem[g] = np.where(mem[g] == bg[:, None], ag[:, None], mem[g])
+            vn = V[g, ag]; yn, pn = _yphi(vn); kn = kp(np.hypot(vn[:, 0], vn[:, 1])); Y[g, ag] = yn; PH[g, ag] = pn; KP[g, ag] = kn
+            dn = np.minimum(kn[:, None], KP[g]) * d2(yn[:, None], pn[:, None], Y[g], PH[g]) / R2; ac = act[g]
+            D[g, ag, :] = np.where(ac & (cols > ag[:, None]), dn, np.inf); D[g, :, ag] = np.where(ac & (cols < ag[:, None]), dn, np.inf)
+        if not nstop:
+            g = np.flatnonzero(fin)
+            if len(g):
+                abg = ab[g]; act[g, abg] = False; D[g, abg, :] = np.inf; D[g, :, abg] = np.inf; jid[g, abg] = nj[g]; nj[g] += 1
+    if not nstop: return np.take_along_axis(jid, mem, 1), dm, dk
+    return (part if snap else mem), dm, dk
+
+
+def _rank(lab, pt, keep, min_pt=None):
+    """the groups of a (J, n) labelling ranked by Σ pT: `keep` masks (J, n) (empty if missing) and the number of groups"""
+    J, n = lab.shape; ok = lab >= 0; r, c = np.nonzero(ok)
+    W = max(n, int(lab.max()) + 1); spt = np.zeros((J, W)); cnt = np.zeros((J, W), int); np.add.at(spt, (r, lab[ok]), pt[r, c]); np.add.at(cnt, (r, lab[ok]), 1)
+    ex = cnt > 0
+    if min_pt is not None: ex &= spt > min_pt
+    order = np.argsort(-np.where(ex, spt, -np.inf), 1, kind='stable')
+    masks = [(lab == order[:, k:k + 1]) & np.take_along_axis(ex, order[:, k:k + 1], 1) for k in range(keep)]
+    return masks, ex.sum(1)
+
+
+def _plus(pt, eta, phi, jet, ext, tree, ax, mp4, P4):
+    from scipy.special import erfc
+    J, n = pt.shape; rows = np.arange(J); real = pt > 0; tot = pt.sum(1); z = pt / tot[:, None]; O = {}
+    E, q, typ, d0, d0e, dz, dze = (ext[..., i] for i in range(7))
+    ch = real & (q != 0); t0 = ch & (d0e > 0); tz = ch & (dze > 0); t3 = t0 & tz; lep = real & ((typ == 4) | (typ == 5))
+    c0 = np.where(t0, d0 / np.where(t0, np.minimum(d0e, 1.0), 1.0), 0.0)
+    c3 = np.where(t3, np.sqrt(c0 ** 2 + (dz / np.where(tz, np.minimum(dze, 1.0), 1.0)) ** 2), 0.0)
+    lnp = np.where(t0 & (c0 > 0), -np.log(np.maximum(erfc(np.abs(c0) / np.sqrt(2.0)), 1e-300)), 0.0)
+    PE = np.stack([pt * np.cos(phi), pt * np.sin(phi), pt * np.sinh(eta + jet[:, 1:2]), E], -1)
+    def emass(m, w=None):
+        v = ((m * (1.0 if w is None else w))[..., None] * PE).sum(1); return np.sqrt(np.maximum(v[:, 3] * v[:, 3] - v[:, 0] * v[:, 0] - v[:, 1] * v[:, 1] - v[:, 2] * v[:, 2], 0.0))
+    def kth(v, m, k):
+        s = -np.sort(-np.where(m, v, -np.inf), 1); r = s[:, k - 1]; return np.where(np.isfinite(r), r, 0.0)
+    def cen(m):
+        w = np.maximum((pt * m).sum(1), 1e-9); return (pt * eta * m).sum(1) / w, (pt * phi * m).sum(1) / w
+    def flav(m, pre):
+        tr = m & t0; dsp = tr & (c0 > 3)
+        for k in (1, 2, 3): O[f'{pre}sd0_{k}'] = kth(c0, tr, k)
+        O[pre + 'n_disp3'] = dsp.sum(1).astype(float); O[pre + 'mass_disp3'] = emass(dsp); O[pre + 'z_disp3'] = (z * dsp).sum(1)
+        O[pre + 'jp'] = (lnp * tr).sum(1); O[pre + 'n_lep'] = (m & lep).sum(1).astype(float)
+        O[pre + 'charge'] = (q * np.sqrt(pt) * m).sum(1) / np.sqrt(np.maximum((pt * m).sum(1), 1e-9))
+    def subfeats(pre, masks, mins=True, dr=True):
+        cs = []
+        for r, m in enumerate(masks):
+            Q = f'{pre}_{r + 1}_'; O[Q + 'z'] = (z * m).sum(1); O[Q + 'mass'] = emass(m); flav(m, Q); cs.append((cen(m), m.any(1)))
+        if dr:
+            for a in range(len(masks)):
+                for b in range(a + 1, len(masks)):
+                    (ea, pa), oa = cs[a]; (eb, pb), ob = cs[b]; O[f'{pre}_dr{a + 1}{b + 1}'] = np.where(oa & ob, np.hypot(ea - eb, pa - pb), 0.0)
+        if mins:
+            for v in ('sd0_1', 'sd0_2', 'n_disp3', 'mass_disp3', 'jp'): O[f'{pre}_min12_{v}'] = np.minimum(O[f'{pre}_1_{v}'], O[f'{pre}_2_{v}'])
+    # ---- subjets: exclusive kT (2) and its merging scales; anti-kT R = 0.2
+    lab, dm, dk = _genkt(pt, eta, phi, real, 1, 1.0, nstop=1, snap=2); subfeats('kt2', _rank(lab, pt, 2)[0])
+    for m in (1, 2, 3): O[f'ktd_ln_d{m}{m + 1}'] = np.where(dk[:, m], np.log(np.maximum(dm[:, m], 1e-12) / (tot * tot)), 0.0)
+    lab = _genkt(pt, eta, phi, real, -1, 0.2)[0]; masks, ng = _rank(lab, pt, 3, min_pt=10.0); O['ak02_n'] = ng.astype(float); subfeats('ak02', masks)
+    # ---- secondary-vertex proxies
+    lab = _genkt(pt, eta, phi, t0 & (c0 > 3), -1, 0.1)[0]; masks, ng = _rank(lab, pt, 2); O['sv_n'] = ng.astype(float)
+    for r, m in enumerate(masks):
+        Q = f'sv_{r + 1}_'; (ce, cp) = cen(m)
+        O[Q + 'n'] = m.sum(1).astype(float); O[Q + 'mass'] = emass(m); O[Q + 'z'] = (z * m).sum(1); O[Q + 'dr'] = np.where(m.any(1), np.hypot(ce, cp), 0.0); O[Q + 'sd0_sum'] = (c0 * m).sum(1)
+    # ---- sums over tracks and pairs
+    ed = (-np.inf, -3.0, -1.0, 1.0, 3.0, 10.0, np.inf)
+    for b in range(6):
+        m = t0 & (c0 > ed[b]) & (c0 <= ed[b + 1]); O[f'sdb_{b}_z'] = (z * m).sum(1); O[f'sdb_{b}_n'] = m.sum(1).astype(float)
+    O['sdb_jp_all'] = lnp.sum(1); O['sdb_jp_top3'] = -np.sort(-lnp, 1)[:, :3].sum(1)
+    h = min(n, 40); iu = np.triu_indices(h, 1); a, b = iu; ok = real[:, a] & real[:, b]
+    d = np.hypot(eta[:, a] - eta[:, b], phi[:, a] - phi[:, b]); w = np.where(ok, z[:, a] * z[:, b], 0.0)
+    ld, lk = np.log(np.maximum(d, 1e-6)), np.log(np.maximum(np.minimum(pt[:, a], pt[:, b]) * d, 1e-6))
+    for k, (lo, hi) in enumerate(zip((-9.0, -3.0, -2.0, -1.0), (-3.0, -2.0, -1.0, 9.0))): O[f'pz_lnd{k}'] = (w * ((ld > lo) & (ld <= hi))).sum(1)
+    for k, (lo, hi) in enumerate(zip((-9.0, 0.0, 1.0, 2.0, 3.0), (0.0, 1.0, 2.0, 3.0, 9.0))): O[f'pz_lnkt{k}'] = (w * ((lk > lo) & (lk <= hi))).sum(1)
+    # ---- prongs (the C/A tree reversed)
+    V, kids, root = tree; H2 = V.shape[1]; H = H2 // 2; npt = np.hypot(V[..., 0], V[..., 1]); ptj = npt[rows, root]; K = 16
+    opn = -np.ones((J, K), int); opn[:, 0] = root; isp = np.zeros((J, H2), bool); SP = np.zeros((J, K, 5)); nsp = np.zeros(J, int)
+    while (opn >= 0).any():
+        for k in range(K):
+            j = np.flatnonzero(opn[:, k] >= 0)
+            if not len(j): continue
+            nd = opn[j, k]; ca, cb = kids[j, nd, 0], kids[j, nd, 1]; leaf = ca < 0
+            isp[j[leaf], nd[leaf]] = True; opn[j[leaf], k] = -1; j, nd, ca, cb = j[~leaf], nd[~leaf], ca[~leaf], cb[~leaf]
+            if not len(j): continue
+            pa, pb = npt[j, ca], npt[j, cb]; hard = np.where(pa >= pb, ca, cb); soft = np.where(pa >= pb, cb, ca)
+            dr = np.sqrt(_dR2(V[j, ca], V[j, cb])); zz = np.minimum(pa, pb) / np.maximum(ptj[j], 1e-12); stop = dr <= 0.1
+            isp[j[stop], nd[stop]] = True; opn[j[stop], k] = -1; go = ~stop; opn[j[go], k] = hard[go]; sp = go & (zz >= 0.1)
+            for jj, ss, nn, z_, d_, pa_, pb_ in zip(j[sp], soft[sp], nd[sp], zz[sp], dr[sp], pa[sp], pb[sp]):
+                opn[jj, np.flatnonzero(opn[jj] < 0)[0]] = ss
+                if nsp[jj] < K: SP[jj, nsp[jj]] = (npt[jj, nn], z_, d_, min(pa_, pb_) * d_, _m4(*V[jj, nn])); nsp[jj] += 1
+    ln = np.where(isp, np.arange(H2)[None], -1)
+    for nd in range(H2 - 1, H - 1, -1):
+        g = np.flatnonzero(ln[:, nd] >= 0)
+        if len(g):
+            for c in (0, 1):
+                kc = kids[g, nd, c]; okc = kc >= 0; ln[g[okc], kc[okc]] = ln[g[okc], nd]
+    lp = -np.ones((J, n), int); lp[:, :H] = ln[:, :H]
+    masks, ng = _rank(np.where(real, lp, -1), pt, 4); O['dc_n'] = isp.sum(1).astype(float); subfeats('dc', masks, mins=False, dr=False)
+    tags = np.stack([O[f'dc_{r + 1}_sd0_2'] for r in range(4)], 1); st = -np.sort(-tags, 1)
+    O['dc_ntag'] = (tags > 3).sum(1).astype(float); O['dc_tag_max'], O['dc_tag_2nd'] = st[:, 0], st[:, 1]
+    md = np.stack([O[f'dc_{r + 1}_mass_disp3'] for r in range(4)], 1); sm = -np.sort(-md, 1)
+    O['dc_mass_disp_max'], O['dc_mass_disp_2nd'], O['dc_mass_disp_sum'] = sm[:, 0], sm[:, 1], md.sum(1)
+    pm = np.stack([np.where(masks[a].any(1) & masks[b].any(1), emass(masks[a] | masks[b]), np.nan) for a in range(4) for b in range(a + 1, 4)], 1); has = np.isfinite(pm).any(1)
+    O['dc_pair_mass_min'] = np.where(has, np.nanmin(np.where(has[:, None], pm, 0.0), 1), 0.0); O['dc_pair_mass_max'] = np.where(has, np.nanmax(np.where(has[:, None], pm, 0.0), 1), 0.0)
+    o = np.argsort(-np.where(np.arange(K)[None] < nsp[:, None], SP[..., 0], -np.inf), 1, kind='stable'); SPo = np.take_along_axis(SP, o[..., None], 1)
+    for r in (0, 1):
+        okr = nsp > r
+        for c, nm in enumerate(('z', 'dr', 'kt', 'mass')): O[f'dc_split{r + 1}_{nm}'] = np.where(okr, SPo[:, r, c + 1], 0.0)
+    # ---- k-means subjets (the τ_N axes): groups ranked by pT share as subjets(k)
+    def kgroups(k):
+        near = ax[k][1].argmin(-1); S = np.stack([(z * real * (near == j)).sum(1) for j in range(k)], 1); order = np.argsort(-S, 1, kind='stable')
+        return [real & (near == order[:, r:r + 1]) for r in range(k)]
+    KG = {k: kgroups(k) for k in (2, 3, 4)}
+    for k in (2, 3, 4):
+        n2 = np.zeros(J)
+        for r, m in enumerate(KG[k]):
+            Q = f'sjf_{k}_{r + 1}_'; tr = m & t0; d3 = tr & (np.abs(c0) > 3)
+            O[Q + 'n_d3'] = d3.sum(1).astype(float); O[Q + 'n_d5'] = (tr & (np.abs(c0) > 5)).sum(1).astype(float)
+            O[Q + 'mass_d3'] = emass(d3); O[Q + 'z_d3'] = (z * d3).sum(1)
+            O[Q + 'maxsd0'] = np.where(tr, np.abs(c0), 0.0).max(1); O[Q + 'max3d'] = np.where(m & t3, c3, 0.0).max(1); n2 += d3.sum(1) >= 2
+        O[f'sjf_{k}_n2disp'] = n2
+    # ---- jet-level vertex-like
+    order = np.argsort(-np.where(t0, np.abs(c0), -1.0), 1, kind='stable'); vs = np.take_along_axis(c0, order, 1); cs_ = np.take_along_axis(t0, order, 1)
+    for r in (4, 5, 6): O[f'jd_sd0_{r}'] = np.where(cs_[:, r - 1], vs[:, r - 1], 0.0); O[f'jd_3d_{r}'] = kth(c3, t3, r)
+    ab = -np.sort(-np.where(t0, np.abs(c0), 0.0), 1); O['jd_sum_abs_sd0_top3'] = ab[:, :3].sum(1); O['jd_sum_abs_sd0_top5'] = ab[:, :5].sum(1)
+    d3 = t0 & (np.abs(c0) > 3); mx = np.where(d3.any(1), np.where(d3, np.abs(c0), 0.0).max(1), 1.0)
+    O['jd_mass_d3_sigw'] = emass(d3, np.abs(c0) / mx[:, None]); zd = (z * d3).sum(1); O['jd_mass_d3_over_z'] = np.where(zd > 0, emass(d3) / np.where(zd > 0, zd, 1.0), 0.0)
+    O['jd_n_d3_pt1'] = (d3 & (pt > 1.0)).sum(1).astype(float)
+    # ---- mass resolution
+    O['mres_mass_e'] = emass(real)
+    for k in (2, 3):
+        for r, m in enumerate(KG[k]): O[f'mres_sj{k}_mass{r + 1}_e'] = emass(m)
+    def sd(zc, beta, prongs=False):
+        cur = root.copy(); done = np.zeros(J, bool); res = np.zeros((J, 3)); pm_ = np.zeros((J, 2))
+        for _ in range(H):
+            c1, c2 = kids[rows, cur, 0], kids[rows, cur, 1]; done |= c1 < 0
+            if done.all(): break
+            v1, v2 = V[rows, np.maximum(c1, 0)], V[rows, np.maximum(c2, 0)]; p1, p2 = np.hypot(v1[:, 0], v1[:, 1]), np.hypot(v2[:, 0], v2[:, 1])
+            zz = np.minimum(p1, p2) / np.maximum(p1 + p2, 1e-300); d = np.sqrt(_dR2(v1, v2)); stop = ~done & (zz > zc * (d / 0.8) ** beta)
+            res = np.where(stop[:, None], np.stack([_m4(*V[rows, cur].T), zz, d], 1), res)
+            m1, m2 = _m4(*v1.T), _m4(*v2.T); pm_ = np.where(stop[:, None], np.stack([np.where(p1 >= p2, m1, m2), np.where(p1 >= p2, m2, m1)], 1), pm_)
+            done |= stop; cur = np.where(~done, np.where(p1 >= p2, c1, c2), cur)
+        return pm_ if prongs else res
+    for t, beta, zc in (('b0z005', 0, 0.05), ('b0z02', 0, 0.2), ('b1z01', 1, 0.1), ('b2z01', 2, 0.1)):
+        res = sd(zc, beta); O[f'mres_sd_mass_{t}'], O[f'mres_sd_zg_{t}'], O[f'mres_sd_rg_{t}'] = res[:, 0], res[:, 1], res[:, 2]
+    pm_ = sd(0.1, 0, True); O['mres_sd_prong_mass1'], O['mres_sd_prong_mass2'] = pm_[:, 0], pm_[:, 1]
+    rv = V[rows, root]; dcut = _m4(*rv.T) / np.maximum(np.hypot(rv[:, 0], rv[:, 1]), 1e-300); PV = V.copy()
+    for nd in range(H, H2):
+        c1, c2 = kids[:, nd, 0], kids[:, nd, 1]; ok = c1 >= 0
+        if not ok.any(): break
+        va, vb = PV[rows, np.maximum(c1, 0)], PV[rows, np.maximum(c2, 0)]; pa, pb = np.hypot(va[:, 0], va[:, 1]), np.hypot(vb[:, 0], vb[:, 1]); v = va + vb
+        zz = np.minimum(pa, pb) / np.maximum(np.hypot(v[:, 0], v[:, 1]), 1e-300); pr = (zz < 0.1) & (np.sqrt(_dR2(va, vb)) > dcut)
+        PV[ok, nd] = np.where(pr[:, None], np.where((pa >= pb)[:, None], va, vb), v)[ok]
+    O['mres_pruned_mass'] = _m4(*PV[rows, root].T)
+    lab = _genkt(pt, eta, phi, real, 1, 0.2)[0]; ok = lab >= 0; r_, c_ = np.nonzero(ok); spt = np.zeros((J, n)); np.add.at(spt, (r_, lab[ok]), pt[r_, c_])
+    keep = ok & (np.take_along_axis(spt, np.maximum(lab, 0), 1) > 0.03 * tot[:, None]); O['mres_trimmed_mass'] = emass(keep)
+    # ---- charge per subjet, prong counting
+    for k in (2, 3):
+        Qk = {}
+        for r, m in enumerate(KG[k]):
+            w = np.maximum((pt * m).sum(1), 1e-9)
+            for ka, t in ((0.3, '03'), (0.5, '05'), (1.0, '1')): Qk[r, t] = (q * pt ** ka * m).sum(1) / w ** ka; O[f'sjq_{k}_{r + 1}_k{t}'] = Qk[r, t]
+            O[f'sjq_{k}_{r + 1}_nch'] = (m & (q != 0)).sum(1).astype(float)
+        for t in ('03', '05', '1'): O[f'sjq_{k}_sumabs_k{t}'] = np.abs(Qk[0, t] + Qk[1, t]); O[f'sjq_{k}_prod_k{t}'] = Qk[0, t] * Qk[1, t]
+    c1, c2 = kids[..., 0], kids[..., 1]; okn = c1 >= 0; R_ = rows[:, None]
+    va, vb = V[R_, np.maximum(c1, 0)], V[R_, np.maximum(c2, 0)]; ktn = np.where(okn, np.minimum(npt[R_, np.maximum(c1, 0)], npt[R_, np.maximum(c2, 0)]) * np.sqrt(_dR2(va, vb)), 0.0)
+    for c in (2, 5, 10, 20):
+        spl = okn & (ktn > c); reach = np.zeros((J, H2), bool); reach[rows, root] = True
+        for nd in range(H2 - 1, H - 1, -1):
+            g = np.flatnonzero(reach[:, nd] & spl[:, nd])
+            if len(g): reach[g, c1[g, nd]] = True; reach[g, c2[g, nd]] = True
+        O[f'nca_kt_above_{c}'] = (reach & ~spl).sum(1).astype(float)
+    mps = -np.sort(-mp4, 1); mj = np.maximum(_m4(*(P4 * real[..., None]).sum(1).T), 1e-9)
+    O['nca_sj4_pair_mass_2nd'], O['nca_sj4_pairmax_over_mass'], O['nca_sj4_pair2nd_over_mass'] = mps[:, 1], mps[:, 0] / mj, mps[:, 1] / mj
+    # ---- the hardest lepton with its nearest subjet
+    il = lep.argmax(1); has = lep.any(1); cols = np.arange(n)[None]
+    for k in (2, 3):
+        D = ax[k][1]; near = D.argmin(-1); jl = D[rows, il].argmin(-1); g = real & (near == jl[:, None]) & (cols != il[:, None]); tr = g & t0
+        Q = f'lepsj_{k}_'
+        O[Q + 'mass'] = np.where(has, emass(g | ((cols == il[:, None]) & has[:, None])), 0.0); O[Q + 'dr'] = np.where(has, D[rows, il, jl], 0.0)
+        O[Q + 'n_d3'] = np.where(has, (tr & (np.abs(c0) > 3)).sum(1), 0).astype(float); O[Q + 'maxsd0'] = np.where(has, np.where(tr, np.abs(c0), 0.0).max(1), 0.0)
     return O
 
 

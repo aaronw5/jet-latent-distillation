@@ -293,6 +293,115 @@ def extras(add, net):
     add('mass_neutral', 'mass of the neutral particles', "subset_mass('neutral')", 'invariant mass of all neutral particles [GeV]')
     add('mass_2photon', 'mass of the 2 hardest photons', "subset_mass('photon2')", 'invariant mass of the 2 hardest photons [GeV] (0 if fewer)')
     add('mass_2charged', 'mass of the 2 hardest charged', "subset_mass('charged2')", 'invariant mass of the 2 hardest charged particles [GeV]')
+    plus(add)
+
+
+# ---- more quantities of 'full' (pq(id) in python_code.PLUS, compute._plus): subjets and prongs with flavour, secondary-vertex
+# proxies, sums over tracks and pairs, mass resolution, charge per subjet, prong counting, the lepton with its subjet.
+# ParT's own inputs only: significances d0 / min(σ, 1) (ParT clips σ to [0, 1]; σ = 0: no significance); masses marked "E"
+# use the particles' energies (η + η of the jet), the others massless four-vectors as the rest of the library.
+FLAV = [('sd0_1', 'largest d0/σ', 'the largest signed d0/σ among its tracks (0 if none)'), ('sd0_2', '2nd largest d0/σ', 'the 2nd largest signed d0/σ among its tracks (0 if fewer)'),
+        ('sd0_3', '3rd largest d0/σ', 'the 3rd largest signed d0/σ among its tracks (0 if fewer)'), ('n_disp3', 'n(d0/σ > 3)', 'number of its tracks with d0/σ > 3'),
+        ('mass_disp3', 'm(d0/σ > 3)', 'mass (E) of its tracks with d0/σ > 3 [GeV]'), ('z_disp3', 'z(d0/σ > 3)', 'pT share (of the jet) of its tracks with d0/σ > 3'),
+        ('jp', 'jet probability', 'Σ −ln P(|d0/σ|) of its tracks with d0/σ > 0, P = erfc(|d0/σ|/√2)'), ('n_lep', 'n(leptons)', 'number of its electrons and muons'),
+        ('charge', 'charge (κ=0.5)', 'Σ q √pT / √(Σ pT) of its particles')]
+ORD = {1: 'hardest', 2: '2nd', 3: '3rd', 4: '4th'}
+
+
+def plus(add):
+    def grp(pre, what, keep, mins, dr=True):
+        for r in range(1, keep + 1):
+            add(f'{pre}_{r}_z', f'z ({what} {r})', f"pq('{pre}_{r}_z')", f'pT share of the {ORD[r]} {what} (0 if none)')
+            add(f'{pre}_{r}_mass', f'm ({what} {r})', f"pq('{pre}_{r}_mass')", f'mass (E) of the {ORD[r]} {what} [GeV] (0 if none)')
+            for k, lab, d in FLAV: add(f'{pre}_{r}_{k}', f'{lab} ({what} {r})', f"pq('{pre}_{r}_{k}')", f'{ORD[r]} {what}: {d}')
+        if dr:
+            for a in range(1, keep + 1):
+                for b in range(a + 1, keep + 1): add(f'{pre}_dr{a}{b}', f'ΔR ({what} {a}, {b})', f"pq('{pre}_dr{a}{b}')", f'distance between the pT-weighted centres of the {ORD[a]} and {ORD[b]} {what} (0 if missing)')
+        if mins:
+            for k, lab, d in FLAV[:2] + FLAV[3:5] + FLAV[6:7]: add(f'{pre}_min12_{k}', f'min {lab} ({what} 1, 2)', f"pq('{pre}_min12_{k}')", f'the smaller of the two hardest {what}s: {d}')
+    # subjets: exclusive kT (2), anti-kT R = 0.2 (pT > 10 GeV, the 3 hardest)
+    grp('kt2', 'kT subjet', 2, True)
+    for m in (1, 2, 3): add(f'ktd_ln_d{m}{m + 1}', f'ln d{m}{m + 1}/pT²', f"pq('ktd_ln_d{m}{m + 1}')", f'ln of the exclusive-kT merging scale from {m + 1} to {m} subjets, min(pT²)ΔR², over (Σ pT)² (0 if fewer particles)')
+    add('ak02_n', 'n(anti-kT 0.2 subjets)', "pq('ak02_n')", 'number of anti-kT R = 0.2 subjets with pT > 10 GeV')
+    grp('ak02', 'anti-kT 0.2 subjet', 3, True)
+    # prongs: the C/A tree reversed (ΔR ≤ 0.1: a prong; a branch below 10 % of the jet pT: dropped; else both declustered)
+    add('dc_n', 'n(prongs)', "pq('dc_n')", 'number of prongs: reverse the C/A tree; ΔR ≤ 0.1 is a prong, a branch with < 10 % of the jet pT is dropped, else both branches are declustered')
+    grp('dc', 'prong', 4, False, dr=False)
+    add('dc_ntag', 'n(prongs with 2nd d0/σ > 3)', "pq('dc_ntag')", 'number of the 4 hardest prongs whose 2nd largest d0/σ is above 3')
+    add('dc_tag_max', 'max prong 2nd d0/σ', "pq('dc_tag_max')", 'largest 2nd-largest d0/σ among the 4 hardest prongs')
+    add('dc_tag_2nd', '2nd prong 2nd d0/σ', "pq('dc_tag_2nd')", 'second largest 2nd-largest d0/σ among the 4 hardest prongs (double tag)')
+    add('dc_mass_disp_max', 'max prong m(d0/σ > 3)', "pq('dc_mass_disp_max')", 'largest displaced-track mass among the 4 hardest prongs [GeV]')
+    add('dc_mass_disp_2nd', '2nd prong m(d0/σ > 3)', "pq('dc_mass_disp_2nd')", 'second largest displaced-track mass among the 4 hardest prongs [GeV]')
+    add('dc_mass_disp_sum', 'Σ prong m(d0/σ > 3)', "pq('dc_mass_disp_sum')", 'sum of the displaced-track masses of the 4 hardest prongs [GeV]')
+    add('dc_pair_mass_min', 'min prong-pair mass', "pq('dc_pair_mass_min')", 'smallest mass (E) of two of the 4 hardest prongs [GeV] (0 if fewer than 2)')
+    add('dc_pair_mass_max', 'max prong-pair mass', "pq('dc_pair_mass_max')", 'largest mass (E) of two of the 4 hardest prongs [GeV] (0 if fewer than 2)')
+    for r in (1, 2):
+        for k, d in (('z', 'z (of the jet pT)'), ('dr', 'ΔR'), ('kt', 'kT = min(pT)·ΔR [GeV]'), ('mass', 'mass of the splitting node [GeV]')):
+            add(f'dc_split{r}_{k}', f'{k} of hard splitting {r}', f"pq('dc_split{r}_{k}')", f'{d} of the {ORD[r]} hard splitting of the prong finding (ranked by pT; 0 if none)')
+    # secondary-vertex proxies: anti-kT R = 0.1 on the tracks with d0/σ > 3
+    add('sv_n', 'n(displaced clusters)', "pq('sv_n')", 'number of anti-kT R = 0.1 clusters of the tracks with d0/σ > 3')
+    for r in (1, 2):
+        for k, d in (('n', 'number of tracks'), ('mass', 'mass (E) [GeV]'), ('z', 'pT share of the jet'), ('dr', 'ΔR of its centre from the jet axis'), ('sd0_sum', 'Σ d0/σ of its tracks')):
+            add(f'sv_{r}_{k}', f'{k} (displaced cluster {r})', f"pq('sv_{r}_{k}')", f'{ORD[r]} displaced-track cluster: {d} (0 if none)')
+    # sums over tracks
+    for b, (lo, hi) in enumerate(((None, -3), (-3, -1), (-1, 1), (1, 3), (3, 10), (10, None))):
+        rng = f'd0/σ ≤ {hi}' if lo is None else f'd0/σ > {lo}' if hi is None else f'{lo} < d0/σ ≤ {hi}'
+        add(f'sdb_{b}_z', f'z({rng})', f"pq('sdb_{b}_z')", f'pT share of the tracks with {rng}')
+        add(f'sdb_{b}_n', f'n({rng})', f"pq('sdb_{b}_n')", f'number of tracks with {rng}')
+    add('sdb_jp_all', 'jet probability', "pq('sdb_jp_all')", 'Σ −ln P(|d0/σ|) over the tracks with d0/σ > 0, P = erfc(|d0/σ|/√2)')
+    add('sdb_jp_top3', 'jet probability (3 tracks)', "pq('sdb_jp_top3')", 'the 3 largest −ln P(|d0/σ|) summed')
+    # sums over pairs of the 40 hardest particles
+    for b, (lo, hi) in enumerate(((-9, -3), (-3, -2), (-2, -1), (-1, 9))): add(f'pz_lnd{b}', f'Σ zᵢzⱼ ({lo} < ln Δ ≤ {hi})', f"pq('pz_lnd{b}')", f'Σ zᵢzⱼ over the pairs of the 40 hardest particles with {lo} < ln ΔRᵢⱼ ≤ {hi}')
+    for b, (lo, hi) in enumerate(((-9, 0), (0, 1), (1, 2), (2, 3), (3, 9))): add(f'pz_lnkt{b}', f'Σ zᵢzⱼ ({lo} < ln kT ≤ {hi})', f"pq('pz_lnkt{b}')", f'Σ zᵢzⱼ over the pairs of the 40 hardest particles with {lo} < ln kT ≤ {hi}')
+    # flavour per k-means subjet (the axes of τ_N; each track to its nearest axis)
+    for k in (2, 3, 4):
+        for r in range(1, k + 1):
+            w = f'subjet {r} of {k}'
+            for q, lab, d in (('n_d3', 'n(|d0/σ| > 3)', 'number of tracks with |d0/σ| > 3'), ('n_d5', 'n(|d0/σ| > 5)', 'number of tracks with |d0/σ| > 5'),
+                              ('mass_d3', 'm(|d0/σ| > 3)', 'mass (E) of the tracks with |d0/σ| > 3 [GeV]'), ('z_d3', 'z(|d0/σ| > 3)', 'pT share of the tracks with |d0/σ| > 3'),
+                              ('maxsd0', 'max |d0/σ|', 'largest |d0/σ| (0 if no track)'), ('max3d', 'max 3D sig.', 'largest 3D significance (0 if no track)')):
+                add(f'sjf_{k}_{r}_{q}', f'{lab} ({w})', f"pq('sjf_{k}_{r}_{q}')", f'{w} (k-means axes, by pT): {d}')
+        add(f'sjf_{k}_n2disp', f'n(subjets of {k} with 2 displaced)', f"pq('sjf_{k}_n2disp')", f'number of the {k} subjets with at least 2 tracks with |d0/σ| > 3')
+    # jet-level vertex-like quantities
+    for r in (4, 5, 6):
+        add(f'jd_sd0_{r}', f'd0/σ (track {r}, σ clipped)', f"pq('jd_sd0_{r}')", f'the {r}th largest |d0/σ| (signed; σ clipped to 1) among the tracks (0 if fewer)')
+        add(f'jd_3d_{r}', f'3D sig. (track {r}, σ clipped)', f"pq('jd_3d_{r}')", f'the {r}th largest 3D significance (σ clipped to 1) (0 if fewer)')
+    add('jd_sum_abs_sd0_top3', 'Σ |d0/σ| (3 largest)', "pq('jd_sum_abs_sd0_top3')", 'sum of the 3 largest |d0/σ|')
+    add('jd_sum_abs_sd0_top5', 'Σ |d0/σ| (5 largest)', "pq('jd_sum_abs_sd0_top5')", 'sum of the 5 largest |d0/σ|')
+    add('jd_mass_d3_sigw', 'm(|d0/σ| > 3, weighted)', "pq('jd_mass_d3_sigw')", 'mass (E) of the tracks with |d0/σ| > 3, each weighted by |d0/σ| / the largest [GeV]')
+    add('jd_mass_d3_over_z', 'm(|d0/σ| > 3) / z', "pq('jd_mass_d3_over_z')", 'mass (E) of the tracks with |d0/σ| > 3 over their pT share [GeV] (0 if none)')
+    add('jd_n_d3_pt1', 'n(|d0/σ| > 3, pT > 1)', "pq('jd_n_d3_pt1')", 'number of tracks with |d0/σ| > 3 and pT > 1 GeV')
+    # mass resolution
+    add('mres_mass_e', 'm (E)', "pq('mres_mass_e')", 'jet mass from the particles’ energies [GeV]')
+    for k in (2, 3):
+        for r in range(1, k + 1): add(f'mres_sj{k}_mass{r}_e', f'm (E, subjet {r} of {k})', f"pq('mres_sj{k}_mass{r}_e')", f'mass (E) of subjet {r} of {k} (k-means axes, by pT) [GeV]')
+    for t, b, zc in (('b0z005', 0, 0.05), ('b0z02', 0, 0.2), ('b1z01', 1, 0.1), ('b2z01', 2, 0.1)):
+        add(f'mres_sd_mass_{t}', f'soft-drop mass (β={b}, z={zc})', f"pq('mres_sd_mass_{t}')", f'soft-drop mass, C/A, β = {b}, z_cut = {zc} [GeV]')
+        add(f'mres_sd_zg_{t}', f'z_g (β={b}, z={zc})', f"pq('mres_sd_zg_{t}')", f'soft-drop z_g, β = {b}, z_cut = {zc}')
+        add(f'mres_sd_rg_{t}', f'R_g (β={b}, z={zc})', f"pq('mres_sd_rg_{t}')", f'soft-drop R_g, β = {b}, z_cut = {zc}')
+    add('mres_sd_prong_mass1', 'm (soft-drop prong 1)', "pq('mres_sd_prong_mass1')", 'mass of the harder branch at the soft-drop splitting (β = 0, z_cut = 0.1) [GeV]')
+    add('mres_sd_prong_mass2', 'm (soft-drop prong 2)', "pq('mres_sd_prong_mass2')", 'mass of the softer branch at the soft-drop splitting (β = 0, z_cut = 0.1) [GeV]')
+    add('mres_pruned_mass', 'pruned mass', "pq('mres_pruned_mass')", 'pruned mass: C/A tree, a merge with z < 0.1 and ΔR > m/pT of the jet keeps only its harder branch [GeV]')
+    add('mres_trimmed_mass', 'trimmed mass', "pq('mres_trimmed_mass')", 'trimmed mass (E): kT subjets R = 0.2 with more than 3 % of the jet pT [GeV]')
+    # charge per k-means subjet; prong counting
+    for k in (2, 3):
+        for r in range(1, k + 1):
+            for t, ka in (('03', '0.3'), ('05', '0.5'), ('1', '1')):
+                add(f'sjq_{k}_{r}_k{t}', f'Q_κ={ka} (subjet {r} of {k})', f"pq('sjq_{k}_{r}_k{t}')", f'Σ q pT^κ / (Σ pT)^κ of subjet {r} of {k}, κ = {ka}')
+            add(f'sjq_{k}_{r}_nch', f'n(charged, subjet {r} of {k})', f"pq('sjq_{k}_{r}_nch')", f'number of charged particles in subjet {r} of {k}')
+        for t, ka in (('03', '0.3'), ('05', '0.5'), ('1', '1')):
+            add(f'sjq_{k}_sumabs_k{t}', f'|Q₁ + Q₂| (κ={ka}, {k} subjets)', f"pq('sjq_{k}_sumabs_k{t}')", f'|sum| of the charges (κ = {ka}) of the two hardest of {k} subjets')
+            add(f'sjq_{k}_prod_k{t}', f'Q₁·Q₂ (κ={ka}, {k} subjets)', f"pq('sjq_{k}_prod_k{t}')", f'product of the charges (κ = {ka}) of the two hardest of {k} subjets')
+    for c in (2, 5, 10, 20): add(f'nca_kt_above_{c}', f'n(C/A subjets, kT > {c} GeV)', f"pq('nca_kt_above_{c}')", f'number of C/A subjets when every branching with kT = min(pT)·ΔR > {c} GeV is split')
+    add('nca_sj4_pair_mass_2nd', '2nd pair mass among 4 subjets', "pq('nca_sj4_pair_mass_2nd')", 'second largest mass of two of the 4 subjets [GeV]')
+    add('nca_sj4_pairmax_over_mass', 'max pair mass / m (4 subjets)', "pq('nca_sj4_pairmax_over_mass')", 'largest mass of two of the 4 subjets over the jet mass')
+    add('nca_sj4_pair2nd_over_mass', '2nd pair mass / m (4 subjets)', "pq('nca_sj4_pair2nd_over_mass')", 'second largest mass of two of the 4 subjets over the jet mass')
+    # the hardest lepton with its nearest subjet
+    for k in (2, 3):
+        for q, lab, d in (('mass', 'm(lepton + subjet)', 'mass (E) of the hardest lepton with its nearest subjet [GeV]'), ('dr', 'ΔR(lepton, subjet)', 'distance of the hardest lepton from its nearest subjet axis'),
+                          ('n_d3', 'n(|d0/σ| > 3) (lepton subjet)', 'number of tracks with |d0/σ| > 3 in the lepton’s nearest subjet (without the lepton)'),
+                          ('maxsd0', 'max |d0/σ| (lepton subjet)', 'largest |d0/σ| in the lepton’s nearest subjet (without the lepton)')):
+            add(f'lepsj_{k}_{q}', f'{lab} ({k} subjets)', f"pq('lepsj_{k}_{q}')", f'{d}; {k} subjets (0 if no lepton)')
 
 
 def mass_ids(n):

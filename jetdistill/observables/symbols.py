@@ -43,8 +43,14 @@ PPSYM = dict(lnpt='ln pT', lne='ln E', lnptrel='ln(pT/pT_jet)', lnerel='ln(E/E_j
              iselectron='is e', ismuon='is μ', td0='tanh d0', d0err='σ(d0)', tdz='tanh dz', dzerr='σ(dz)')
 
 
+PLUS_GROUPS = ('kt2', 'ktd', 'ak02', 'dc', 'sv', 'sdb', 'pz', 'sjf', 'jd', 'mres', 'sjq', 'nca', 'lepsj')
+
+
 def part_symbol(q):
     if q in PART_FIXED: return PART_FIXED[q]
+    if q.split('_')[0] in PLUS_GROUPS:                 # the quantities of library.plus: their labels
+        from .library import library
+        return library('full')[q].label
     m = re.fullmatch(r'(lnpt|lne|lnptrel|lnerel|charge|ischhad|isnhad|isphoton|iselectron|ismuon|td0|d0err|tdz|dzerr)_(\d+)', q)
     if m: return f'{PPSYM[m.group(1)]}{m.group(2).translate(SUB)}'
     m = re.fullmatch(r'(lndelta|lnkt|lnz|lnm2)_(\d+)_(\d+)', q)

@@ -87,6 +87,8 @@ if TAGGER == 'part':      # ParT: the best JEDI recipe (tuned on the network's p
                         masses_as_thresholds=False, no_mass=True),
         'nomass_strict': Setup(label='No mass quantities or exact equivalents', page_desc='as “No mass quantities”, and also no quantity equal to (m/ΣpT)² in disguise (|correlation| > 0.98)',
                                masses_as_thresholds=False, no_mass=True, strict=True),
+        'all_plus': Setup(label='All quantities + prongs, subjet flavour, vertices, mass resolution', page_desc='as “All quantities”, plus 305 more (library.plus): kT and anti-kT subjets and C/A prongs with their flavour, displaced-track clusters, significance and pair sums, mass resolution (masses from the energies, soft drop variants, pruning, trimming), charge per subjet, prong counting, the lepton with its subjet',
+                          masses_as_thresholds=False),
         'all_truth': Setup(label='All quantities, tuned on the true labels', page_desc='as “All quantities” (the same step 1); steps 2–3 are tuned toward the true class of each jet instead of ParT’s probabilities (still with λ·R toward ParT’s neurons), pruning and step 4 keep validation accuracy',
                            masses_as_thresholds=False, step1_from='all', families=dict(labels=((100,), 'labels'))),
     }

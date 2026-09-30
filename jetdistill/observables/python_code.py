@@ -378,8 +378,363 @@ FULL = '''
             return set_mass(ph[:2]) if len(ph) >= 2 else 0.0
         return set_mass(ch[:2])
 '''
+PLUS = '''
+    # ---- more quantities of the 'full' network (pq(id)); ParT's view of the track uncertainties: clipped to [0, 1];
+    # tracks with sigma = 0 have no significance; four-vectors with the particles' energies (eta + the jet's eta)
+    SQ2 = math.sqrt(2.0)
+    c0 = {i: d0[i] / min(d0err[i], 1.0) for i in tk['d0']}
+    c3 = {i: math.sqrt(c0[i] ** 2 + (dz[i] / min(dzerr[i], 1.0)) ** 2) for i in tk['3d']}
+    lnp = {i: -math.log(max(math.erfc(abs(c0[i]) / SQ2), 1e-300)) for i in tk['d0'] if c0[i] > 0}
+    p4e = {i: (pt[i] * math.cos(phi[i]), pt[i] * math.sin(phi[i]), pt[i] * math.sinh(eta[i] + jet_eta), energy[i]) for i in real}
+
+    def emass(ids, w=None):
+        v = [0.0, 0.0, 0.0, 0.0]
+        for i in ids:
+            f = 1.0 if w is None else w[i]
+            for c in range(4):
+                v[c] += f * p4e[i][c]
+        return math.sqrt(max(v[3] * v[3] - v[0] * v[0] - v[1] * v[1] - v[2] * v[2], 0.0))
+
+    def ranked(groups):
+        return sorted(groups, key=lambda g: -sum(pt[i] for i in g))
+
+    def cen(g):
+        w = max(sum(pt[i] for i in g), 1e-9)
+        return (sum(pt[i] * eta[i] for i in g) / w, sum(pt[i] * phi[i] for i in g) / w)
+
+    def flav(g, pre, out):
+        tr = [i for i in g if i in c0]
+        dsp = [i for i in tr if c0[i] > 3]
+        s = sorted((c0[i] for i in tr), reverse=True)
+        for k in (1, 2, 3):
+            out[pre + 'sd0_' + str(k)] = s[k - 1] if len(s) >= k else 0.0
+        out[pre + 'n_disp3'] = float(len(dsp))
+        out[pre + 'mass_disp3'] = emass(dsp)
+        out[pre + 'z_disp3'] = sum(z[i] for i in dsp)
+        out[pre + 'jp'] = sum(lnp.get(i, 0.0) for i in tr)
+        out[pre + 'n_lep'] = float(sum(1 for i in g if ptype[i] in (4, 5)))
+        out[pre + 'charge'] = sum(charge[i] * math.sqrt(pt[i]) for i in g) / math.sqrt(max(sum(pt[i] for i in g), 1e-9))
+
+    def subfeats(pre, groups, keep, out):
+        gs = ranked(groups)[:keep]
+        gs += [[]] * (keep - len(gs))
+        cs = []
+        for r, g in enumerate(gs):
+            q = pre + '_' + str(r + 1) + '_'
+            out[q + 'z'] = sum(z[i] for i in g)
+            out[q + 'mass'] = emass(g)
+            flav(g, q, out)
+            cs.append(cen(g) if g else None)
+        for a in range(keep):
+            for b in range(a + 1, keep):
+                out[pre + '_dr' + str(a + 1) + str(b + 1)] = math.hypot(cs[a][0] - cs[b][0], cs[a][1] - cs[b][1]) if cs[a] and cs[b] else 0.0
+        for v in ('sd0_1', 'sd0_2', 'n_disp3', 'mass_disp3', 'jp'):
+            out[pre + '_min12_' + v] = min(out[pre + '_1_' + v], out[pre + '_2_' + v])
+
+    def genkt(ids, p, R, nstop=0, snap=0):
+        # generalized kT (p = 1: kT, p = -1: anti-kT), E-scheme, rapidity-azimuth distances, massless four-vectors;
+        # nstop > 0: exclusive (pairwise merges only) down to nstop pseudojets, snap: the partition when snap remain;
+        # nstop = 0: inclusive (a pseudojet whose beam distance is the smallest becomes a jet; ties merge)
+        key = ('gk', tuple(ids), p, R, nstop, snap)
+        if key in _memo:
+            return _memo[key]
+        R2 = R * R
+        node = {i: (pt[i] * math.cos(phi[i]), pt[i] * math.sin(phi[i]), pt[i] * math.sinh(eta[i]), pt[i] * math.cosh(eta[i])) for i in ids}
+
+        def yk(v):
+            t = math.hypot(v[0], v[1])
+            return (0.5 * math.log(max(v[3] + v[2], 1e-300) / max(v[3] - v[2], 1e-300)), math.atan2(v[1], v[0]), t * t if p == 1 else 1.0 / max(t * t, 1e-300))
+        live, mem, yp, jets, dms, new = list(ids), {i: [i] for i in ids}, {i: yk(node[i]) for i in ids}, [], {}, 1000
+        part = [[i] for i in ids]
+        while live and len(live) > nstop:
+            if snap and len(live) == snap:
+                part = [mem[x] for x in live]
+            best = None
+            for a in range(len(live)):
+                ya, pa, ka = yp[live[a]]
+                for b in range(a + 1, len(live)):
+                    yb, pb, kb = yp[live[b]]
+                    d = min(ka, kb) * ((ya - yb) ** 2 + ((pa - pb + math.pi) % (2 * math.pi) - math.pi) ** 2) / R2
+                    if best is None or d < best[0]:
+                        best = (d, a, b)
+            if not nstop:
+                bb = None
+                for a in range(len(live)):
+                    if bb is None or yp[live[a]][2] < bb[0]:
+                        bb = (yp[live[a]][2], a)
+                if best is None or bb[0] < best[0]:
+                    jets.append(mem[live[bb[1]]])
+                    live.pop(bb[1])
+                    continue
+            d, a, b = best
+            if nstop:
+                dms[len(live) - 1] = d
+            v = tuple(x + y for x, y in zip(node[live[a]], node[live[b]]))
+            node[new], yp[new], mem[new] = v, yk(v), mem[live[a]] + mem[live[b]]
+            live[a] = new
+            live.pop(b)
+            new += 1
+        _memo[key] = (part if snap else jets if not nstop else [mem[x] for x in live], dms)
+        return _memo[key]
+
+    def kgroups(k):
+        axes, dist = kaxes(k)
+        near = {i: min(range(k), key=lambda a: dist[i][a]) for i in real}
+        S = [0.0] * k
+        for i in real:
+            S[near[i]] += z[i]
+        order = sorted(range(k), key=lambda j: -S[j])
+        return [[i for i in real if near[i] == j] for j in order]
+
+    def g_kt2():
+        out = {}
+        subfeats('kt2', genkt(real, 1, 1.0, 1, 2)[0], 2, out)
+        return out
+
+    def g_ktd():
+        dms = genkt(real, 1, 1.0, 1, 2)[1]
+        return {'ktd_ln_d' + str(m) + str(m + 1): math.log(max(dms[m], 1e-12) / (tot * tot)) if m in dms else 0.0 for m in (1, 2, 3)}
+
+    def g_ak02():
+        jets = [g for g in genkt(real, -1, 0.2)[0] if sum(pt[i] for i in g) > 10.0]
+        out = {'ak02_n': float(len(jets))}
+        subfeats('ak02', jets, 3, out)
+        return out
+
+    def g_sv():
+        jets = genkt([i for i in tk['d0'] if c0[i] > 3], -1, 0.1)[0]
+        out = {'sv_n': float(len(jets))}
+        gs = ranked(jets)[:2]
+        gs += [[]] * (2 - len(gs))
+        for r, g in enumerate(gs):
+            q = 'sv_' + str(r + 1) + '_'
+            out[q + 'n'] = float(len(g))
+            out[q + 'mass'] = emass(g)
+            out[q + 'z'] = sum(z[i] for i in g)
+            out[q + 'dr'] = math.hypot(*cen(g)) if g else 0.0
+            out[q + 'sd0_sum'] = sum(c0[i] for i in g)
+        return out
+
+    def g_sdb():
+        E, out = (-math.inf, -3.0, -1.0, 1.0, 3.0, 10.0, math.inf), {}
+        for b in range(6):
+            ids = [i for i in tk['d0'] if E[b] < c0[i] <= E[b + 1]]
+            out['sdb_' + str(b) + '_z'] = sum(z[i] for i in ids)
+            out['sdb_' + str(b) + '_n'] = float(len(ids))
+        out['sdb_jp_all'] = sum(lnp.values())
+        out['sdb_jp_top3'] = sum(sorted(lnp.values(), reverse=True)[:3])
+        return out
+
+    def g_pz():
+        LD, LK = (-9.0, -3.0, -2.0, -1.0, 9.0), (-9.0, 0.0, 1.0, 2.0, 3.0, 9.0)
+        out = {'pz_lnd' + str(b): 0.0 for b in range(4)}
+        out.update({'pz_lnkt' + str(b): 0.0 for b in range(5)})
+        top = [i for i in real if i < 40]
+        for a in range(len(top)):
+            for b in range(a + 1, len(top)):
+                i, j = top[a], top[b]
+                d = math.hypot(eta[i] - eta[j], phi[i] - phi[j])
+                w = z[i] * z[j]
+                ld, lk = math.log(max(d, 1e-6)), math.log(max(min(pt[i], pt[j]) * d, 1e-6))
+                for k in range(4):
+                    if LD[k] < ld <= LD[k + 1]:
+                        out['pz_lnd' + str(k)] += w
+                for k in range(5):
+                    if LK[k] < lk <= LK[k + 1]:
+                        out['pz_lnkt' + str(k)] += w
+        return out
+
+    def g_dc():
+        # prongs: reverse the C/A tree; a node whose branches are closer than 0.1 is a prong; else the branch with less
+        # than 10 % of the jet's pT is dropped, or (both above) both branches are declustered further
+        node, kids, root = ca_tree()
+        ptn = lambda k: math.hypot(node[k][0], node[k][1])
+        ptj = ptn(root)
+        prongs, splits, stack = [], [], [root]
+        while stack:
+            k = stack.pop()
+            while True:
+                if k not in kids:
+                    prongs.append(k)
+                    break
+                a, b = kids[k]
+                pa, pb = ptn(a), ptn(b)
+                d = math.sqrt(ca_dR2(node[a], node[b]))
+                if d <= 0.1:
+                    prongs.append(k)
+                    break
+                hard, soft = (a, b) if pa >= pb else (b, a)
+                zz = min(pa, pb) / max(ptj, 1e-12)
+                if zz >= 0.1:
+                    splits.append((ptn(k), zz, d, min(pa, pb) * d, m4(node[k])))
+                    stack.append(soft)
+                k = hard
+
+        def leaves(k):
+            return leaves(kids[k][0]) + leaves(kids[k][1]) if k in kids else [k]
+        groups = [leaves(k) for k in prongs]
+        out = {'dc_n': float(len(groups))}
+        gs = ranked(groups)[:4]
+        gs += [[]] * (4 - len(gs))
+        for r, g in enumerate(gs):
+            q = 'dc_' + str(r + 1) + '_'
+            out[q + 'z'] = sum(z[i] for i in g)
+            out[q + 'mass'] = emass(g)
+            flav(g, q, out)
+        tags = [out['dc_' + str(r + 1) + '_sd0_2'] for r in range(4)]
+        st = sorted(tags, reverse=True)
+        out['dc_ntag'], out['dc_tag_max'], out['dc_tag_2nd'] = float(sum(1 for t in tags if t > 3)), st[0], st[1]
+        md = [out['dc_' + str(r + 1) + '_mass_disp3'] for r in range(4)]
+        sm = sorted(md, reverse=True)
+        out['dc_mass_disp_max'], out['dc_mass_disp_2nd'], out['dc_mass_disp_sum'] = sm[0], sm[1], sum(md)
+        pm = [emass(gs[a] + gs[b]) for a in range(4) for b in range(a + 1, 4) if gs[a] and gs[b]]
+        out['dc_pair_mass_min'], out['dc_pair_mass_max'] = (min(pm), max(pm)) if pm else (0.0, 0.0)
+        sp = sorted(splits, key=lambda t: -t[0])
+        for r in (0, 1):
+            t = sp[r] if len(sp) > r else (0.0, 0.0, 0.0, 0.0, 0.0)
+            for c, nm in enumerate(('z', 'dr', 'kt', 'mass')):
+                out['dc_split' + str(r + 1) + '_' + nm] = t[c + 1]
+        return out
+
+    def g_sjf():
+        out = {}
+        for k in (2, 3, 4):
+            n2 = 0
+            for r, g in enumerate(kgroups(k)):
+                q = 'sjf_' + str(k) + '_' + str(r + 1) + '_'
+                tr = [i for i in g if i in c0]
+                d3 = [i for i in tr if abs(c0[i]) > 3]
+                out[q + 'n_d3'] = float(len(d3))
+                out[q + 'n_d5'] = float(sum(1 for i in tr if abs(c0[i]) > 5))
+                out[q + 'mass_d3'] = emass(d3)
+                out[q + 'z_d3'] = sum(z[i] for i in d3)
+                out[q + 'maxsd0'] = max([abs(c0[i]) for i in tr] or [0.0])
+                out[q + 'max3d'] = max([c3[i] for i in g if i in c3] or [0.0])
+                n2 += len(d3) >= 2
+            out['sjf_' + str(k) + '_n2disp'] = float(n2)
+        return out
+
+    def g_jd():
+        tr, out = tk['d0'], {}
+        s = sorted(tr, key=lambda i: -abs(c0[i]))
+        for r in (4, 5, 6):
+            out['jd_sd0_' + str(r)] = c0[s[r - 1]] if len(s) >= r else 0.0
+        s3 = sorted((c3[i] for i in tk['3d']), reverse=True)
+        for r in (4, 5, 6):
+            out['jd_3d_' + str(r)] = s3[r - 1] if len(s3) >= r else 0.0
+        a = sorted((abs(c0[i]) for i in tr), reverse=True)
+        out['jd_sum_abs_sd0_top3'], out['jd_sum_abs_sd0_top5'] = sum(a[:3]), sum(a[:5])
+        d3 = [i for i in tr if abs(c0[i]) > 3]
+        mx = max([abs(c0[i]) for i in d3] or [1.0])
+        out['jd_mass_d3_sigw'] = emass(d3, {i: abs(c0[i]) / mx for i in d3})
+        zd = sum(z[i] for i in d3)
+        out['jd_mass_d3_over_z'] = emass(d3) / zd if zd > 0 else 0.0
+        out['jd_n_d3_pt1'] = float(sum(1 for i in d3 if pt[i] > 1.0))
+        return out
+
+    def g_mres():
+        out = {'mres_mass_e': emass(real)}
+        for k in (2, 3):
+            for r, g in enumerate(kgroups(k)):
+                out['mres_sj' + str(k) + '_mass' + str(r + 1) + '_e'] = emass(g)
+        node, kids, root = ca_tree()
+        ptn = lambda k: math.hypot(node[k][0], node[k][1])
+        for b, zc, t in ((0, 0.05, 'b0z005'), (0, 0.2, 'b0z02'), (1, 0.1, 'b1z01'), (2, 0.1, 'b2z01')):
+            cur, res = root, (0.0, 0.0, 0.0)
+            while cur in kids:
+                c1, c2 = kids[cur]
+                p1, p2 = ptn(c1), ptn(c2)
+                zz, d = min(p1, p2) / max(p1 + p2, 1e-300), math.sqrt(ca_dR2(node[c1], node[c2]))
+                if zz > zc * (d / 0.8) ** b:
+                    res = (m4(node[cur]), zz, d)
+                    break
+                cur = c1 if p1 >= p2 else c2
+            out['mres_sd_mass_' + t], out['mres_sd_zg_' + t], out['mres_sd_rg_' + t] = res
+        cur, pm = root, (0.0, 0.0)
+        while cur in kids:                                # the two prongs of the soft-drop splitting (beta = 0, z_cut = 0.1)
+            c1, c2 = kids[cur]
+            p1, p2 = ptn(c1), ptn(c2)
+            if min(p1, p2) / max(p1 + p2, 1e-300) > 0.1:
+                pm = (m4(node[c1]), m4(node[c2])) if p1 >= p2 else (m4(node[c2]), m4(node[c1]))
+                break
+            cur = c1 if p1 >= p2 else c2
+        out['mres_sd_prong_mass1'], out['mres_sd_prong_mass2'] = pm
+        rv = node[root]                                   # pruning on the C/A tree: z_cut = 0.1, D_cut = m / pT of the jet
+        dcut = m4(rv) / max(math.hypot(rv[0], rv[1]), 1e-300)
+        pv = {i: node[i] for i in node if i not in kids}
+        for k in sorted(kids):
+            a, b = kids[k]
+            va, vb = pv[a], pv[b]
+            pa, pb = math.hypot(va[0], va[1]), math.hypot(vb[0], vb[1])
+            v = tuple(x + y for x, y in zip(va, vb))
+            zz = min(pa, pb) / max(math.hypot(v[0], v[1]), 1e-300)
+            pv[k] = (va if pa >= pb else vb) if zz < 0.1 and math.sqrt(ca_dR2(va, vb)) > dcut else v
+        out['mres_pruned_mass'] = m4(pv[root])
+        keep = [i for g in genkt(real, 1, 0.2)[0] if sum(pt[j] for j in g) > 0.03 * tot for i in g]   # trimming
+        out['mres_trimmed_mass'] = emass(keep)
+        return out
+
+    def g_sjq():
+        out = {}
+        for k in (2, 3):
+            Q = {}
+            for r, g in enumerate(kgroups(k)):
+                w = max(sum(pt[i] for i in g), 1e-9)
+                for ka, t in ((0.3, '03'), (0.5, '05'), (1.0, '1')):
+                    Q[r, t] = sum(charge[i] * pt[i] ** ka for i in g) / w ** ka
+                    out['sjq_' + str(k) + '_' + str(r + 1) + '_k' + t] = Q[r, t]
+                out['sjq_' + str(k) + '_' + str(r + 1) + '_nch'] = float(sum(1 for i in g if charge[i] != 0))
+            for t in ('03', '05', '1'):
+                out['sjq_' + str(k) + '_sumabs_k' + t] = abs(Q[0, t] + Q[1, t])
+                out['sjq_' + str(k) + '_prod_k' + t] = Q[0, t] * Q[1, t]
+        return out
+
+    def g_nca():
+        node, kids, root = ca_tree()
+        out = {}
+        for c in (2, 5, 10, 20):
+            cnt, stack = 0, [root]
+            while stack:
+                k = stack.pop()
+                if k in kids:
+                    a, b = kids[k]
+                    if min(math.hypot(node[a][0], node[a][1]), math.hypot(node[b][0], node[b][1])) * math.sqrt(ca_dR2(node[a], node[b])) > c:
+                        stack += [a, b]
+                        continue
+                cnt += 1
+            out['nca_kt_above_' + str(c)] = float(cnt)
+        mp = sorted(subjets(4)['mpair'], reverse=True)
+        mj = max(mass_of(n), 1e-9)
+        out['nca_sj4_pair_mass_2nd'], out['nca_sj4_pairmax_over_mass'], out['nca_sj4_pair2nd_over_mass'] = mp[1], mp[0] / mj, mp[1] / mj
+        return out
+
+    def g_lepsj():
+        out, lep = {}, [i for i in real if ptype[i] in (4, 5)]
+        for k in (2, 3):
+            q = 'lepsj_' + str(k) + '_'
+            if not lep:
+                out[q + 'mass'] = out[q + 'dr'] = out[q + 'n_d3'] = out[q + 'maxsd0'] = 0.0
+                continue
+            l = lep[0]
+            axes, dist = kaxes(k)
+            j = min(range(k), key=lambda a: dist[l][a])
+            g = [i for i in real if i != l and min(range(k), key=lambda a: dist[i][a]) == j]
+            tr = [i for i in g if i in c0]
+            out[q + 'mass'] = emass(g + [l])
+            out[q + 'dr'] = dist[l][j]
+            out[q + 'n_d3'] = float(sum(1 for i in tr if abs(c0[i]) > 3))
+            out[q + 'maxsd0'] = max([abs(c0[i]) for i in tr] or [0.0])
+        return out
+
+    def pq(key):
+        g = key.split('_')[0]
+        if ('pq', g) not in _memo:
+            _memo['pq', g] = dict(kt2=g_kt2, ktd=g_ktd, ak02=g_ak02, sv=g_sv, sdb=g_sdb, pz=g_pz, dc=g_dc, sjf=g_sjf, jd=g_jd,
+                                  mres=g_mres, sjq=g_sjq, nca=g_nca, lepsj=g_lepsj)[g]()
+        return _memo['pq', g][key]
+'''
 PART_TOKENS = ('pfeat(', 'pairf(', 'pairsum(', 'pairmax(', 'paircount(', 'lund(', 'ecfb(')
-FULL_TOKENS = ('sip(', 'nsig(', 'leadtrack(', 'lepton(', 'displaced(', 'subset_mass(')
+FULL_TOKENS = ('sip(', 'nsig(', 'leadtrack(', 'lepton(', 'displaced(', 'subset_mass(', 'pq(')
 # the arguments of quantities() / classify() of each kind of network (jedi: pT, Δη, Δφ; ParT adds each particle's energy
 # and the jet's pT, η and energy; 'full' also each particle's charge, type and impact parameters)
 ARGS = dict(jedi=('pt', 'eta', 'phi'), kin=('pt', 'eta', 'phi', 'energy', 'jet_pt', 'jet_eta', 'jet_energy'),
@@ -400,6 +755,7 @@ def helper_code(exprs):
     if any(t in exprs for t in V2_TOKENS + PART_TOKENS + FULL_TOKENS): body += V2
     if any(t in exprs for t in PART_TOKENS + FULL_TOKENS): body += PART
     if any(t in exprs for t in FULL_TOKENS): body += FULL
+    if 'pq(' in exprs: body += PLUS
     return body.replace('H3_', str(H3)).replace('H4_', str(H4)).replace('HSD_', str(HSD))
 
 
