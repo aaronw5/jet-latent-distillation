@@ -18,7 +18,7 @@ PART_CLASSES = ('QCD (light quark or gluon), H→bb̄, H→cc̄, H→gg, H→4q,
 def part_tagger(n, n_explain):
     """what the page says about the ParT network (its template reads D.tagger)"""
     full = n == 'full'
-    return dict(title='Distilling the Latent Space of the Particle Transformer into Interpretable Physics Equations', nn=128, relu=False, py=f'part_{n}', own=False, k1=60, kk='60', nexplain=f'{n_explain:,}',
+    return dict(title='Distilling the Latent Space of the Particle Transformer into Interpretable Physics Equations', nn=128, relu=False, py=f'part_{n}', own=False, k1=100, kk='100', nexplain=f'{n_explain:,}',
                 pyin='a jet’s particles (up to 128, hardest first: pT [GeV], Δη, Δφ relative to the jet axis, energy [GeV]; empty slots pT = 0) and the jet’s pT, η and energy'
                      + (', plus each particle’s charge, type (charged hadron, neutral hadron, photon, electron, muon) and track impact parameters d0, dz with their uncertainties' if full else ''),
                 step1='For each of the 128 numbers the network’s last layer reads (its class token after the last LayerNorm; no activation follows), its value is fitted',

@@ -9,7 +9,7 @@ setup offers them), and products of an already chosen threshold term with a thre
 most correlated with the current residual.
 Each step adds the candidate that lowers the squared error most (on 12,000 of the fitting jets), refits all coefficients
 by least squares on all 40,000 fitting jets, and scores R² of max(0, formula) against the neuron on 25,000 validation jets;
-the kept length is the best validation R² (stop after 5 steps without improvement, or 100 terms; 60 for ParT). Only the network's
+the kept length is the best validation R² (stop after 5 steps without improvement, or 100 terms). Only the network's
 neuron values are used, never the classes.
 ParT: the jet-level observables are candidates as above; ParT's per-particle and pair inputs (~35,000 quantities) are
 screened at every step: the 100 whose value or distance from its median correlates most with the current residual (on
@@ -28,7 +28,7 @@ from .observables.library import is_block
 def log(*a):
     print(*a, flush=True)
 
-N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (10 if config.SMOKE else 100 if TAGGER == 'jedi' else 60), 12000, 5
+N_KNOTS, MAX_TERMS, N_SELECT, STALL = 19, (10 if config.SMOKE else 100), 12000, 5
 N_SCREEN, N_TOP, N_CACHE = 6000, 100, 700      # ParT blocks: screening jets, screened candidates per step, kept candidate matrices
 
 
@@ -163,6 +163,12 @@ def _one_neuron(j):
     r2h = lambda z: float(1 - ((ht - act(z)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
     imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
     log(f'neuron {j}: {len(terms)} terms, R² on test jets {r2:.4f}, {time.time() - t0:.0f} s')
+    if r2 >= 0.95:                                   # the main quantities of a well-described neuron (R² lost without them)
+        from .observables import symbol
+        by = {}
+        for t, m in zip(terms, imp):
+            for q in {t['q'], t.get('q2')} - {None}: by[q] = by.get(q, 0) + m
+        log(f'  neuron {j} features: ' + ', '.join(f'{symbol(q)} ({v:.3f})' for q, v in sorted(by.items(), key=lambda x: -x[1])[:8]))
     return dict(neuron=j, intercept=float(coef[0]), terms=[dict(t, coef=float(c), importance=m) for t, c, m in zip(terms, coef[1:], imp)], dev_r2_path=path, test_r2=r2)
 
 
