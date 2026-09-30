@@ -33,7 +33,8 @@ TOL = dict(probabilities=0.001, decisions=0.001, labels=0.001, neurons=0.005)
 def refit(neurons, Q, Z, ridge=1e-6):
     """least-squares coefficients of the given terms to each neuron's pre-activation Z (clipped below as in step 1)"""
     out = []
-    for nr, B in zip(neurons, F.bases(neurons, Q)):
+    for nr in neurons:                                  # neuron by neuron (memory: all float64 matrices at once are ~30 GB at 300k jets)
+        B = F.bases([nr], Q)[0]
         z = Z[:, nr['neuron']]; zp = z[z > 0]; tgt = np.maximum(z, -0.2 * (zp.std() if len(zp) > 50 else z.std())) if RELU else z
         if not nr['terms']: out.append(dict(nr, intercept=float(tgt.mean()))); continue
         sd = B.std(0) + 1e-12; Bn = (B - B.mean(0)) / sd
@@ -57,7 +58,8 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, h
     K7, b7 = (jnp.asarray(x, jnp.float32) for x in last[:2]); rounds = last[2] is not None
     if rounds: i7, f7 = (jnp.asarray(x, jnp.float32) for x in last[2:])
     a = jax.nn.relu if RELU else (lambda x: x)
-    B = [jnp.asarray(b, jnp.float32) for b in F.bases(formula, Qf)]; Bd = [jnp.asarray(b, jnp.float32) for b in F.bases(formula, Qd)]
+    # neuron by neuron (the same float32 arrays; the float64 matrices of all neurons at once need twice the memory)
+    B = [jnp.asarray(F.bases([nr], Qf)[0], jnp.float32) for nr in formula]; Bd = [jnp.asarray(F.bases([nr], Qd)[0], jnp.float32) for nr in formula]
     sd = [jnp.asarray(np.asarray(b).std(0) + 1e-9) for b in B]
     th = [(jnp.asarray(c, jnp.float32) * s, jnp.asarray(c0, jnp.float32)) for (c, c0), s in zip(F.coefs(formula), sd)]   # scaled coefficients
 

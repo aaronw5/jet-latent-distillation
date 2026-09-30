@@ -47,7 +47,7 @@ def bases(formula, Q):
 
 def pre_activations(formula, Q):
     """(J, neurons): each neuron before its activation"""
-    return np.stack([nr['intercept'] + B @ np.array([t['coef'] for t in nr['terms']], np.float64).reshape(-1) for nr, B in zip(formula, bases(formula, Q))], 1)
+    return np.stack([nr['intercept'] + bases([nr], Q)[0] @ np.array([t['coef'] for t in nr['terms']], np.float64).reshape(-1) for nr in formula], 1)   # neuron by neuron (memory)
 
 
 def hidden(formula, Q):
