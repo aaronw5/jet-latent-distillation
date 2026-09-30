@@ -1,0 +1,20 @@
+<section id="allifz" style="display:flex; flex-direction:row; gap:44px; align-items:start; padding:128px 128px 160px; background:#fafaf7">
+  <div style="width:830px; display:flex; flex-direction:column; gap:12px">
+    <p style="padding:18px 20px; font-family:'JetBrains Mono', 'Courier New', monospace; font-size:17.5px; line-height:1.55; color:#1d2433; background:#ffffff; border:1px solid #d5dae1; border-radius:12px">if m &lt; 81: z += 0.107·(81 − m)<br>if m &lt; 91: z += 0.263·(91 − m)<br>if m &lt; 93: z −= 0.285·(93 − m)<br>if m &lt; 91 and Ψ &gt; 0.96: z −= 8.38·(91 − m)(Ψ − 0.96)<br>if m &lt; 100 and Ψ &gt; 0.96: z += 5.64·(100 − m)(Ψ − 0.96)<br>if m &lt; 91 and m_SD &gt; 54: z −= 0.00264·(91 − m)(m_SD − 54)<br>if m &lt; 120 and m_SD &gt; 76: z += 0.00239·(120 − m)(m_SD − 76)<br>if LHA &lt; 0.31: z += 13.9·(0.31 − LHA)<br>if w &lt; 0.0076 and M₂ &lt; 0.12: z += 2490·(0.0076 − w)(0.12 − M₂)<br>if w₃₀ &lt; 0.0068: z += 320·(0.0068 − w₃₀)<br>if w₃₀ &lt; 0.0082: z −= 530·(0.0082 − w₃₀)<br>if w₃₀ &lt; 0.012: z += 194·(0.012 − w₃₀)<br>if w₅₀ &lt; 0.0034: z −= 2740·(0.0034 − w₅₀)<br>if n &lt; 6.2 and e₃ &lt; 0.000067: z −= 1810·(6.2 − n)(0.000067 − e₃)<br>if n &lt; 6.1 and pT₄ &gt; 60: z += 0.00298·(6.1 − n)(pT₄ − 60)<br>if n &lt; 6.3 and pT_soft &lt; 2.3: z += 0.0741·(6.3 − n)(2.3 − pT_soft)<br>if τ₁ &lt; 0.11: z −= 28.9·(0.11 − τ₁)<br>if τ₂₁′ &lt; 0.23: z += 3.47·(0.23 − τ₂₁′)<br>if τ₂₁′ &lt; 0.25 and ΔR_sj &gt; 0.19: z −= 22.2·(0.25 − τ₂₁′)(ΔR_sj − 0.19)<br>if z₂₀ &gt; 0.92: z −= 10.7·(z₂₀ − 0.92)</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:18px; line-height:1.45; color:#6a7482">m: jet mass [GeV]; m_SD: soft-drop mass; Ψ: pT share within ΔR &lt; 0.3; w, w₃₀, w₅₀: Σ zΔR² of all, the 30, the 50 hardest particles; n: particles at 0.2 ≤ ΔR &lt; 0.4; τ₂₁′: τ₂₁ with β = 2; ΔR_sj: distance of the 2 subjet axes; z₂₀: pT share of the 20 hardest</p>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:20px; flex:1">
+    <div style="display:flex; flex-direction:column; gap:8px">
+      <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:50px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 7: All If-Statements&nbsp;</h2>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">288 formula (tuned on the network; no mass values offered), 64 particles, accuracy 81.05% (network 80.94%). Start value z = −0.555</p>
+    </div>
+    <ul style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.45; color:#3f4a5a">
+      <li>m &lt; 91 and m &lt; 100, each with Ψ &gt; 0.96: for collimated jets the two terms together are largest at 91 GeV and zero below 72.5 and above 100 GeV</li>
+      <li>m &lt; 81, 91, 93 alone: change z by less than 1</li>
+      <li>w, w₃₀, w₅₀ (ΣzΔR²), LHA, τ₁: together raise z for small values</li>
+      <li>The other 6 terms: soft-drop mass, particles at 0.2–0.4, τ₂₁′ with the subjet distance, e₃</li>
+    </ul>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; line-height:1.4; color:#3f4a5a">Mean: Z 1.50, W 0.09, t 0.06, g 0.05, q 0.03 (network neuron 7: Z 2.05). Raises the Z score (weight +0.91), lowers W (−0.63) and t (−0.28).</p>
+  </div>
+  <p style="position:absolute; right:128px; bottom:64px; width:200px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; text-align:right; color:#8a94a3">32</p>
+</section>

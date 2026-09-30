@@ -1,0 +1,30 @@
+<section id="nest" style="display:flex; flex-direction:column; gap:30px; padding:128px 128px 160px; background:#fafaf7">
+  <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">The Last Hidden Layer as a Nested Function of the Input</h2>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">The network turns the particles’ (pT, η, φ) into 16 numbers h, its last hidden layer, by applying several layers in sequence. The class is decided from these 16 numbers alone, by one linear layer.</p>
+  <div style="display:flex; flex-direction:row; gap:14px; align-items:center">
+    <div style="width:300px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">N particles<br>(pT, η, φ) each</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:190px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">layer f₁</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:190px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">layer f₂</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#6a7482">…</p>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:250px; display:flex; flex-direction:column; padding:14px; background:#e7eef6; border:2px solid #1f4e79; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433"><b>16 numbers h</b><br>last hidden layer</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:210px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">5 class scores</p>
+    </div>
+  </div>
+  <img src="/_blob/36a055f6fea3b4f6901a9833208524d9" alt="h = f_L( ... f_2( f_1( {(pT_i, eta_i, phi_i)} ) ) ... ), with f_k(u) = max(0, W_k u + b_k); s = K^T h + b; class = argmax_c s_c" style="width:1500px; height:204px; background:#f1f3f6; border-radius:12px; object-fit:contain">
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433"></p>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">2 · η, φ relative to the jet axis; JEDI-linear applies particle-level layers, a sum over particles, then jet-level layers</p>
+</section>

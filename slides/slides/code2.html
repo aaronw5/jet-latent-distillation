@@ -1,0 +1,24 @@
+<section id="code2" style="display:flex; flex-direction:column; gap:30px; padding:128px 128px 160px; background:#1d2433">
+  <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#f4f5f2">The Complete Classifier as One Python File</h2>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:29px; line-height:1.4; color:#dce3ea">The whole 64-particle jet tagger, from particle four-momenta to the class, runs as plain Python: 976 lines, only the standard library (math), with the network replaced by 250 if-statements.</p>
+  <div style="display:flex; flex-direction:row; gap:48px; align-items:start">
+    <div style="width:980px; display:flex; flex-direction:column; padding:30px; background:#11172a; border:1px solid #3a4560; border-radius:12px">
+      <p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#e6eaf0">import math<br><br>def quantities(pt, eta, phi):&nbsp;&nbsp;&nbsp;# mass, e2, τ21, …<br>&nbsp;&nbsp;&nbsp;&nbsp;...<br>def neuron_0(Q): ...&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 16 functions like neuron_12<br>...<br>def neuron_15(Q): ...<br><br>def logits(h):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# the network's last layer<br>&nbsp;&nbsp;&nbsp;&nbsp;h = [round_to_grid(x) for x in h]<br>&nbsp;&nbsp;&nbsp;&nbsp;return [B[c] + sum(h[j] * W[j][c] for j in range(16))<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for c in range(5)]<br><br>def classify(pt, eta, phi):<br>&nbsp;&nbsp;&nbsp;&nbsp;s = logits(jet_layer_4(quantities(pt, eta, phi)))<br>&nbsp;&nbsp;&nbsp;&nbsp;return CLASSES[s.index(max(s))]</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:26px; flex:1">
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">80.96%</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">accuracy, full test file (network 80.94%)</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">150</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">if-statements in 16 neurons</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">586</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">lines of Python, no machine-learning library</p>
+      </div>
+    </div>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#9fb7cf">21 · code abbreviated; round_to_grid stands for the file’s fixed-point rounding line. Files for every formula: aaronw5.github.io/jet-tagger-distillation, tab “Python files”</p>
+</section>

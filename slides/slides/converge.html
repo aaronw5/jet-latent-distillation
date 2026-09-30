@@ -1,0 +1,13 @@
+<section id="converge" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:20px">
+<h2 style="font-size:52px; font-weight:600; line-height:1.1">Backup: Convergence and Overfitting of Step 2</h2>
+<p style="font-size:26px; line-height:1.4">Step 2 runs 800 Adam steps on 100,000 training jets and keeps the checkpoint with the highest agreement on 25,000 validation jets (checked every 50 steps). Continuing to 3,000 steps changes validation agreement by less than 0.1 points (8 particles: 90.54% at step 800, 90.62% at 3,000; 64 particles: 94.49%, 94.52%).</p>
+<img src="/_blob/fe3cc7d1fbea2f604eab2f6ca0876e3b" alt="Agreement with the network against Adam step, training and validation jets, 8 and 64 particles; validation agreement is flat after about 800 steps." style="width:1300px; height:390px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<table style="font-size:21px; color:#1D2433; width:1300px; align-self:center">
+<tr><th>formula</th><th style="text-align:right">training jets</th><th style="text-align:right">validation jets</th><th style="text-align:right">test jets</th></tr>
+<tr><td>782 (8 particles)</td><td style="text-align:right">90.74%</td><td style="text-align:right">90.49%</td><td style="text-align:right">90.54%</td></tr>
+<tr><td>399 (8 particles)</td><td style="text-align:right">90.33%</td><td style="text-align:right">90.08%</td><td style="text-align:right">90.09%</td></tr>
+<tr><td>690 (64 particles)</td><td style="text-align:right">94.27%</td><td style="text-align:right">94.45%</td><td style="text-align:right">94.18%</td></tr>
+<tr><td>250 (64 particles)</td><td style="text-align:right">93.78%</td><td style="text-align:right">93.96%</td><td style="text-align:right">93.70%</td></tr>
+</table>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:22px; color:#8A94A3">42 · all observables, 100 if-statements per neuron, tuned on the network, λ = 0.01; agreement with the network; test: 260,000 jets</p>
+</section>

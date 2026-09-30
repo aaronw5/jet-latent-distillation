@@ -1,0 +1,16 @@
+<section id="motiv" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Last-Layer Neurons Have a ReLU-Shaped Cutoff</h2>
+<p style="font-size:28px; line-height:1.4">Many of the network’s last-layer neurons are exactly 0 below a threshold of one observable and grow roughly linearly above it: the shape of a ReLU, max(0, a·(x − t)).</p>
+<div style="display:flex; gap:28px; align-items:flex-start">
+<img src="/_blob/d0f07eb21667e51088d7ad0f882ab142" alt="The network's neuron 3 against the pT-weighted mean Delta R for all test jets: exactly 0 below 0.067, rising above; red line max(0, 65.6 (x - 0.0667)) with R^2 0.765" style="width:830px; height:547px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:10px">
+<div style="flex:1; display:flex; flex-direction:column; gap:14px">
+<div style="display:flex; gap:14px">
+<img src="/_blob/18a397ef5518d07fd9d9a83559ac6d47" alt="Network neuron 10 against m/sum pT: near zero below 0.024, rising above" style="width:396px; height:261px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:8px">
+<img src="/_blob/84e201d24ff047be9ef901fe80636938" alt="Network neuron 2 against jet mass: decreasing below 67 GeV, flat above" style="width:396px; height:261px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:8px">
+</div>
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A">Left: network neuron 3 against x = Σᵢ pT,ᵢ ΔRᵢ / Σᵢ pT,ᵢ (260,000 test jets). Below x = 0.067, 97% of jets give exactly 0; one hinge explains R² = 0.77. Right: neurons 10 and 2 (JEDI-linear explorer page).</p>
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A">One observable alone does not describe most neurons. This suggests writing each neuron as a sum of such hinges in several observables, keeping the network’s last layer.</p>
+</div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">4</p>
+</section>

@@ -1,0 +1,17 @@
+<section id="n10term" style="display:flex; flex-direction:column; gap:26px; padding:128px 128px 160px; background:#fafaf7">
+  <div style="display:flex; flex-direction:column; gap:8px">
+    <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 10: A Single If-Statement</h2>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+  </div>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">The if-statement ΣzΔR² &gt; 0.0075 adds to neuron 10 only for wide jets, and the amount grows linearly with ΣzΔR² above the threshold.&nbsp;</p>
+  <div style="display:flex; flex-direction:row; gap:40px; align-items:start">
+    <img src="/_blob/91fa6ad85fb7662ac9e64d182df5cc5b" alt="Left: what the if-statement adds to neuron 10 as a function of ΣzΔR²: 0 below 0.0075, then rising linearly with slope 274. Right: distribution of ΣzΔR² for each true class with the threshold at 0.0075; W and Z peak below it, top jets extend far above it." style="width:1100px; height:390px; background:#ffffff; border:1px solid #d5dae1; object-fit:contain">
+    <ul style="flex:1; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; line-height:1.45; color:#3f4a5a">
+      <li>if ΣzΔR² &gt; 0.0075: z += 274 × (ΣzΔR² − 0.0075)</li>
+      <li>ΣzΔR² = Σᵢ pTᵢΔRᵢ² / Σᵢ pTᵢ</li>
+      <li>Passes for 25.3% of jets and then adds 2.67 on average</li>
+      <li>Passing jets: t 62%, Z 18%, g 14%, q 6%, W 0.7%</li>
+    </ul>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">25</p>
+</section>

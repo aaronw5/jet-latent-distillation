@@ -67,12 +67,24 @@ python -m jetdistill.pipeline all 8          # every stage: step1 tune step4 exp
 python -m jetdistill.pipeline nomass 64 tune step4
 python -m jetdistill.site.sites              # landing page and the setup selector (site/)
 python -m jetdistill.analysis.control 8      # untrained-network control
+python -m jetdistill.analysis.convergence 8  # step 2 for 3000 steps; training / validation / test agreement
+python -m jetdistill.figures all             # the figures of the slides (results/figures/)
+python slides/build_html.py                  # the slides as one HTML page (slides/deck.html)
 JETDISTILL_SMOKE=1 python -m jetdistill.pipeline all 8    # every stage on a few thousand jets, in minutes
 pytest tests
 ```
 Stages write to `results/<setup>/n<N>/`: `step1.json`, `formulas.json` (the formulas of the setup, named by their
 number of terms), `formulas/<tag>/` (formula, normalized weights, the two Python files and their check, explanation data),
 `metrics.json`. Observables and network outputs of each set of jets are computed once per network (`results/_jets/`).
+
+**Convergence.** Step 2 runs 800 Adam steps and keeps the step with the highest validation agreement. Run for 3000 steps
+(8 particles, 100 if-statements per neuron), validation agreement is 90.53% at step 800 and 90.63% at step 3000, within
+the ±0.15-point spread between checkpoints; training agreement rises by 0.2 points. The formulas give the same agreement on
+the jets they were tuned on and on the test jets (e.g. 399: 90.25% training, 90.10% validation, 90.06% test).
+
+**Names.** Pages, slides and texts write every quantity as its formula (ΣzΔR² = Σᵢ zᵢΔRᵢ², λ₁, τ₂₁(β=2), …; zᵢ = pTᵢ / ΣpT;
+`observables/symbols.py`); the site's `quantities.html` lists all of them with their definitions. Code ids that are jargon
+(girth, width, e2_sq) are replaced by descriptive names (sum_z_dr, lam1_plus_lam2, sum_zz_dr2) in the exported files.
 
 ## Written explanations
 
@@ -92,6 +104,8 @@ not in the data, and names describe observables, never classes). Rerun `pipeline
 | `explain/` | explanation data (`pack.py`, `anatomy.py`) and the text checks (`check.py`) |
 | `metrics.py`, `pipeline.py` | metrics on the whole test file; the stages of one setup |
 | `site/` | the page of a setup (`template.html`, `page.py`) and the site (`sites.py`) |
-| `analysis/` | untrained-network control, jet-mass studies |
+| `analysis/` | untrained-network control (`control.py`), step-2 convergence (`convergence.py`), jet-mass studies |
+| `figures.py` | every figure of the slides, from the results |
+| `slides/` (top level) | the talk: slide files, images, screenshot tool, a map from each image to what makes it (`slides/README.md`) |
 
 Model: JEDI-linear (github.com/calad0i/JEDI-linear). Dataset: hls4ml LHC jet dataset (150 particles).

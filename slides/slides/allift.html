@@ -1,0 +1,23 @@
+<section id="allift" style="display:flex; flex-direction:row; gap:44px; align-items:start; padding:128px 128px 160px; background:#fafaf7">
+  <div style="width:830px; display:flex; flex-direction:column; gap:12px">
+    <p style="padding:16px 18px; font-family:'JetBrains Mono', 'Courier New', monospace; font-size:16px; line-height:1.55; color:#1d2433; background:#ffffff; border:1px solid #d5dae1; border-radius:12px">if ΣzΔR &lt; 0.148: z += 58.6·(0.148 − ΣzΔR)<br>if λ₁ &lt; 0.0161: z += 253·(0.0161 − λ₁)<br>if pT₁₋₅ &gt; 667 and pT₇ &lt; 38.1: z += 0.00108·(pT₁₋₅ − 667)(38.1 − pT₇)<br>if ΣzΔR &lt; 0.148 and ln ΣpT &lt; 6.81: z −= 75.4·(0.148 − ΣzΔR)(6.81 − ln ΣpT)<br>if e₂ &lt; 0.079: z −= 55.3·(0.079 − e₂)<br>if e₃ &lt; 0.000051: z += 19700·(0.000051 − e₃)<br>if m &gt; 49.1: z −= 0.0244·(m − 49.1)<br>if pT₇ &gt; 48.4: z −= 0.0571·(pT₇ − 48.4)<br>if pT₁₋₅ &gt; 674: z −= 0.00746·(pT₁₋₅ − 674)<br>if pT₁₋₅ &gt; 794: z += 0.0137·(pT₁₋₅ − 794)<br>if z₅ &lt; 0.0283: z −= 167·(0.0283 − z₅)<br>if z₇ &lt; 0.028: z −= 189·(0.028 − z₇)<br>if e₃ &lt; 0.000069 and D₃ &gt; 0.0598: z += 2100·(0.000069 − e₃)(D₃ − 0.0598)<br>if e₃ &lt; 0.000054 and c &lt; 0.0377: z −= 1180000·(0.000054 − e₃)(0.0377 − c)<br>if ΣzΔR &lt; 0.15 and M₃ &lt; 0.0746: z += 125·(0.15 − ΣzΔR)(0.0746 − M₃)<br>if ΣzΔR &lt; 0.148 and λ₂ &lt; 0.000536: z −= 8780·(0.148 − ΣzΔR)(0.000536 − λ₂)<br>if ΣzΔR &lt; 0.145 and pT₇ &lt; 38.2: z −= 0.987·(0.145 − ΣzΔR)(38.2 − pT₇)<br>if ΣzΔR &lt; 0.152 and m_sj &gt; 30.4: z −= 1.58·(0.152 − ΣzΔR)(m_sj − 30.4)<br>if ΣzΔR &lt; 0.142 and τ₂ &gt; 0.00886: z += 281·(0.142 − ΣzΔR)(τ₂ − 0.00886)<br>if ΣzΔR &lt; 0.153 and z₇ &gt; 0.0616: z += 392·(0.153 − ΣzΔR)(z₇ − 0.0616)<br>if pT₆ &lt; 31.9 and z₇ &lt; 0.0624: z −= 2.22·(31.9 − pT₆)(0.0624 − z₇)<br>if ΣpT &gt; 1000 and pT₆ &lt; 70: z −= 0.000466·(ΣpT − 1000)(70 − pT₆)</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:17px; line-height:1.45; color:#6a7482">ΣzΔR: Σᵢ pTᵢΔRᵢ / Σᵢ pTᵢ; e₂, e₃: energy correlations; λ₁, λ₂: axes of the pT-weighted (Δη, Δφ) spread; m: jet mass [GeV]; pTᵢ: pT of particle i [GeV]; pT₁₋₅: pT of the 5 hardest; zᵢ: pT share of particle i; c: centroid offset; D₃, M₃: 3-prong energy-correlation ratios; τ₂: N-subjettiness; m_sj: mass of the harder of 2 subjets</p>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:20px; flex:1">
+    <div style="display:flex; flex-direction:column; gap:8px">
+      <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:50px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 13: All If-Statements&nbsp;</h2>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles, accuracy 65.54% (network 65.69%). Start value z = 0.714; neuron = max(0, z)</p>
+    </div>
+    <ul style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.45; color:#3f4a5a">
+      <li>ΣzΔR &lt; 0.148 (passes 95.1%, adds 5.56 on average) and λ₁ &lt; 0.0161 (89.7%, +3.07): the narrower the jet, the larger the neuron</li>
+      <li>pT of the 5 hardest above 667 GeV with pT₇ &lt; 38.1 GeV (27.4%, +2.63): raises it for hard jets with few particles</li>
+      <li>ΣzΔR &lt; 0.148 with ln ΣpT &lt; 6.81 (81.3%, −1.89): lowers it for lower-pT jets</li>
+      <li>The other 18 terms are smaller corrections</li>
+    </ul>
+    <div style="display:flex; flex-direction:row; gap:16px; align-items:center">
+      <img src="/_blob/9b2431900c39a7d3b210dc94295df8c2" alt="Distribution of neuron 13 for each true class: top jets low, all others high" style="width:390px; height:117px; background:#ffffff; border:1px solid #d5dae1; border-radius:8px; object-fit:contain">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; line-height:1.4; color:#3f4a5a">Mean: q 4.48, W 4.05, Z 3.64, g 3.59, t 1.11. Scores: t −48%, W +7%, Z +7%</p>
+    </div>
+  </div>
+  <p style="position:absolute; right:128px; bottom:64px; width:200px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; text-align:right; color:#8a94a3">33</p>
+</section>

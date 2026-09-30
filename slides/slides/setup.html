@@ -1,0 +1,21 @@
+<section id="setup" data-section="Method, step by step" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">JEDI-linear</h2>
+<p style="font-size:27px; line-height:1.4">JEDI-linear is a graph-network jet tagger whose cost is linear in the number of particles, quantized for FPGA inference in the real-time trigger. Its inputs are the pT, Δη and Δφ of the 8 or 64 hardest particles of a jet; its outputs are scores for five classes: gluon (g), light quark (q), W, Z and top (t).</p>
+<div style="display:flex; flex-direction:column; gap:14px">
+<div style="display:flex; align-items:center; gap:10px">
+<p style="width:150px; font-size:24px; color:#6A7482; font-weight:600">Network</p>
+<div style="width:230px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">Particles (pT, η, φ)</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:280px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">particle layers, sum over particles</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:200px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">jet layers 64, 32</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:200px; background:#E7EEF6; border:2px solid #1F4E79; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25"><b>16 neurons hⱼ</b></p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:210px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">last layer: 5 scores</p></div>
+</div>
+
+</div>
+<p style="font-size:27px; line-height:1.4; color:#3F4A5A">Class scores s_c = b_c + Σⱼ Kⱼ꜀ hⱼ; the largest score gives the class. Accuracy on the test file: 65.69% (8 particles) and 80.94% (64 particles).</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">5 · η, φ relative to the jet axis; hls4ml LHC jet dataset, 150 particles [16]; github.com/calad0i/JEDI-linear</p>
+</section>

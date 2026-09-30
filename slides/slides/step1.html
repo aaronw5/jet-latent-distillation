@@ -1,0 +1,18 @@
+<section id="step1" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 1: MARS, a Network Whose Units Read Observables</h2>
+<p style="font-size:28px; line-height:1.4">A network neuron is a ReLU of a weighted sum of ReLUs from the previous layer. A MARS neuron has the same form, but each inner ReLU acts on one physics observable minus a threshold, max(0, Q − t), which is an if-statement.</p>
+<div style="display:flex; gap:32px; align-items:stretch">
+<div style="flex:1; display:flex; flex-direction:column; gap:14px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:14px; padding:28px">
+<h3 style="font-size:32px; font-weight:600">Neuron of the network</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#1D2433">h = max(0,<br>&#160;&#160;&#160;&#160;w₁·max(0, a₁·u + c₁)<br>&#160;&#160;+ w₂·max(0, a₂·u + c₂)<br>&#160;&#160;+ …<br>&#160;&#160;+ b)</p>
+<p style="font-size:25px; line-height:1.4; color:#3F4A5A">u: all outputs of the layer before, themselves built from all particles’ (pT, η, φ). The inner units have no direct physical meaning.</p>
+</div>
+<div style="flex:1; display:flex; flex-direction:column; gap:14px; background:#E7EEF6; border:2px solid #1F4E79; border-radius:14px; padding:28px">
+<h3 style="font-size:32px; font-weight:600; color:#1F4E79">Neuron written with MARS</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#1D2433">h = max(0,<br>&#160;&#160;&#160;&#160;β₁·max(0, Q₁ − t₁)<br>&#160;&#160;+ β₂·max(0, t₂ − Q₂)<br>&#160;&#160;+ β₃·max(0, Q₃ − t₃)·max(0, Q₄ − t₄)<br>&#160;&#160;+ … + β₀)</p>
+<p style="font-size:25px; line-height:1.4; color:#3F4A5A">Q: physics observables of the jet; t: thresholds. max(0, Q − t) = “if Q &gt; t: Q − t”. A product of two hinges is an if-statement with two conditions.</p>
+</div>
+</div>
+<p style="font-size:26px; line-height:1.4; color:#3F4A5A">Each network neuron j is fitted separately: the MARS sum reproduces the neuron’s value before the ReLU, zⱼ, by least squares, and the neuron is max(0, ẑⱼ), as in the network.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">8 · MARS: multivariate adaptive regression splines [1]; related: symbolic regression of network components [9]</p>
+</section>

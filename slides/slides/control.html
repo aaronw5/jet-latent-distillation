@@ -1,0 +1,9 @@
+<section id="control" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Control: Step 1 on an Untrained Network</h2>
+<p style="font-size:26px; color:#6A7482">Same architecture and number formats; weights drawn at random with each layer’s trained mean and spread; same observables</p>
+</div>
+<p style="font-size:27px; line-height:1.4">Step 1 reaches a median R² of 0.89 and 0.92 per neuron for the trained network (8 and 64 particles), and 0.55 and 0.16 for the untrained network. For the untrained 8-particle network, 97% of the formula’s term importance is on observables that depend on the jet orientation (Δη or Δφ alone); for the trained networks, none.</p>
+<img src="/_blob/c00a663b3296a20cfffc5c6feca4a11f" alt="Left: median R² of step 1 per neuron, trained against untrained: 0.89 and 0.55 (8 particles), 0.92 and 0.16 (64 particles). Right: share of term importance on Δη- or Δφ-only observables at 8 particles: 0 trained, 97 untrained." style="width:1500px; height:500px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">18 · 50,000 test jets; step 1 fitted on 40,000 training jets; R²: formula neuron against network neuron; term importance: R² lost when the term is removed</p>
+</section>

@@ -1,0 +1,13 @@
+<section id="step4" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 4 (Optional): Further Simplification</h2>
+<p style="font-size:26px; color:#6A7482">Makes the formula smaller and easier to read; does not improve it</p>
+</div>
+<p style="font-size:28px; line-height:1.4">The pruned formula still has several if-statements on the same observable, and on observables that measure nearly the same thing (e.g. ΣzΔR² and λ₁). Step 4 removes more of them, including whole observables, and after each removal refits the remaining weights so that every neuron keeps the values it had in the pruned formula.</p>
+<div style="display:flex; gap:40px; align-items:center">
+<img src="/_blob/2d05bd9abd5a10dbd4c23bb649833511" alt="minimize sum_n w_nj (z_hat_j(n) - z_big_j(n))^2 with w_nj = K_j^T (diag p(n) - p(n) p(n)^T) K_j" style="width:620px; height:197px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<p style="flex:1; font-size:26px; line-height:1.45; color:#3F4A5A">Target: the pruned formula’s own neuron values. The thresholds of step 1 are kept until the end, then refined and rounded. Jets whose class depends strongly on neuron j (near a decision boundary) get a larger weight wₙⱼ.</p>
+</div>
+<p style="font-size:27px; line-height:1.45; color:#3F4A5A">The size is the smallest that stays within a margin set before testing: 782 → 399 if-statements for the formula tuned on the network (within 0.5 points of validation agreement); 349 → 199 for the formula tuned on truth (within 0.4 points of validation accuracy). 8 particles.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">12</p>
+</section>

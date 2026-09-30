@@ -1,0 +1,12 @@
+<section id="summary" data-section="Summary" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:32px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Summary</h2>
+<ul style="font-size:30px; line-height:1.5; color:#3F4A5A">
+<li>The 16 neurons of the last hidden layer of the JEDI-linear jet tagger were replaced by 16 sums of if-statements on physics quantities of the jet; the network’s last layer was kept unchanged.</li>
+<li>Method: MARS fit of each neuron to the network’s pre-activation, joint tuning of the coefficients through the last layer (to the network’s output, with each neuron kept close to the network’s), pruning, and simplification by distillation.</li>
+<li>Tuned on the network, the formulas give the network’s class for 90.5% (8 particles, 782 if-statements) and 94.2% (64 particles, 690) of the 260,000 test jets, and their smaller versions for 90.1% (399) and 93.7% (250); accuracy is within 0.5 points of the network.</li>
+<li>Each formula neuron corresponds to a physical property of the jet, for example ΣzΔR² and λ₁ (neuron 10) or pT concentration in the hardest particles (neuron 5). Like the network, the 64-particle formulas have windows at the W and Z masses, even when no mass observable is offered (through Σ zᵢzⱼΔRᵢⱼ² = (m/ΣpT)²).</li>
+<li>For the same network with random weights, step 1 reaches a median R² of 0.55 and 0.16 per neuron (trained: 0.89 and 0.92), and the 8-particle formula uses mainly orientation-dependent observables (Δη or Δφ alone).</li>
+<li>Jets that pass the same combination of if-statements form groups with distinct m, ΣzΔR² and pT sharing, and different class composition.</li>
+</ul>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">37 · aaronw5.github.io/jet-tagger-distillation</p>
+</section>

@@ -1,0 +1,634 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jet tagger last layer as physics rules</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap">
+<style>body{margin:0;background:#d5dae1}.frame{position:relative;width:100vw;height:calc(100vw * 1080 / 1920);overflow:hidden;margin:0 0 12px}
+.scale{position:absolute;top:0;left:0;width:1920px;height:1080px;transform-origin:0 0;transform:scale(calc(100vw / 1920px))}
+.slide{position:relative;box-sizing:border-box;width:1920px;height:1080px;overflow:hidden}.slide *{margin:0;box-sizing:border-box}
+.slide ul,.slide ol{padding-left:1.2em}.slide table{border-collapse:collapse;width:100%}.slide th,.slide td{text-align:left;padding:8px 12px;border-bottom:1px solid #d5dae1}
+x-shape{display:inline-block;flex:none}</style>
+<script>addEventListener('resize',()=>document.querySelectorAll('.scale').forEach(e=>e.style.transform=`scale(${innerWidth/1920})`));addEventListener('load',()=>dispatchEvent(new Event('resize')))</script>
+</head><body><div class="frame" id="s1"><div class="scale"><section class="slide" id="cover" style="display:flex; flex-direction:column; gap:40px; justify-content:center; padding:128px; background:#1d2433">
+  <h1 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:76px; font-weight:600; line-height:1.1; color:#f4f5f2">Distilling the Latent Space of a Jet Tagger into Interpretable Physics Equations</h1>
+  <div style="display:flex; flex-direction:column; gap:10px">
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:34px; color:#f4f5f2">Aaron Wang</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#c9d3de">University of Illinois Chicago</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#c9d3de">September 28, 2026</p>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#9fb7cf">aaronw5.github.io/jet-tagger-distillation</p>
+</section>
+</div></div><div class="frame" id="s2"><div class="scale"><section class="slide" id="nest" style="display:flex; flex-direction:column; gap:30px; padding:128px 128px 160px; background:#fafaf7">
+  <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">The Last Hidden Layer as a Nested Function of the Input</h2>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">The network turns the particles’ (pT, η, φ) into 16 numbers h, its last hidden layer, by applying several layers in sequence. The class is decided from these 16 numbers alone, by one linear layer.</p>
+  <div style="display:flex; flex-direction:row; gap:14px; align-items:center">
+    <div style="width:300px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">N particles<br>(pT, η, φ) each</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:190px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">layer f₁</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:190px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">layer f₂</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:30px; color:#6a7482">…</p>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:250px; display:flex; flex-direction:column; padding:14px; background:#e7eef6; border:2px solid #1f4e79; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433"><b>16 numbers h</b><br>last hidden layer</p>
+    </div>
+    <x-shape kind="arrow-right" style="width:44px; height:22px; background:#8a94a3"></x-shape>
+    <div style="width:210px; display:flex; flex-direction:column; padding:14px; background:#ffffff; border:2px solid #c9d0da; border-radius:10px">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.3; color:#1d2433">5 class scores</p>
+    </div>
+  </div>
+  <img src="images/36a055f6fea3b4f6901a9833208524d9.png" alt="h = f_L( ... f_2( f_1( {(pT_i, eta_i, phi_i)} ) ) ... ), with f_k(u) = max(0, W_k u + b_k); s = K^T h + b; class = argmax_c s_c" style="width:1500px; height:204px; background:#f1f3f6; border-radius:12px; object-fit:contain">
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433"></p>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">2 · η, φ relative to the jet axis; JEDI-linear applies particle-level layers, a sum over particles, then jet-level layers</p>
+</section>
+</div></div><div class="frame" id="s3"><div class="scale"><section class="slide" id="motivgrid" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:30px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Last-Layer Neurons Approximate High-Level Observables</h2>
+<p style="font-size:28px; line-height:1.4">In sections of their range, the network’s last-layer neurons are linear functions of standard jet observables, although the network only receives the particles’ (pT, η, φ). Neuron 12 falls linearly with the jet mass and reaches 0 near 90 GeV; neuron 2 rises linearly with the logarithm of the total pT above a threshold. Networks trained on particle-level inputs were found to learn quantities close to jet mass, N-subjettiness and energy correlations [2–4, 7, 8], and their decisions were mapped to energy-flow polynomials [5, 6].</p>
+<img src="images/b336a158e898777f6fd9d46f2fa1bd9f.png" alt="Four network neurons (64 particles) against one observable each with a straight line fitted to the jets in the linear section: neuron 12 vs jet mass (R^2 0.81 for 5-90 GeV), neuron 9 vs sum pT_i Delta R_i^2 / sum pT_i (0.77), neuron 6 vs jet mass (0.69), neuron 2 vs log of total pT (0.61, jets with neuron on)" style="width:1664px; height:408px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:26px; line-height:1.45; color:#3F4A5A">64-particle network, 260,000 test jets. Shading: number of jets (logarithmic). Red: straight line fitted to the jets in the shaded section where the neuron is on; R² per jet.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">3 · high-level observables learned by networks: [2–4, 7, 8]; network decisions mapped to observables: [5, 6]</p>
+</section>
+</div></div><div class="frame" id="s4"><div class="scale"><section class="slide" id="motiv" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Last-Layer Neurons Have a ReLU-Shaped Cutoff</h2>
+<p style="font-size:28px; line-height:1.4">Many of the network’s last-layer neurons are exactly 0 below a threshold of one observable and grow roughly linearly above it: the shape of a ReLU, max(0, a·(x − t)).</p>
+<div style="display:flex; gap:28px; align-items:flex-start">
+<img src="images/d0f07eb21667e51088d7ad0f882ab142.png" alt="The network's neuron 3 against the pT-weighted mean Delta R for all test jets: exactly 0 below 0.067, rising above; red line max(0, 65.6 (x - 0.0667)) with R^2 0.765" style="width:830px; height:547px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:10px">
+<div style="flex:1; display:flex; flex-direction:column; gap:14px">
+<div style="display:flex; gap:14px">
+<img src="images/18a397ef5518d07fd9d9a83559ac6d47.png" alt="Network neuron 10 against m/sum pT: near zero below 0.024, rising above" style="width:396px; height:261px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:8px">
+<img src="images/84e201d24ff047be9ef901fe80636938.png" alt="Network neuron 2 against jet mass: decreasing below 67 GeV, flat above" style="width:396px; height:261px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:8px">
+</div>
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A">Left: network neuron 3 against x = Σᵢ pT,ᵢ ΔRᵢ / Σᵢ pT,ᵢ (260,000 test jets). Below x = 0.067, 97% of jets give exactly 0; one hinge explains R² = 0.77. Right: neurons 10 and 2 (JEDI-linear explorer page).</p>
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A">One observable alone does not describe most neurons. This suggests writing each neuron as a sum of such hinges in several observables, keeping the network’s last layer.</p>
+</div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">4</p>
+</section>
+</div></div><div class="frame" id="s5"><div class="scale"><section class="slide" id="setup" data-section="Method, step by step" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">JEDI-linear</h2>
+<p style="font-size:27px; line-height:1.4">JEDI-linear is a graph-network jet tagger whose cost is linear in the number of particles, quantized for FPGA inference in the real-time trigger. Its inputs are the pT, Δη and Δφ of the 8 or 64 hardest particles of a jet; its outputs are scores for five classes: gluon (g), light quark (q), W, Z and top (t).</p>
+<div style="display:flex; flex-direction:column; gap:14px">
+<div style="display:flex; align-items:center; gap:10px">
+<p style="width:150px; font-size:24px; color:#6A7482; font-weight:600">Network</p>
+<div style="width:230px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">Particles (pT, η, φ)</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:280px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">particle layers, sum over particles</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:200px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">jet layers 64, 32</p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:200px; background:#E7EEF6; border:2px solid #1F4E79; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25"><b>16 neurons hⱼ</b></p></div>
+<x-shape kind="arrow-right" style="width:36px; height:18px; background:#8A94A3"></x-shape>
+<div style="width:210px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:10px; padding:12px"><p style="font-size:24px; line-height:1.25">last layer: 5 scores</p></div>
+</div>
+
+</div>
+<p style="font-size:27px; line-height:1.4; color:#3F4A5A">Class scores s_c = b_c + Σⱼ Kⱼ꜀ hⱼ; the largest score gives the class. Accuracy on the test file: 65.69% (8 particles) and 80.94% (64 particles).</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">5 · η, φ relative to the jet axis; hls4ml LHC jet dataset, 150 particles [16]; github.com/calad0i/JEDI-linear</p>
+</section>
+</div></div><div class="frame" id="s6"><div class="scale"><section class="slide" id="overview" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:30px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Method Overview</h2>
+<p style="font-size:28px; line-height:1.4">Five steps. Steps 1, 2 and 5 produce and test the formula; steps 3 and 4 are optional and only make it smaller.</p>
+<table style="font-size:26px; color:#1D2433">
+<tr><th style="width:8%">step</th><th style="width:30%">name</th><th style="width:47%">what it does</th><th style="width:15%">needed?</th></tr>
+<tr><td>1</td><td>MARS fit</td><td>writes each network neuron as a sum of hinges (if-statements) of observables</td><td>required</td></tr>
+<tr><td>2</td><td>Joint tuning</td><td>trains all coefficients together, to the network’s output or to the true labels</td><td>required</td></tr>
+<tr style="background:#F1F3F6"><td>3</td><td>Pruning</td><td>removes if-statements that add little, retraining after each cut</td><td>optional</td></tr>
+<tr style="background:#F1F3F6"><td>4</td><td>Further simplification</td><td>removes more if-statements and whole observables, refitting to keep the neuron values</td><td>optional</td></tr>
+<tr><td>5</td><td>Evaluation</td><td>all scores on the 260,000 test jets</td><td>required</td></tr>
+</table>
+<p style="font-size:26px; line-height:1.45; color:#3F4A5A">8 particles, same class as the network on test jets: step 1 alone 88.3%; after steps 2 and 3, tuned on the network, 90.5% with 782 if-statements; after step 4, 90.1% with 399.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">6</p>
+</section>
+</div></div><div class="frame" id="s7"><div class="scale"><section class="slide" id="step1" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 1: MARS, a Network Whose Units Read Observables</h2>
+<p style="font-size:28px; line-height:1.4">A network neuron is a ReLU of a weighted sum of ReLUs from the previous layer. A MARS neuron has the same form, but each inner ReLU acts on one physics observable minus a threshold, max(0, Q − t), which is an if-statement.</p>
+<div style="display:flex; gap:32px; align-items:stretch">
+<div style="flex:1; display:flex; flex-direction:column; gap:14px; background:#FFFFFF; border:2px solid #C9D0DA; border-radius:14px; padding:28px">
+<h3 style="font-size:32px; font-weight:600">Neuron of the network</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#1D2433">h = max(0,<br>&#160;&#160;&#160;&#160;w₁·max(0, a₁·u + c₁)<br>&#160;&#160;+ w₂·max(0, a₂·u + c₂)<br>&#160;&#160;+ …<br>&#160;&#160;+ b)</p>
+<p style="font-size:25px; line-height:1.4; color:#3F4A5A">u: all outputs of the layer before, themselves built from all particles’ (pT, η, φ). The inner units have no direct physical meaning.</p>
+</div>
+<div style="flex:1; display:flex; flex-direction:column; gap:14px; background:#E7EEF6; border:2px solid #1F4E79; border-radius:14px; padding:28px">
+<h3 style="font-size:32px; font-weight:600; color:#1F4E79">Neuron written with MARS</h3>
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#1D2433">h = max(0,<br>&#160;&#160;&#160;&#160;β₁·max(0, Q₁ − t₁)<br>&#160;&#160;+ β₂·max(0, t₂ − Q₂)<br>&#160;&#160;+ β₃·max(0, Q₃ − t₃)·max(0, Q₄ − t₄)<br>&#160;&#160;+ … + β₀)</p>
+<p style="font-size:25px; line-height:1.4; color:#3F4A5A">Q: physics observables of the jet; t: thresholds. max(0, Q − t) = “if Q &gt; t: Q − t”. A product of two hinges is an if-statement with two conditions.</p>
+</div>
+</div>
+<p style="font-size:26px; line-height:1.4; color:#3F4A5A">Each network neuron j is fitted separately: the MARS sum reproduces the neuron’s value before the ReLU, zⱼ, by least squares, and the neuron is max(0, ẑⱼ), as in the network.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">8 · MARS: multivariate adaptive regression splines [1]; related: symbolic regression of network components [9]</p>
+</section>
+</div></div><div class="frame" id="s8"><div class="scale"><section class="slide" id="select" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:26px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 1: How MARS Adds Hinges</h2>
+<p style="font-size:28px; line-height:1.4">MARS starts from a constant and adds hinges one at a time. At each step it tries every observable and every threshold, keeps the hinge that reduces the squared error most, and refits all coefficients.</p>
+<div style="display:flex; gap:40px; align-items:flex-start">
+<img src="images/f7f4de08407963371d95f92271ea5fd6.png" alt="First step of the search for network neuron 3 against ln(total pT): candidate hinges at many thresholds (dotted grey) and the least-squares best (solid red), max(0, a (6.67 - x)), which follows the bin means" style="width:820px; height:603px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<div style="flex:1; display:flex; flex-direction:column; gap:22px">
+<p style="font-size:26px; line-height:1.45; color:#3F4A5A">Example: network neuron 3 against x = ln(total pT of the jet), bin means. Dotted: candidate hinges at different thresholds. Solid: the least-squares best, max(0, a·(6.67 − x)), which follows the curve. The next hinge is chosen in the same way and added to this one.</p>
+<p style="font-size:26px; line-height:1.45; color:#3F4A5A"><b>Stopping:</b> a hinge counts as useful if it raises the R² of the neuron value on validation jets by at least 10⁻⁴. The search stops after 5 steps in a row without such a gain, or at 100 hinges. In the 8-particle fit the 16 neurons ended with 18 to 100 hinges.</p>
+<p style="font-size:26px; line-height:1.45; color:#3F4A5A">Candidates: all observables, thresholds at their 5–95% quantiles, and products of two hinges.</p>
+</div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">9 · illustration fitted to the neuron value; the formulas fit the value before the ReLU</p>
+</section>
+</div></div><div class="frame" id="s9"><div class="scale"><section class="slide" id="step2" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:22px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 2: Joint Tuning of the Coefficients</h2>
+<p style="font-size:28px; line-height:1.4">Step 2 keeps the hinges and thresholds of step 1 and trains all coefficients of the 16 neurons together, through the network’s unchanged last layer, so that the class probabilities match a target, while each formula neuron is kept close to its network neuron.</p>
+<table style="font-size:24px; color:#1D2433">
+<tr><th style="width:18%">step</th><th style="width:22%">what is fitted</th><th style="width:32%">target</th><th style="width:28%">loss</th></tr>
+<tr><td>1 (MARS)</td><td>each neuron separately</td><td>the network’s neuron value before the ReLU, zⱼ</td><td>least squares (regression)</td></tr>
+<tr style="background:#E7EEF6"><td><b>2, tuned on the network</b></td><td>all coefficients together</td><td><b>the network’s output class probabilities</b> for each jet</td><td>cross-entropy to those probabilities + λR</td></tr>
+<tr><td><b>2, tuned on truth</b></td><td>all coefficients together</td><td><b>the true class</b> of each jet</td><td>cross-entropy to the true class + λR</td></tr>
+</table>
+<div style="display:flex; gap:40px; align-items:center">
+<img src="images/f753d7f2b080bf20448904116d9decad.png" alt="h_hat_j = max(0, z_hat_j); p_c = softmax(b_c + sum_j K_jc h_hat_j); L_network = -(1/N) sum_n sum_c p_net_c(n) log p_c(n) + lambda R; L_truth = -(1/N) sum_n log p_{y_n}(n) + lambda R; R = (1/16) sum_j mean_n (h_hat_j(n) - h_net_j(n))^2 / Var(h_net_j), lambda = 0.01" style="width:600px; height:324px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<div style="flex:1; display:flex; flex-direction:column; gap:14px">
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A"><b>R</b>: mean squared difference between each formula neuron and the network’s neuron, in units of that neuron’s variance.</p>
+<p style="font-size:25px; line-height:1.45; color:#3F4A5A">Without R, the 16 neurons are constrained only through the 5 class scores; tuning then changes them in directions that do not affect the class probabilities (backup slides). With λ = 0.01 agreement and accuracy are unchanged and every neuron stays close to the network’s.</p>
+</div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">10 · kept training step: highest validation agreement (network target) or accuracy (truth target)</p>
+</section>
+</div></div><div class="frame" id="s10"><div class="scale"><section class="slide" id="step3" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 3 (Optional): Pruning</h2>
+<p style="font-size:26px; color:#6A7482">Makes the formula smaller; does not improve it</p>
+</div>
+<p style="font-size:28px; line-height:1.4">After step 2 the formula still has all the if-statements from step 1, and many of them add very little. Pruning removes those with the smallest contribution Iₘ (the typical amount they add), retrains the rest with the same loss (including λR), and keeps a cut if validation agreement drops by at most 0.1 points.</p>
+<img src="images/ca35127da495abab30af702a1db5d87b.png" alt="I_m = |beta_m| times the standard deviation of B_m over jets; keep the cut if A_val >= A_val_ref - 0.1%, else halve f; f starts at 0.15, stop when f < 0.02" style="width:1150px; height:128px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<table style="font-size:24px; color:#1D2433">
+<tr><th style="width:14%">particles</th><th style="width:22%; text-align:right">step 1: per neuron</th><th style="width:16%; text-align:right">step 1: total</th><th style="width:16%; text-align:right">after pruning</th><th style="width:16%; text-align:right">agreement</th><th style="width:16%; text-align:right">accuracy</th></tr>
+<tr><td>8</td><td style="text-align:right">100</td><td style="text-align:right">1,297</td><td style="text-align:right"><b>782</b></td><td style="text-align:right"><b>90.54%</b></td><td style="text-align:right">65.65%</td></tr>
+<tr><td>8</td><td style="text-align:right">60</td><td style="text-align:right">878</td><td style="text-align:right">525</td><td style="text-align:right">90.25%</td><td style="text-align:right">65.50%</td></tr>
+<tr><td>64</td><td style="text-align:right">100</td><td style="text-align:right">1,359</td><td style="text-align:right"><b>690</b></td><td style="text-align:right"><b>94.18%</b></td><td style="text-align:right">81.37%</td></tr>
+<tr><td>64</td><td style="text-align:right">60</td><td style="text-align:right">930</td><td style="text-align:right">552</td><td style="text-align:right">93.94%</td><td style="text-align:right">81.25%</td></tr>
+</table>
+<p style="font-size:24px; color:#6A7482">Tuned on the network (λ = 0.01); all observables; 260,000 test jets. Starting from 100 per neuron gives 0.2–0.3 points more agreement.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">11</p>
+</section>
+</div></div><div class="frame" id="s11"><div class="scale"><section class="slide" id="step4" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 4 (Optional): Further Simplification</h2>
+<p style="font-size:26px; color:#6A7482">Makes the formula smaller and easier to read; does not improve it</p>
+</div>
+<p style="font-size:28px; line-height:1.4">The pruned formula still has several if-statements on the same observable, and on observables that measure nearly the same thing (e.g. ΣzΔR² and λ₁). Step 4 removes more of them, including whole observables, and after each removal refits the remaining weights so that every neuron keeps the values it had in the pruned formula.</p>
+<div style="display:flex; gap:40px; align-items:center">
+<img src="images/2d05bd9abd5a10dbd4c23bb649833511.png" alt="minimize sum_n w_nj (z_hat_j(n) - z_big_j(n))^2 with w_nj = K_j^T (diag p(n) - p(n) p(n)^T) K_j" style="width:620px; height:197px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<p style="flex:1; font-size:26px; line-height:1.45; color:#3F4A5A">Target: the pruned formula’s own neuron values. The thresholds of step 1 are kept until the end, then refined and rounded. Jets whose class depends strongly on neuron j (near a decision boundary) get a larger weight wₙⱼ.</p>
+</div>
+<p style="font-size:27px; line-height:1.45; color:#3F4A5A">The size is the smallest that stays within a margin set before testing: 782 → 399 if-statements for the formula tuned on the network (within 0.5 points of validation agreement); 349 → 199 for the formula tuned on truth (within 0.4 points of validation accuracy). 8 particles.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">12</p>
+</section>
+</div></div><div class="frame" id="s12"><div class="scale"><section class="slide" id="eval" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Step 5: Evaluation</h2>
+<p style="font-size:29px; line-height:1.4">All reported scores are computed once, on the full test file of 260,000 jets, which was not used for fitting or for any choice. Every choice in steps 1–4 used validation jets.</p>
+<img src="images/00bf865da631a0187e7d4a48db7533c3.png" alt="agreement = fraction of test jets where the formula's class equals the network's class; accuracy = fraction where the formula's class equals the true class; N = 260,000" style="width:820px; height:257px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<ul style="font-size:27px; line-height:1.45; color:#3F4A5A">
+<li>Neuron comparison: correlation between each formula neuron and the network neuron it replaces, on the same 260,000 test jets</li>
+<li>Descriptions of neurons and groups of jets (following slides): computed on 60,000 training jets</li>
+</ul>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">13</p>
+</section>
+</div></div><div class="frame" id="s13"><div class="scale"><section class="slide" id="results" data-section="Results on the full test file" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Agreement, Accuracy and Background Rejection: 8 Particles</h2>
+<p style="font-size:26px; color:#6A7482">260,000 test jets; all observables; tuned with each neuron kept close to the network’s (λ = 0.01)</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Tuning on the network gives 2.6 points more agreement with the network than tuning on truth (90.54% against 87.98%) at the same accuracy (65.65% and 65.62%; network 65.69%). Background rejection of the formulas tuned on the network is within 0.2 of the network’s value in every class.</p>
+<table style="font-size:24px; color:#1D2433">
+<tr><th style="width:12%">if-statements</th><th style="width:24%">tuned on</th><th style="width:12%; text-align:right">agreement</th><th style="width:12%; text-align:right">accuracy</th><th style="width:8%; text-align:right">g</th><th style="width:8%; text-align:right">q</th><th style="width:8%; text-align:right">W</th><th style="width:8%; text-align:right">Z</th><th style="width:8%; text-align:right">t</th></tr>
+<tr><td>network</td><td></td><td style="text-align:right">—</td><td style="text-align:right">65.69%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.2</td><td style="text-align:right">5.5</td><td style="text-align:right">11.2</td></tr>
+<tr><td>1,297</td><td>step 1 only</td><td style="text-align:right">88.28%</td><td style="text-align:right">64.59%</td><td style="text-align:right">3.8</td><td style="text-align:right">5.0</td><td style="text-align:right">6.4</td><td style="text-align:right">4.7</td><td style="text-align:right">10.3</td></tr>
+<tr><td>349</td><td>truth</td><td style="text-align:right">87.98%</td><td style="text-align:right">65.62%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.1</td><td style="text-align:right">5.3</td><td style="text-align:right">10.7</td></tr>
+<tr><td>199</td><td>truth, smaller version of 349</td><td style="text-align:right">87.34%</td><td style="text-align:right">65.38%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.0</td><td style="text-align:right">5.3</td><td style="text-align:right">10.6</td></tr>
+<tr style="background:#E7EEF6"><td><b>782</b></td><td><b>network</b></td><td style="text-align:right"><b>90.54%</b></td><td style="text-align:right">65.65%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.2</td><td style="text-align:right">5.4</td><td style="text-align:right">11.3</td></tr>
+<tr style="background:#E7EEF6"><td>525</td><td>network (from 60 per neuron)</td><td style="text-align:right">90.25%</td><td style="text-align:right">65.50%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.1</td><td style="text-align:right">5.3</td><td style="text-align:right">11.1</td></tr>
+<tr style="background:#E7EEF6"><td>399</td><td>network, smaller version of 782</td><td style="text-align:right">90.09%</td><td style="text-align:right">65.54%</td><td style="text-align:right">3.9</td><td style="text-align:right">5.1</td><td style="text-align:right">7.1</td><td style="text-align:right">5.4</td><td style="text-align:right">11.1</td></tr>
+</table>
+<p style="font-size:24px; color:#6A7482">Agreement: share of test jets given the network’s class. g … t: background rejection at 80% signal efficiency for that class against the other four.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">14</p>
+</section>
+</div></div><div class="frame" id="s14"><div class="scale"><section class="slide" id="results64" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Agreement, Accuracy and Background Rejection: 64 Particles</h2>
+<p style="font-size:26px; color:#6A7482">260,000 test jets; all observables; tuned with each neuron kept close to the network’s (λ = 0.01)</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Tuning on the network gives 1.8 points more agreement than tuning on truth (94.18% against 92.38%). The 690 is 0.43 points more accurate than the network (81.37% against 80.94%) and rejects more W and Z background at 80% efficiency (63.8 against 53.2, 93.4 against 73.7).</p>
+<table style="font-size:24px; color:#1D2433">
+<tr><th style="width:12%">if-statements</th><th style="width:24%">tuned on</th><th style="width:12%; text-align:right">agreement</th><th style="width:12%; text-align:right">accuracy</th><th style="width:8%; text-align:right">g</th><th style="width:8%; text-align:right">q</th><th style="width:8%; text-align:right">W</th><th style="width:8%; text-align:right">Z</th><th style="width:8%; text-align:right">t</th></tr>
+<tr><td>network</td><td></td><td style="text-align:right">—</td><td style="text-align:right">80.94%</td><td style="text-align:right">14.3</td><td style="text-align:right">9.9</td><td style="text-align:right">53.2</td><td style="text-align:right">73.7</td><td style="text-align:right">30.1</td></tr>
+<tr><td>1,359</td><td>step 1 only</td><td style="text-align:right">93.44%</td><td style="text-align:right">81.03%</td><td style="text-align:right">14.2</td><td style="text-align:right">9.6</td><td style="text-align:right">57.9</td><td style="text-align:right">83.1</td><td style="text-align:right">28.8</td></tr>
+<tr><td>400</td><td>truth</td><td style="text-align:right">92.38%</td><td style="text-align:right">81.70%</td><td style="text-align:right">15.2</td><td style="text-align:right">9.9</td><td style="text-align:right">68.7</td><td style="text-align:right">110.1</td><td style="text-align:right">33.3</td></tr>
+<tr><td>150</td><td>truth, smaller version of 400</td><td style="text-align:right">91.86%</td><td style="text-align:right">81.44%</td><td style="text-align:right">14.6</td><td style="text-align:right">9.7</td><td style="text-align:right">65.0</td><td style="text-align:right">96.1</td><td style="text-align:right">31.9</td></tr>
+<tr style="background:#E7EEF6"><td><b>690</b></td><td><b>network</b></td><td style="text-align:right"><b>94.18%</b></td><td style="text-align:right">81.37%</td><td style="text-align:right">14.5</td><td style="text-align:right">9.8</td><td style="text-align:right">63.8</td><td style="text-align:right">93.4</td><td style="text-align:right">30.3</td></tr>
+<tr style="background:#E7EEF6"><td>552</td><td>network (from 60 per neuron)</td><td style="text-align:right">93.94%</td><td style="text-align:right">81.25%</td><td style="text-align:right">14.4</td><td style="text-align:right">9.7</td><td style="text-align:right">62.2</td><td style="text-align:right">90.5</td><td style="text-align:right">29.7</td></tr>
+<tr style="background:#E7EEF6"><td>250</td><td>network, smaller version of 690</td><td style="text-align:right">93.70%</td><td style="text-align:right">81.18%</td><td style="text-align:right">14.3</td><td style="text-align:right">9.6</td><td style="text-align:right">61.7</td><td style="text-align:right">88.2</td><td style="text-align:right">29.6</td></tr>
+</table>
+<p style="font-size:24px; color:#6A7482">Agreement: share of test jets given the network’s class. g … t: background rejection at 80% signal efficiency for that class against the other four.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">15</p>
+</section>
+</div></div><div class="frame" id="s15"><div class="scale"><section class="slide" id="targets" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Agreement for Four Tuning Targets</h2>
+<p style="font-size:26px; color:#6A7482">All observables; same step 1; steps 2–4 tuned on each target</p>
+</div>
+<p style="font-size:27px; line-height:1.4">The network’s class probabilities give the highest agreement: 90.54% (8 particles) and 94.18% (64). With the one-hot class as target, agreement falls below step 1 alone (87.76% against 88.28% at 8 particles, 92.53% against 93.44% at 64) and pruning removes no term. With the neuron values as the only target, agreement is 88.65% and 93.55%.</p>
+<img src="images/11835e5aecc4125b0f55842bfce5c5f6.png" alt="Agreement with the network for four tuning targets. 8 particles, tuned and smaller: class probabilities 90.5 and 90.1, one-hot class 87.8 and 87.4, neuron values 88.7 and 87.4, true labels 88.0 and 87.3. 64 particles: 94.2 and 93.7, 92.5 and 91.2, 93.5 and 93.0, 92.4 and 91.9." style="width:1500px; height:500px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">17 · 260,000 test jets; λ = 0.01 for all targets except the neuron values; class probabilities as training targets: [10]</p>
+</section>
+</div></div><div class="frame" id="s16"><div class="scale"><section class="slide" id="control" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Control: Step 1 on an Untrained Network</h2>
+<p style="font-size:26px; color:#6A7482">Same architecture and number formats; weights drawn at random with each layer’s trained mean and spread; same observables</p>
+</div>
+<p style="font-size:27px; line-height:1.4">Step 1 reaches a median R² of 0.89 and 0.92 per neuron for the trained network (8 and 64 particles), and 0.55 and 0.16 for the untrained network. For the untrained 8-particle network, 97% of the formula’s term importance is on observables that depend on the jet orientation (Δη or Δφ alone); for the trained networks, none.</p>
+<img src="images/c00a663b3296a20cfffc5c6feca4a11f.png" alt="Left: median R² of step 1 per neuron, trained against untrained: 0.89 and 0.55 (8 particles), 0.92 and 0.16 (64 particles). Right: share of term importance on Δη- or Δφ-only observables at 8 particles: 0 trained, 97 untrained." style="width:1500px; height:500px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">18 · 50,000 test jets; step 1 fitted on 40,000 training jets; R²: formula neuron against network neuron; term importance: R² lost when the term is removed</p>
+</section>
+</div></div><div class="frame" id="s17"><div class="scale"><section class="slide" id="controlin" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Physics Observables and Raw Inputs</h2>
+<p style="font-size:26px; color:#6A7482">Trained network; each neuron fitted on training jets; median R² over neurons on 50,000 test jets</p>
+</div>
+<p style="font-size:27px; line-height:1.4">MARS on the physics observables reaches a higher R² per neuron than MARS on the raw inputs (pT, Δη, Δφ of each particle) and than boosted decision trees on the raw inputs.</p>
+<img src="images/a183bad93222750e208649088afe3367.png" alt="Median R² per neuron: MARS on physics observables 0.89 (8 particles) and 0.92 (64), MARS on raw inputs 0.58 and 0.42, boosted decision trees on raw inputs 0.83 and 0.79." style="width:1500px; height:560px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">19 · 50,000 test jets; untrained 64-particle network: boosted decision trees on the raw inputs also reach only R² = 0.15</p>
+</section>
+</div></div><div class="frame" id="s18"><div class="scale"><section class="slide" id="code1" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">A Neuron as Python Code</h2>
+<p style="font-size:26px; color:#6A7482">250 formula (tuned on the network, smaller version of the 690), 64 particles, file jedi_n64_formula250.py</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Each neuron is a short Python function of the jet quantities Q, made only of if-statements and linear expressions.</p>
+<div style="display:flex; gap:40px; align-items:flex-start">
+<div style="width:1100px; background:#1D2433; border-radius:12px; padding:26px 30px">
+<p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:19px; line-height:1.5; color:#E6EAF0">def neuron_12(Q):<br>&#160;&#160;&#160;&#160;z = -0.151<br>&#160;&#160;&#160;&#160;if Q.girth2_top15 &lt; 0.00586:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += 172.0 * Q.girth2_top15 - 1.00792<br>&#160;&#160;&#160;&#160;if Q.mass &lt; 59.7:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += -0.0234 * Q.mass + 4.21728<br>&#160;&#160;&#160;&#160;if 59.7 &lt;= Q.mass &lt; 83.4:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += -0.119 * Q.mass + 9.9246<br>&#160;&#160;&#160;&#160;if Q.sd_mass &gt;= 124.0:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += 0.0144 * Q.sd_mass - 1.7856<br>&#160;&#160;&#160;&#160;if Q.log_sum_pt &lt; 6.85 and Q.lam2 &lt; 0.0036:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += -3400.0 * (6.85 - Q.log_sum_pt) * (0.0036 - Q.lam2)<br>&#160;&#160;&#160;&#160;if Q.mass &lt; 90.0 and Q.psi_0p3 &lt; 0.999:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += -3.47 * (90.0 - Q.mass) * (0.999 - Q.psi_0p3)<br>&#160;&#160;&#160;&#160;if Q.sj3_pair_mass_max &gt; 123.0 and Q.sj3_pair_mass_min &lt; 65.0:<br>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;z += 0.000437 * (Q.sj3_pair_mass_max - 123.0) * (65.0 - Q.sj3_pair_mass_min)<br>&#160;&#160;&#160;&#160;return max(0.0, z)</p>
+</div>
+<ul style="flex:1; font-size:24px; line-height:1.45; color:#3F4A5A">
+<li>The two jet-mass lines make z fall linearly from light jets to 0 at m = 83.4 GeV; above that they add nothing</li>
+<li>The last if-statement uses the three subjets: it adds for jets with one subjet pair above 123 GeV and another below 65 GeV</li>
+<li>return max(0.0, z) is the ReLU of the network neuron</li>
+</ul>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">20</p>
+</section>
+</div></div><div class="frame" id="s19"><div class="scale"><section class="slide" id="code2" style="display:flex; flex-direction:column; gap:30px; padding:128px 128px 160px; background:#1d2433">
+  <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#f4f5f2">The Complete Classifier as One Python File</h2>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:29px; line-height:1.4; color:#dce3ea">The whole 64-particle jet tagger, from particle four-momenta to the class, runs as plain Python: 976 lines, only the standard library (math), with the network replaced by 250 if-statements.</p>
+  <div style="display:flex; flex-direction:row; gap:48px; align-items:start">
+    <div style="width:980px; display:flex; flex-direction:column; padding:30px; background:#11172a; border:1px solid #3a4560; border-radius:12px">
+      <p style="font-family:'JetBrains Mono', 'Courier New', monospace; font-size:24px; line-height:1.6; color:#e6eaf0">import math<br><br>def quantities(pt, eta, phi):&nbsp;&nbsp;&nbsp;# mass, e2, τ21, …<br>&nbsp;&nbsp;&nbsp;&nbsp;...<br>def neuron_0(Q): ...&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# 16 functions like neuron_12<br>...<br>def neuron_15(Q): ...<br><br>def logits(h):&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;# the network's last layer<br>&nbsp;&nbsp;&nbsp;&nbsp;h = [round_to_grid(x) for x in h]<br>&nbsp;&nbsp;&nbsp;&nbsp;return [B[c] + sum(h[j] * W[j][c] for j in range(16))<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;for c in range(5)]<br><br>def classify(pt, eta, phi):<br>&nbsp;&nbsp;&nbsp;&nbsp;s = logits(jet_layer_4(quantities(pt, eta, phi)))<br>&nbsp;&nbsp;&nbsp;&nbsp;return CLASSES[s.index(max(s))]</p>
+    </div>
+    <div style="display:flex; flex-direction:column; gap:26px; flex:1">
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">80.96%</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">accuracy, full test file (network 80.94%)</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">150</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">if-statements in 16 neurons</p>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:4px">
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:64px; font-weight:600; line-height:1.1; color:#f4f5f2">586</p>
+        <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#9fb7cf">lines of Python, no machine-learning library</p>
+      </div>
+    </div>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#9fb7cf">21 · code abbreviated; round_to_grid stands for the file’s fixed-point rounding line. Files for every formula: aaronw5.github.io/jet-tagger-distillation, tab “Python files”</p>
+</section>
+</div></div><div class="frame" id="s20"><div class="scale"><section class="slide" id="tool" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Browsing Tool: aaronw5.github.io/jet-tagger-distillation</h2>
+<p style="font-size:28px; line-height:1.4">All formulas (8 and 64 particles), their explanations and Python files can be browsed on a web page built for this study. The neuron plots on the following slides are taken from it.</p>
+<div style="display:flex; gap:32px; align-items:flex-start">
+<img src="images/1ca2f19541b4b3bbd65c4828f1b8aa22.png" alt="Top of the 8-particle page: title, tabs, how to read the explanation tab, and the buttons for every formula" style="width:1040px; height:441px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<ul style="flex:1; font-size:24px; line-height:1.45; color:#3F4A5A">
+<li><b>Results</b>: agreement, accuracy, rejection and ROC curves on the full test file</li>
+<li><b>What each part does</b>: per neuron, what it measures, comparison with the network neuron, every if-statement with plots, groups of jets</li>
+<li><b>Class scores</b>: how the five scores are built from the neurons</li>
+<li><b>Try a jet</b>: a test jet or typed particles, with every if-statement evaluated</li>
+<li><b>Python files</b>: each formula as a standalone classifier</li>
+</ul>
+</div>
+<p style="font-size:24px; color:#6A7482">The network itself (layer-by-layer analysis, including the plots on slide 2): the JEDI-linear explorer, aaronw5.github.io/jedi-linear-explorer</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">22</p>
+</section>
+</div></div><div class="frame" id="s21"><div class="scale"><section class="slide" id="match" data-section="Neurons in detail" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:26px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Formula Neurons Compared with Network Neurons</h2>
+<p style="font-size:26px; color:#6A7482">399 formula (tuned on the network, smaller version of the 782), 8 particles, 260,000 test jets</p>
+</div>
+<p style="font-size:28px; line-height:1.4">After tuning, the formula neurons still follow the network neurons they replace, so each formula neuron can be read as a description of the corresponding network neuron.</p>
+<div style="display:flex; gap:56px; align-items:flex-start">
+<div style="display:flex; flex-direction:column; gap:12px">
+<img src="images/82c969a7ec9d527d339abaed50b8e38e.png" alt="2D histogram of the formula's neuron 10 against the network's neuron 10; points cluster along the diagonal" style="width:430px; height:417px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:26px; line-height:1.4"><b>Neuron 10</b>: correlation 0.952<br>both on or both off: 89.2%</p>
+</div>
+<div style="display:flex; flex-direction:column; gap:12px">
+<img src="images/745147ccc9605a1090869c86c4520270.png" alt="2D histogram of the formula's neuron 5 against the network's neuron 5" style="width:430px; height:417px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:26px; line-height:1.4"><b>Neuron 5</b>: correlation 0.968<br>both on or both off: 87.4%</p>
+</div>
+<ul style="flex:1; font-size:26px; line-height:1.45; color:#3F4A5A">
+<li>Horizontal axis: network neuron value; vertical axis: formula neuron value; shade: number of jets (logarithmic); red dashed line: equal values</li>
+<li>Both on or both off: share of jets where both values are 0 or both are positive</li>
+<li>All 16 neurons: correlation 0.78–0.97 (median 0.89)</li>
+</ul>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">23</p>
+</section>
+</div></div><div class="frame" id="s22"><div class="scale"><section class="slide" id="n10" style="display:flex; flex-direction:column; gap:26px; padding:128px 128px 160px; background:#fafaf7">
+  <div style="display:flex; flex-direction:column; gap:8px">
+    <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 10: ΣzΔR, ΣzΔR² and λ₁</h2>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+  </div>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">Neuron 10 is a sum of 24 if-statements. Together they make it increase with ΣzΔR, ΣzΔR² and λ₁ (zᵢ = pTᵢ / ΣpT).</p>
+  <div style="display:flex; flex-direction:row; gap:44px; align-items:start">
+    <div style="display:flex; flex-direction:column; gap:10px">
+      <img src="images/aba341a20c6803608dad75ad8038002c.png" alt="First eight if-statements of neuron 10, each with the true-class mix of the jets that pass it" style="width:940px; height:328px; background:#ffffff; border:1px solid #d5dae1; border-radius:12px; object-fit:contain">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">First 8 of the 24 if-statements; bar: true-class mix of the jets that pass (g, q, W, Z, t)</p>
+    </div>
+    <ul style="flex:1; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; line-height:1.45; color:#3f4a5a">
+      <li>Mean value by true class: t 4.33, Z 1.98, W 1.95, g 1.10, q 0.54</li>
+      <li>Rank correlation with ΣzΔR and ΣzΔR² 0.872 (training jets)</li>
+      <li>Separates top jets from the rest with AUC 0.83</li>
+      <li>Non-zero for 99.2% of top jets and 58.1% of quark jets</li>
+    </ul>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">24</p>
+</section>
+</div></div><div class="frame" id="s23"><div class="scale"><section class="slide" id="n10term" style="display:flex; flex-direction:column; gap:26px; padding:128px 128px 160px; background:#fafaf7">
+  <div style="display:flex; flex-direction:column; gap:8px">
+    <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 10: A Single If-Statement</h2>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+  </div>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">The if-statement ΣzΔR² &gt; 0.0075 adds to neuron 10 only for wide jets, and the amount grows linearly with ΣzΔR² above the threshold.&nbsp;</p>
+  <div style="display:flex; flex-direction:row; gap:40px; align-items:start">
+    <img src="images/91fa6ad85fb7662ac9e64d182df5cc5b.png" alt="Left: what the if-statement adds to neuron 10 as a function of ΣzΔR²: 0 below 0.0075, then rising linearly with slope 274. Right: distribution of ΣzΔR² for each true class with the threshold at 0.0075; W and Z peak below it, top jets extend far above it." style="width:1100px; height:390px; background:#ffffff; border:1px solid #d5dae1; object-fit:contain">
+    <ul style="flex:1; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; line-height:1.45; color:#3f4a5a">
+      <li>if ΣzΔR² &gt; 0.0075: z += 274 × (ΣzΔR² − 0.0075)</li>
+      <li>ΣzΔR² = Σᵢ pTᵢΔRᵢ² / Σᵢ pTᵢ</li>
+      <li>Passes for 25.3% of jets and then adds 2.67 on average</li>
+      <li>Passing jets: t 62%, Z 18%, g 14%, q 6%, W 0.7%</li>
+    </ul>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">25</p>
+</section>
+</div></div><div class="frame" id="s24"><div class="scale"><section class="slide" id="n10use" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:28px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Neuron 10: Contribution to the Class Scores</h2>
+<p style="font-size:26px; color:#6A7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+</div>
+<p style="font-size:28px; line-height:1.4">The network’s last layer uses neuron 10 in two class scores only: it increases the t score and decreases the q score. A wide jet therefore favours t and disfavours q.</p>
+<img src="images/5b8d343d6b8a88e295e660b617277238.png" alt="Average amount neuron 10 adds to each class score, overall and per true class: t positive, q negative, g W Z zero" style="width:1400px; height:266px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<ul style="font-size:27px; line-height:1.45; color:#3F4A5A">
+<li>Contribution = neuron value × last-layer weight Kⱼ꜀; left: average over all jets, right: average per true class</li>
+<li>t score: +0.75 on average, +1.62 for top jets; q score: −0.25 on average, −0.54 for top jets; g, W, Z: weight 0</li>
+</ul>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">26</p>
+</section>
+</div></div><div class="frame" id="s25"><div class="scale"><section class="slide" id="n10groups" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Neuron 10: Groups of Jets by Active If-Statements</h2>
+<p style="font-size:26px; color:#6A7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Jets that pass the same combination of if-statements have similar m and ΣzΔR². Each combination therefore corresponds to a different kind of jet, with its own typical neuron value and class mix.</p>
+<div style="display:flex; gap:36px; align-items:flex-start">
+<img src="images/769ce900cd4c1405c3eedd59d1973e63.png" alt="The 10 main groups of jets for neuron 10, each with a physics name, share of jets, mean neuron value, class mix and one chip per if-statement" style="width:880px; height:294px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<div style="flex:1; display:flex; flex-direction:column; gap:18px">
+<img src="images/d2e6b6d669ad3b8203bc8b8752c0d64c.png" alt="a_n = (beta_1 B_1(x_n), ..., beta_M B_M(x_n)); k-means with 10 clusters on the a_n" style="width:560px; height:141px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<p style="font-size:24px; line-height:1.4; color:#3F4A5A">aₙ: what each if-statement adds for jet n. Groups: k-means on aₙ (60,000 training jets); no labels used. Chips: ✓ passes for ≥ 90%, ~ some, · ≤ 10% of the group.</p>
+<table style="font-size:24px; color:#1D2433">
+<tr><th style="width:44%">group (mean m)</th><th style="width:18%; text-align:right">jets</th><th style="width:18%; text-align:right">neuron</th><th style="width:20%; text-align:right">class mix</th></tr>
+<tr><td>88 GeV</td><td style="text-align:right">0.6%</td><td style="text-align:right">12.03</td><td style="text-align:right">t 95%</td></tr>
+<tr><td>84 GeV</td><td style="text-align:right">1.8%</td><td style="text-align:right">9.40</td><td style="text-align:right">t 96%</td></tr>
+<tr><td>55 GeV</td><td style="text-align:right">36.2%</td><td style="text-align:right">2.44</td><td style="text-align:right">W+Z 73%</td></tr>
+<tr><td>9 GeV</td><td style="text-align:right">30.8%</td><td style="text-align:right">0.20</td><td style="text-align:right">g+q 80%</td></tr>
+</table>
+</div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">27</p>
+</section>
+</div></div><div class="frame" id="s26"><div class="scale"><section class="slide" id="n5" style="display:flex; flex-direction:column; gap:24px; padding:128px 128px 160px; background:#fafaf7">
+  <div style="display:flex; flex-direction:column; gap:8px">
+    <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 5: pT Concentration in the Hardest Particles</h2>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles</p>
+  </div>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:28px; line-height:1.4; color:#1d2433">Neuron 5 is large when most of the jet pT is carried by the few hardest particles. Its largest values are for jets with m ≈ 10 GeV and max zᵢ ≈ 0.5.</p>
+  <div style="display:flex; flex-direction:row; gap:36px; align-items:start">
+    <img src="images/cca097ac0bc30704a4c1f32f94098f70.png" alt="The 10 main groups of jets for neuron 5 with their if-statement chips and class mix" style="width:860px; height:295px; background:#ffffff; border:1px solid #d5dae1; border-radius:12px; object-fit:contain">
+    <div style="display:flex; flex-direction:column; gap:18px; flex:1">
+      <ul style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.45; color:#3f4a5a">
+        <li>19 if-statements; mean value q 4.54, g 1.48, Z 1.25, W 1.23, t 0.39</li>
+        <li>Its strongest if-statements: z₇ &lt; 0.070, and ΣzΔR² &lt; 0.0017 with |Σz(Δη,Δφ)| &lt; 0.024</li>
+        <li>Raises the q score; lowers the g and t scores</li>
+      </ul>
+      <table style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#1d2433">
+        <tr><th style="width:46%">group (mean m, max zᵢ)</th><th style="width:18%; text-align:right">jets</th><th style="width:18%; text-align:right">neuron</th><th style="width:18%; text-align:right">class mix</th></tr>
+        <tr><td>10 GeV, 0.51</td><td style="text-align:right">4.3%</td><td style="text-align:right">9.47</td><td style="text-align:right">q 80%</td></tr>
+        <tr><td>8 GeV, 0.38</td><td style="text-align:right">7.7%</td><td style="text-align:right">6.00</td><td style="text-align:right">q 64%</td></tr>
+        <tr><td>8 GeV, 0.26</td><td style="text-align:right">9.1%</td><td style="text-align:right">2.36</td><td style="text-align:right">g 54%</td></tr>
+        <tr><td>53 GeV, 0.24</td><td style="text-align:right">30.9%</td><td style="text-align:right">0.04</td><td style="text-align:right">t 37%</td></tr>
+      </table>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">max zᵢ: largest pTᵢ / ΣpT in the jet</p>
+    </div>
+  </div>
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">28</p>
+</section>
+</div></div><div class="frame" id="s27"><div class="scale"><section class="slide" id="massnet" style="display:flex; flex-direction:column; gap:22px; padding:128px 128px 160px; background:#fafaf7">
+  <div style="display:flex; flex-direction:column; gap:8px">
+    <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:56px; font-weight:600; line-height:1.1; color:#1d2433">Network Neurons Spike near Particle Masses</h2>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:26px; color:#6a7482">The network itself, 64 particles; its inputs are only the particles’ (pT, η, φ), no masses</p>
+  </div>
+  <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:27px; line-height:1.4; color:#1d2433">Mean value of three last-layer neurons per 0.5 GeV of jet mass. Neuron 0 is largest at 79.25 GeV (m_W = 80.4 GeV) and neuron 7 at 91.75 GeV (m_Z = 91.19 GeV). Neuron 10 falls to half its height at 181 GeV, just above m_t = 172.8 GeV. The network learned these positions from the training jets.</p>
+  <img src="images/3804793f576eb2989069fa17e3b38290.png" alt="Mean value of network neurons 0, 7 and 10 against jet mass for all 260,000 test jets. Neuron 0 has its maximum at 79.25 GeV, neuron 7 at 91.75 GeV; neuron 10 rises up to about 155 GeV and falls to half height at 181.2 GeV. Lower panels: jet-mass distributions of true W, Z and top jets, peaking at 79.5, 90.5 and 171.5 GeV." style="width:1664px; height:560px; background:#ffffff; border:1px solid #d5dae1; border-radius:12px; object-fit:contain">
+  <p style="position:absolute; bottom:64px; left:128px; width:1664px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#8a94a3">29 · 260,000 test jets; lower panels: jet mass of true W, Z, t jets (peaks at 79.5, 90.5, 171.5 GeV)</p>
+</section>
+</div></div><div class="frame" id="s28"><div class="scale"><section class="slide" id="allifz" style="display:flex; flex-direction:row; gap:44px; align-items:start; padding:128px 128px 160px; background:#fafaf7">
+  <div style="width:830px; display:flex; flex-direction:column; gap:12px">
+    <p style="padding:18px 20px; font-family:'JetBrains Mono', 'Courier New', monospace; font-size:17.5px; line-height:1.55; color:#1d2433; background:#ffffff; border:1px solid #d5dae1; border-radius:12px">if m &lt; 81: z += 0.107·(81 − m)<br>if m &lt; 91: z += 0.263·(91 − m)<br>if m &lt; 93: z −= 0.285·(93 − m)<br>if m &lt; 91 and Ψ &gt; 0.96: z −= 8.38·(91 − m)(Ψ − 0.96)<br>if m &lt; 100 and Ψ &gt; 0.96: z += 5.64·(100 − m)(Ψ − 0.96)<br>if m &lt; 91 and m_SD &gt; 54: z −= 0.00264·(91 − m)(m_SD − 54)<br>if m &lt; 120 and m_SD &gt; 76: z += 0.00239·(120 − m)(m_SD − 76)<br>if LHA &lt; 0.31: z += 13.9·(0.31 − LHA)<br>if w &lt; 0.0076 and M₂ &lt; 0.12: z += 2490·(0.0076 − w)(0.12 − M₂)<br>if w₃₀ &lt; 0.0068: z += 320·(0.0068 − w₃₀)<br>if w₃₀ &lt; 0.0082: z −= 530·(0.0082 − w₃₀)<br>if w₃₀ &lt; 0.012: z += 194·(0.012 − w₃₀)<br>if w₅₀ &lt; 0.0034: z −= 2740·(0.0034 − w₅₀)<br>if n &lt; 6.2 and e₃ &lt; 0.000067: z −= 1810·(6.2 − n)(0.000067 − e₃)<br>if n &lt; 6.1 and pT₄ &gt; 60: z += 0.00298·(6.1 − n)(pT₄ − 60)<br>if n &lt; 6.3 and pT_soft &lt; 2.3: z += 0.0741·(6.3 − n)(2.3 − pT_soft)<br>if τ₁ &lt; 0.11: z −= 28.9·(0.11 − τ₁)<br>if τ₂₁′ &lt; 0.23: z += 3.47·(0.23 − τ₂₁′)<br>if τ₂₁′ &lt; 0.25 and ΔR_sj &gt; 0.19: z −= 22.2·(0.25 − τ₂₁′)(ΔR_sj − 0.19)<br>if z₂₀ &gt; 0.92: z −= 10.7·(z₂₀ − 0.92)</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:18px; line-height:1.45; color:#6a7482">m: jet mass [GeV]; m_SD: soft-drop mass; Ψ: pT share within ΔR &lt; 0.3; w, w₃₀, w₅₀: Σ zΔR² of all, the 30, the 50 hardest particles; n: particles at 0.2 ≤ ΔR &lt; 0.4; τ₂₁′: τ₂₁ with β = 2; ΔR_sj: distance of the 2 subjet axes; z₂₀: pT share of the 20 hardest</p>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:20px; flex:1">
+    <div style="display:flex; flex-direction:column; gap:8px">
+      <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:50px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 7: All If-Statements&nbsp;</h2>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">288 formula (tuned on the network; no mass values offered), 64 particles, accuracy 81.05% (network 80.94%). Start value z = −0.555</p>
+    </div>
+    <ul style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.45; color:#3f4a5a">
+      <li>m &lt; 91 and m &lt; 100, each with Ψ &gt; 0.96: for collimated jets the two terms together are largest at 91 GeV and zero below 72.5 and above 100 GeV</li>
+      <li>m &lt; 81, 91, 93 alone: change z by less than 1</li>
+      <li>w, w₃₀, w₅₀ (ΣzΔR²), LHA, τ₁: together raise z for small values</li>
+      <li>The other 6 terms: soft-drop mass, particles at 0.2–0.4, τ₂₁′ with the subjet distance, e₃</li>
+    </ul>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; line-height:1.4; color:#3f4a5a">Mean: Z 1.50, W 0.09, t 0.06, g 0.05, q 0.03 (network neuron 7: Z 2.05). Raises the Z score (weight +0.91), lowers W (−0.63) and t (−0.28).</p>
+  </div>
+  <p style="position:absolute; right:128px; bottom:64px; width:200px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; text-align:right; color:#8a94a3">32</p>
+</section>
+</div></div><div class="frame" id="s29"><div class="scale"><section class="slide" id="allift" style="display:flex; flex-direction:row; gap:44px; align-items:start; padding:128px 128px 160px; background:#fafaf7">
+  <div style="width:830px; display:flex; flex-direction:column; gap:12px">
+    <p style="padding:16px 18px; font-family:'JetBrains Mono', 'Courier New', monospace; font-size:16px; line-height:1.55; color:#1d2433; background:#ffffff; border:1px solid #d5dae1; border-radius:12px">if ΣzΔR &lt; 0.148: z += 58.6·(0.148 − ΣzΔR)<br>if λ₁ &lt; 0.0161: z += 253·(0.0161 − λ₁)<br>if pT₁₋₅ &gt; 667 and pT₇ &lt; 38.1: z += 0.00108·(pT₁₋₅ − 667)(38.1 − pT₇)<br>if ΣzΔR &lt; 0.148 and ln ΣpT &lt; 6.81: z −= 75.4·(0.148 − ΣzΔR)(6.81 − ln ΣpT)<br>if e₂ &lt; 0.079: z −= 55.3·(0.079 − e₂)<br>if e₃ &lt; 0.000051: z += 19700·(0.000051 − e₃)<br>if m &gt; 49.1: z −= 0.0244·(m − 49.1)<br>if pT₇ &gt; 48.4: z −= 0.0571·(pT₇ − 48.4)<br>if pT₁₋₅ &gt; 674: z −= 0.00746·(pT₁₋₅ − 674)<br>if pT₁₋₅ &gt; 794: z += 0.0137·(pT₁₋₅ − 794)<br>if z₅ &lt; 0.0283: z −= 167·(0.0283 − z₅)<br>if z₇ &lt; 0.028: z −= 189·(0.028 − z₇)<br>if e₃ &lt; 0.000069 and D₃ &gt; 0.0598: z += 2100·(0.000069 − e₃)(D₃ − 0.0598)<br>if e₃ &lt; 0.000054 and c &lt; 0.0377: z −= 1180000·(0.000054 − e₃)(0.0377 − c)<br>if ΣzΔR &lt; 0.15 and M₃ &lt; 0.0746: z += 125·(0.15 − ΣzΔR)(0.0746 − M₃)<br>if ΣzΔR &lt; 0.148 and λ₂ &lt; 0.000536: z −= 8780·(0.148 − ΣzΔR)(0.000536 − λ₂)<br>if ΣzΔR &lt; 0.145 and pT₇ &lt; 38.2: z −= 0.987·(0.145 − ΣzΔR)(38.2 − pT₇)<br>if ΣzΔR &lt; 0.152 and m_sj &gt; 30.4: z −= 1.58·(0.152 − ΣzΔR)(m_sj − 30.4)<br>if ΣzΔR &lt; 0.142 and τ₂ &gt; 0.00886: z += 281·(0.142 − ΣzΔR)(τ₂ − 0.00886)<br>if ΣzΔR &lt; 0.153 and z₇ &gt; 0.0616: z += 392·(0.153 − ΣzΔR)(z₇ − 0.0616)<br>if pT₆ &lt; 31.9 and z₇ &lt; 0.0624: z −= 2.22·(31.9 − pT₆)(0.0624 − z₇)<br>if ΣpT &gt; 1000 and pT₆ &lt; 70: z −= 0.000466·(ΣpT − 1000)(70 − pT₆)</p>
+    <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:17px; line-height:1.45; color:#6a7482">ΣzΔR: Σᵢ pTᵢΔRᵢ / Σᵢ pTᵢ; e₂, e₃: energy correlations; λ₁, λ₂: axes of the pT-weighted (Δη, Δφ) spread; m: jet mass [GeV]; pTᵢ: pT of particle i [GeV]; pT₁₋₅: pT of the 5 hardest; zᵢ: pT share of particle i; c: centroid offset; D₃, M₃: 3-prong energy-correlation ratios; τ₂: N-subjettiness; m_sj: mass of the harder of 2 subjets</p>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:20px; flex:1">
+    <div style="display:flex; flex-direction:column; gap:8px">
+      <h2 style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:50px; font-weight:600; line-height:1.1; color:#1d2433">Neuron 13: All If-Statements&nbsp;</h2>
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; color:#6a7482">399 formula (tuned on the network, smaller version of the 782), 8 particles, accuracy 65.54% (network 65.69%). Start value z = 0.714; neuron = max(0, z)</p>
+    </div>
+    <ul style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:25px; line-height:1.45; color:#3f4a5a">
+      <li>ΣzΔR &lt; 0.148 (passes 95.1%, adds 5.56 on average) and λ₁ &lt; 0.0161 (89.7%, +3.07): the narrower the jet, the larger the neuron</li>
+      <li>pT of the 5 hardest above 667 GeV with pT₇ &lt; 38.1 GeV (27.4%, +2.63): raises it for hard jets with few particles</li>
+      <li>ΣzΔR &lt; 0.148 with ln ΣpT &lt; 6.81 (81.3%, −1.89): lowers it for lower-pT jets</li>
+      <li>The other 18 terms are smaller corrections</li>
+    </ul>
+    <div style="display:flex; flex-direction:row; gap:16px; align-items:center">
+      <img src="images/9b2431900c39a7d3b210dc94295df8c2.png" alt="Distribution of neuron 13 for each true class: top jets low, all others high" style="width:390px; height:117px; background:#ffffff; border:1px solid #d5dae1; border-radius:8px; object-fit:contain">
+      <p style="font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; line-height:1.4; color:#3f4a5a">Mean: q 4.48, W 4.05, Z 3.64, g 3.59, t 1.11. Scores: t −48%, W +7%, Z +7%</p>
+    </div>
+  </div>
+  <p style="position:absolute; right:128px; bottom:64px; width:200px; font-family:'IBM Plex Sans', Arial, sans-serif; font-size:24px; text-align:right; color:#8a94a3">33</p>
+</section>
+</div></div><div class="frame" id="s30"><div class="scale"><section class="slide" id="ex1" data-section="Example classifications" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:26px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Example Classification: Top Jet</h2>
+<p style="font-size:26px; color:#6A7482">399 formula (tuned on the network, smaller version of the 782), 8 particles, one test jet</p>
+</div>
+<p style="font-size:28px; line-height:1.4">For a single jet, each class score is the sum of the neuron values times their weights. For this top jet the t score is largest; neuron 10 (ΣzΔR, ΣzΔR², λ₁) contributes most to the difference between t and the runner-up g.</p>
+<img src="images/1f61d6a817fcf9fbed3f52736b3cebb9.png" alt="A top jet in the detector plane with three prongs, the five class scores (t largest at 2.94) and the three neurons that separate t from g" style="width:1664px; height:500px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:26px; color:#3F4A5A">Scores: t 2.94, g 0.51, q −0.02, W −5.28, Z −5.48. The network also gives t.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">34</p>
+</section>
+</div></div><div class="frame" id="s31"><div class="scale"><section class="slide" id="ex1n10" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:row; gap:44px; align-items:flex-start">
+<img src="images/e9ce24ab9352ce7327950dae9630875f.png" alt="Neuron 10 for the top jet: every if-statement with the jet's value, whether it passes and what it adds; the sum gives 3.31" style="width:975px; height:792px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<div style="flex:1; display:flex; flex-direction:column; gap:24px">
+<h2 style="font-size:50px; font-weight:600; line-height:1.1">Example Classification: Neuron 10 for the Top Jet</h2>
+<p style="font-size:27px; line-height:1.4">The neuron value for one jet is the start value plus what each passing if-statement adds; failing if-statements add 0.</p>
+<ul style="font-size:25px; line-height:1.45; color:#3F4A5A">
+<li>12 of the 24 if-statements pass</li>
+<li>Largest terms: ΣzΔR² &gt; 0.0075 +4.71, Σz(ΔR/0.8)^½ &gt; 0.305 −3.83, τ₁ &gt; 0.057 +1.97</li>
+<li>1.59 + all terms: z = 3.30, rounded to 3.31</li>
+<li>Contribution to the scores: t +1.24, q −0.41</li>
+</ul>
+</div>
+<p style="position:absolute; right:128px; bottom:64px; width:200px; text-align:right; font-size:24px; color:#8A94A3">35</p>
+</section>
+</div></div><div class="frame" id="s32"><div class="scale"><section class="slide" id="ex23" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:20px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Example Classifications: W Jet and Quark Jet</h2>
+<p style="font-size:26px; color:#6A7482">399 formula (tuned on the network, smaller version of the 782), 8 particles, two test jets</p>
+</div>
+<div style="display:flex; gap:32px; align-items:center">
+<img src="images/a1e2d7841eb360da179228ec83842d11.png" alt="A W jet: two close hard particles, W score 3.24 largest, Z second at 1.82" style="width:1110px; height:333px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="flex:1; font-size:25px; line-height:1.45; color:#3F4A5A">W 3.24 vs Z 1.29. The compact, centred, elongated shape (neurons 11 and 0) separates W from Z: +1.43 and +1.42.</p>
+</div>
+<div style="display:flex; gap:32px; align-items:center">
+<img src="images/135c5f8aee9368cd51ab616c5d967914.png" alt="A quark jet: narrow, few hard particles, q score 2.01 largest, g second at 1.09" style="width:1110px; height:333px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="flex:1; font-size:25px; line-height:1.45; color:#3F4A5A">q 2.01 vs g 1.34. pT concentrated in the hardest particles (neuron 5, +1.14) and a narrow, centred core (neuron 9, +0.55) separate q from g.</p>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">36 · the network gives the same class for both jets</p>
+</section>
+</div></div><div class="frame" id="s33"><div class="scale"><section class="slide" id="summary" data-section="Summary" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:32px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Summary</h2>
+<ul style="font-size:30px; line-height:1.5; color:#3F4A5A">
+<li>The 16 neurons of the last hidden layer of the JEDI-linear jet tagger were replaced by 16 sums of if-statements on physics quantities of the jet; the network’s last layer was kept unchanged.</li>
+<li>Method: MARS fit of each neuron to the network’s pre-activation, joint tuning of the coefficients through the last layer (to the network’s output, with each neuron kept close to the network’s), pruning, and simplification by distillation.</li>
+<li>Tuned on the network, the formulas give the network’s class for 90.5% (8 particles, 782 if-statements) and 94.2% (64 particles, 690) of the 260,000 test jets, and their smaller versions for 90.1% (399) and 93.7% (250); accuracy is within 0.5 points of the network.</li>
+<li>Each formula neuron corresponds to a physical property of the jet, for example ΣzΔR² and λ₁ (neuron 10) or pT concentration in the hardest particles (neuron 5). Like the network, the 64-particle formulas have windows at the W and Z masses, even when no mass observable is offered (through Σ zᵢzⱼΔRᵢⱼ² = (m/ΣpT)²).</li>
+<li>For the same network with random weights, step 1 reaches a median R² of 0.55 and 0.16 per neuron (trained: 0.89 and 0.92), and the 8-particle formula uses mainly orientation-dependent observables (Δη or Δφ alone).</li>
+<li>Jets that pass the same combination of if-statements form groups with distinct m, ΣzΔR² and pT sharing, and different class composition.</li>
+</ul>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">37 · aaronw5.github.io/jet-tagger-distillation</p>
+</section>
+</div></div><div class="frame" id="s34"><div class="scale"><section class="slide" id="refs" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:112px 128px 150px; display:flex; flex-direction:column; gap:24px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">References</h2>
+<div style="display:flex; gap:48px; align-items:flex-start">
+<div style="flex:1"><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[1] J. H. Friedman, Multivariate adaptive regression splines, Ann. Statist. 19 (1991) 1</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[2] L. de Oliveira, M. Kagan, L. Mackey, B. Nachman, A. Schwartzman, Jet-images — deep learning edition, JHEP 07 (2016) 069, arXiv:1511.05190</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[3] P. Baldi, K. Bauer, C. Eng, P. Sadowski, D. Whiteson, Jet substructure classification in high-energy physics with deep neural networks, PRD 93 (2016) 094034, arXiv:1603.09349</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[4] S. Chang, T. Cohen, B. Ostdiek, What is the machine learning?, PRD 97 (2018) 056009, arXiv:1709.10106</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[5] T. Faucett, J. Thaler, D. Whiteson, Mapping machine-learned physics into a human-readable space, PRD 103 (2021) 036020, arXiv:2010.11998</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[6] J. Collado, J. N. Howard, T. Faucett, T. Tong, P. Baldi, D. Whiteson, Learning to identify electrons, PRD 103 (2021) 116028, arXiv:2011.01984</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[7] G. Agarwal et al., Explainable AI for ML jet taggers using expert variables and layerwise relevance propagation, JHEP 05 (2021) 208, arXiv:2011.13466</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[8] A. Khot, M. S. Neubauer, A. Roy, A detailed study of interpretability of deep neural network based top taggers, Mach. Learn.: Sci. Technol. 4 (2023) 035003, arXiv:2210.04371</p></div>
+<div style="flex:1"><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[9] M. Cranmer et al., Discovering symbolic models from deep learning with inductive biases, NeurIPS 2020, arXiv:2006.11287</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[10] G. Hinton, O. Vinyals, J. Dean, Distilling the knowledge in a neural network, arXiv:1503.02531</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[11] J. Thaler, K. Van Tilburg, Identifying boosted objects with N-subjettiness, JHEP 03 (2011) 015, arXiv:1011.2268</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[12] A. J. Larkoski, G. P. Salam, J. Thaler, Energy correlation functions for jet substructure, JHEP 06 (2013) 108, arXiv:1305.0007</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[13] A. J. Larkoski, I. Moult, D. Neill, Power counting to better jet observables, JHEP 12 (2014) 009, arXiv:1409.6298</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[14] I. Moult, L. Necib, J. Thaler, New angles on energy correlation functions, JHEP 12 (2016) 153, arXiv:1609.07483</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[15] A. J. Larkoski, S. Marzani, G. Soyez, J. Thaler, Soft drop, JHEP 05 (2014) 146, arXiv:1402.2657</p><p style="font-size:19px; line-height:1.35; color:#3F4A5A; margin:0 0 9px 0">[16] J. Duarte et al., Fast inference of deep neural networks in FPGAs for particle physics, JINST 13 (2018) P07027, arXiv:1804.06913</p></div>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">38</p>
+</section>
+</div></div><div class="frame" id="s35"><div class="scale"><section class="slide" id="fidelity" data-section="Backup" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:20px">
+<h2 style="font-size:52px; font-weight:600; line-height:1.1">Backup: Why Tuned Formula Neurons Differ from the Network</h2>
+<p style="font-size:26px; line-height:1.4">Step 2 fits only the network’s class probabilities. The 16 neurons enter 5 class scores and the softmax ignores a common shift, so only 4 of the 16 neuron directions change the probabilities; changes along the other 12 cost nothing. In addition, the FPGA arithmetic wraps each neuron modulo 2^i (neuron 6: i = 4, values ≥ 16 wrap), which hides overshoots.</p>
+<img src="images/9c33bd507392c7d0388eb0c652271dca.png" alt="Left: mean value of neuron 6 against sum pT_i Delta R_i^2 / sum pT_i for the network, the step-1 formula, the formula tuned with lambda 0 and with lambda 0.01; the network peaks at 0.014 and falls, step 1 follows it, lambda 0 is twice as large and rises again, lambda 0.01 follows the network shape. Right: R squared of each of the 16 formula neurons against the network neuron; lambda 0 is negative for neurons 6, 8 (-1.7) and 13 (-18.9); lambda 0.01 is 0.63 to 0.95 for all." style="width:1520px; height:502px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:24px; line-height:1.4; color:#3F4A5A">Deviation from the network neurons: 4.4 per jet after step 1, 16.9 after tuning, 88% of it along the 12 invisible directions (75% by chance); 4.0% of jets have a wrapped neuron. Adding λ Σⱼ (hⱼ − hⱼ,net)² / Var(hⱼ,net) to the step-2 loss with λ = 0.01: agreement 90.59% (λ = 0: 90.57%), accuracy 65.50% (65.49%), median neuron R² 0.84 (0.76), worst 0.63 (−18.9), wrapped 0.08%.</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:22px; color:#8A94A3">39 · 8 particles, 100 if-statements per neuron, tuned on the network, not pruned; 260,000 test jets</p>
+</section>
+</div></div><div class="frame" id="s36"><div class="scale"><section class="slide" id="fidelity2" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:20px">
+<h2 style="font-size:52px; font-weight:600; line-height:1.1">Backup: Formula Neuron vs Network Neuron, λ = 0 and λ = 0.01</h2>
+<p style="font-size:26px; line-height:1.4">Top: step 2 as used so far (λ = 0). Bottom: with the neuron-fidelity term (λ = 0.01). Dotted line: formula = network. With λ = 0.01 the points follow it and the values above the network’s range disappear; agreement (90.59% vs 90.57%) and accuracy (65.50% vs 65.49%) are unchanged.</p>
+<img src="images/f8125c49e2fb25d1ae3fa45efa578cc1.png" alt="2D histograms of formula neuron against network neuron for neurons 4, 6, 8, 13, 15 and 2. Lambda 0: R squared 0.13, -0.31, -1.72, -18.91, 0.39, 0.83, with up to 6 percent of jets above the axis. Lambda 0.01: R squared 0.74, 0.78, 0.70, 0.91, 0.63, 0.91." style="width:1664px; height:568px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:22px; color:#8A94A3">40 · 8 particles, 100 if-statements per neuron, tuned on the network, not pruned; 260,000 test jets; colour: number of jets (log)</p>
+</section>
+</div></div><div class="frame" id="s37"><div class="scale"><section class="slide" id="fidelity3" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:20px">
+<h2 style="font-size:52px; font-weight:600; line-height:1.1">Backup: All 16 Neurons with λ = 0.01</h2>
+<p style="font-size:26px; line-height:1.4">Formula neuron against network neuron for every neuron of the formula tuned with the neuron-fidelity term. R² ranges from 0.63 to 0.95; agreement with the network 90.59% (λ = 0: 90.57%).</p>
+<img src="images/372a8c2457b92b5e8aebea7c6afbf881.png" alt="2D histograms of formula neuron against network neuron for all 16 neurons with lambda 0.01; all follow the diagonal, R squared between 0.63 and 0.95." style="width:1664px; height:434px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:22px; color:#8A94A3">41 · 8 particles, 100 if-statements per neuron, tuned on the network, not pruned; 260,000 test jets</p>
+</section>
+</div></div><div class="frame" id="s38"><div class="scale"><section class="slide" id="converge" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:120px 128px 150px; display:flex; flex-direction:column; gap:20px">
+<h2 style="font-size:52px; font-weight:600; line-height:1.1">Backup: Convergence and Overfitting of Step 2</h2>
+<p style="font-size:26px; line-height:1.4">Step 2 runs 800 Adam steps on 100,000 training jets and keeps the checkpoint with the highest agreement on 25,000 validation jets (checked every 50 steps). Continuing to 3,000 steps changes validation agreement by less than 0.1 points (8 particles: 90.54% at step 800, 90.62% at 3,000; 64 particles: 94.49%, 94.52%).</p>
+<img src="images/fe3cc7d1fbea2f604eab2f6ca0876e3b.png" alt="Agreement with the network against Adam step, training and validation jets, 8 and 64 particles; validation agreement is flat after about 800 steps." style="width:1300px; height:390px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<table style="font-size:21px; color:#1D2433; width:1300px; align-self:center">
+<tr><th>formula</th><th style="text-align:right">training jets</th><th style="text-align:right">validation jets</th><th style="text-align:right">test jets</th></tr>
+<tr><td>782 (8 particles)</td><td style="text-align:right">90.74%</td><td style="text-align:right">90.49%</td><td style="text-align:right">90.54%</td></tr>
+<tr><td>399 (8 particles)</td><td style="text-align:right">90.33%</td><td style="text-align:right">90.08%</td><td style="text-align:right">90.09%</td></tr>
+<tr><td>690 (64 particles)</td><td style="text-align:right">94.27%</td><td style="text-align:right">94.45%</td><td style="text-align:right">94.18%</td></tr>
+<tr><td>250 (64 particles)</td><td style="text-align:right">93.78%</td><td style="text-align:right">93.96%</td><td style="text-align:right">93.70%</td></tr>
+</table>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:22px; color:#8A94A3">42 · all observables, 100 if-statements per neuron, tuned on the network, λ = 0.01; agreement with the network; test: 260,000 jets</p>
+</section>
+</div></div><div class="frame" id="s39"><div class="scale"><section class="slide" id="allifw" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Neuron 12: All If-Statements (Below the W Mass)</h2>
+<p style="font-size:26px; color:#6A7482">150 formula (simplified; tuned on truth), 64 particles. Start value z = 0.085</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Neuron 12 is non-zero mainly for jets lighter than the W. Its six if-statements are one mass threshold at m_W and five corrections, three of which act almost only on heavy top jets.</p>
+<div style="display:flex; gap:40px; align-items:flex-start">
+<img src="images/1f2f31b83e18490642f1d4e246a2f9cc.png" alt="All 6 if-statements of neuron 12 of the 150 formula, each with the class mix of the jets that pass it" style="width:840px; height:514px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<ul style="flex:1; font-size:25px; line-height:1.45; color:#3F4A5A">
+<li>mass &lt; 80.4: +0.081 per GeV below m_W (passes 42.9%)</li>
+<li>C₂ &gt; 0.053: lowers; mass of the hardest 50 particles &lt; 63 GeV: lowers the lightest jets</li>
+<li>Three terms that pass for 4–11% of jets, 72–87% of them top jets</li>
+<li>Mean: q 1.24, g 0.75, W 0.24, t 0.19, Z 0.18; q vs rest AUC 0.79</li>
+<li>Scores: q +7%, g +3%, Z +3%, W −4%, t −4%</li>
+</ul>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">28</p>
+</section>
+</div></div><div class="frame" id="s40"><div class="scale"><section class="slide" id="quant" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:32px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Jet Quantities Used as Inputs</h2>
+<p style="font-size:29px; line-height:1.4">The formulas do not use the particles directly. We defined about 100 physics quantities of the jet, each computed from the pT, Δη and Δφ of the particles the network sees, and every if-statement tests one of them. Some examples:</p>
+<img src="images/d8967859f542d83ed79b363c1c53c34c.png" alt="Definitions: z_i = pT_i / sum pT; m^2 = (sum p_i)^2; r_i = (Delta eta_i, Delta phi_i); sum z Delta R^2 = sum_i z_i Delta R_i^2; e2 = sum_{i<k} z_i z_k Delta R_ik; tau21 = tau2/tau1; lambda1 >= lambda2 eigenvalues of sum_i z_i r_i r_i^T, lambda1 + lambda2 = sum z Delta R^2" style="width:1100px; height:288px; object-fit:contain; background:#F1F3F6; border-radius:12px">
+<p style="font-size:26px; color:#3F4A5A">All quantities with their definitions: aaronw5.github.io/jet-tagger-distillation/quantities.html</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">6</p>
+</section>
+</div></div><div class="frame" id="s41"><div class="scale"><section class="slide" id="massno" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">W and Z Mass Windows Without Mass Observables</h2>
+<p style="font-size:26px; color:#6A7482">Formula tuned on the network, 64 particles, 250 if-statements; no mass observable offered</p>
+</div>
+<p style="font-size:27px; line-height:1.4">Mean value of formula and network neurons 0 and 7 per 1 GeV of jet mass. The formula neurons peak at the same masses as the network’s, 79.5 and 91.5 GeV. They cut on Σ<sub>i&lt;j</sub> z<sub>i</sub>z<sub>j</sub>ΔR<sub>ij</sub><sup>2</sup> (z<sub>i</sub> = pT<sub>i</sub> / ΣpT), which equals (m/ΣpT)² (correlation 0.99997).</p>
+<img src="images/ea14c9da521d35da7bd457d55966083f.png" alt="Mean value of network and formula neurons 0 and 7 against jet mass; both pairs peak at 79.5 GeV (neuron 0, near m_W) and 91.5 GeV (neuron 7, near m_Z)." style="width:1400px; height:520px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">31 · 260,000 test jets; this formula: 93.18% agreement, accuracy 80.77% (network 80.94%)</p>
+</section>
+</div></div><div class="frame" id="s42"><div class="scale"><section class="slide" id="mass" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Z Mass Window Without m_Z as a Candidate Threshold</h2>
+<p style="font-size:26px; color:#6A7482">Formula tuned on the network, 64 particles, 288 if-statements; MARS offered only the 5–95% quantiles of each observable</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Without the W, Z or top mass among the candidates, neuron 7 of the formula still cuts the jet mass at 91 and 93 GeV and, like the network’s neuron 7, is largest at the Z mass.</p>
+<img src="images/09a20869a02daac3db9068d770c8d6e9.png" alt="Mean value of network neuron 7 and of formula neuron 7 against jet mass; both peak at the Z mass (network 2.6, formula 2.0 at about 91 GeV). Dotted lines: the formula's jet-mass thresholds at 81, 91, 93, 100 and 120 GeV; dashed: m_W and m_Z." style="width:1300px; height:560px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<p style="font-size:24px; line-height:1.4; color:#3F4A5A">The candidates are dense where W and Z jets peak (7 of the 19 jet-mass quantiles lie between 78 and 93 GeV), and training moved the cut from 91.03 to 91.1–91.4 GeV. Other neurons cut at 80.6–81.0 GeV (m_W = 80.4) and 171.9–173.5 GeV (m_t = 172.8).</p>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">30 · 260,000 test jets; this formula: accuracy 81.05% (network 80.94%), agreement 93.81%</p>
+</section>
+</div></div><div class="frame" id="s43"><div class="scale"><section class="slide" id="setups" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:22px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Agreement for Four Sets of Observables</h2>
+<p style="font-size:26px; color:#6A7482">Formula tuned on the network and its smaller version (step 4); λ = 0.01</p>
+</div>
+<p style="font-size:27px; line-height:1.4">At 8 particles the four sets differ by at most 0.4 points. At 64 particles, agreement drops from 94.18% with all observables to 93.52% without mass observables, and to 92.91% when observables equivalent to (m/ΣpT)² are also removed.</p>
+<img src="images/96c8df30ee662c6f83b31ac9818a3168.png" alt="Agreement with the network for four sets of observables. 8 particles, tuned and smaller: 90.5 and 90.1 (all), 90.7 and 90.3 (no W/Z/t mass thresholds), 90.3 and 90.1 (no mass observables), 90.4 and 90.0 (no mass observables or equivalents). 64 particles: 94.2 and 93.7, 94.3 and 93.8, 93.5 and 93.2, 92.9 and 92.5." style="width:1500px; height:500px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; align-self:center">
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">16 · 260,000 test jets; equivalents: |correlation| > 0.98 with (m/ΣpT)²; accuracy within 0.6 points of the network for all formulas</p>
+</section>
+</div></div></body></html>

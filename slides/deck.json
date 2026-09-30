@@ -1,0 +1,95 @@
+{
+  "v": 4,
+  "attachments": {},
+  "createdOnFiles": {
+    "at": "2026-09-28T23:30:00Z",
+    "v": 1
+  },
+  "designSystems": [],
+  "faces": {
+    "ibm-plex-sans": {
+      "family": "IBM Plex Sans",
+      "href": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap"
+    },
+    "jetbrains-mono": {
+      "family": "JetBrains Mono",
+      "href": "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+    }
+  },
+  "order": [
+    "cover",
+    "nest",
+    "motivgrid",
+    "motiv",
+    "setup",
+    "overview",
+    "step1",
+    "select",
+    "step2",
+    "step3",
+    "step4",
+    "eval",
+    "results",
+    "results64",
+    "targets",
+    "control",
+    "controlin",
+    "code1",
+    "code2",
+    "tool",
+    "match",
+    "n10",
+    "n10term",
+    "n10use",
+    "n10groups",
+    "n5",
+    "massnet",
+    "allifz",
+    "allift",
+    "ex1",
+    "ex1n10",
+    "ex23",
+    "summary",
+    "refs",
+    "fidelity",
+    "fidelity2",
+    "fidelity3",
+    "converge",
+    "allifw",
+    "quant",
+    "massno",
+    "mass",
+    "setups"
+  ],
+  "sections": {
+    "s1": {
+      "description": "Title and motivation",
+      "start": "cover"
+    },
+    "s2": {
+      "description": "Method, step by step",
+      "start": "setup"
+    },
+    "s3": {
+      "description": "Results on the full test file",
+      "start": "results"
+    },
+    "s4": {
+      "description": "Neurons in detail",
+      "start": "match"
+    },
+    "s5": {
+      "description": "Example classifications",
+      "start": "ex1"
+    },
+    "s6": {
+      "description": "Summary",
+      "start": "summary"
+    },
+    "s7": {
+      "description": "Backup",
+      "start": "fidelity"
+    }
+  },
+  "title": "Jet tagger last layer as physics rules"
+}

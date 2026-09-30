@@ -1,0 +1,18 @@
+<section id="allifw" style="background:#FAFAF7; color:#1D2433; font-family:'IBM Plex Sans', Arial, sans-serif; padding:128px 128px 160px; display:flex; flex-direction:column; gap:24px">
+<div style="display:flex; flex-direction:column; gap:8px">
+<h2 style="font-size:56px; font-weight:600; line-height:1.1">Neuron 12: All If-Statements (Below the W Mass)</h2>
+<p style="font-size:26px; color:#6A7482">150 formula (simplified; tuned on truth), 64 particles. Start value z = 0.085</p>
+</div>
+<p style="font-size:28px; line-height:1.4">Neuron 12 is non-zero mainly for jets lighter than the W. Its six if-statements are one mass threshold at m_W and five corrections, three of which act almost only on heavy top jets.</p>
+<div style="display:flex; gap:40px; align-items:flex-start">
+<img src="/_blob/1f2f31b83e18490642f1d4e246a2f9cc" alt="All 6 if-statements of neuron 12 of the 150 formula, each with the class mix of the jets that pass it" style="width:840px; height:514px; object-fit:contain; background:#FFFFFF; border:1px solid #D5DAE1; border-radius:12px">
+<ul style="flex:1; font-size:25px; line-height:1.45; color:#3F4A5A">
+<li>mass &lt; 80.4: +0.081 per GeV below m_W (passes 42.9%)</li>
+<li>C₂ &gt; 0.053: lowers; mass of the hardest 50 particles &lt; 63 GeV: lowers the lightest jets</li>
+<li>Three terms that pass for 4–11% of jets, 72–87% of them top jets</li>
+<li>Mean: q 1.24, g 0.75, W 0.24, t 0.19, Z 0.18; q vs rest AUC 0.79</li>
+<li>Scores: q +7%, g +3%, Z +3%, W −4%, t −4%</li>
+</ul>
+</div>
+<p style="position:absolute; left:128px; bottom:64px; width:1664px; font-size:24px; color:#8A94A3">28</p>
+</section>
