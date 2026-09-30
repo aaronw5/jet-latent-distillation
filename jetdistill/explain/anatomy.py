@@ -125,7 +125,7 @@ def readable(t):
 
 def build(f, normalized, n, last, jets, X):
     """jets: dict(Q=observables, y=true class) of the explanation jets; X: their particles (J, n, 3)"""
-    Q = dict(jets['Q']); y = jets['y']
+    Q = jets['Q'] if hasattr(jets['Q'], 'many') else dict(jets['Q']); y = jets['y']     # (ParT: per-particle quantities are computed when used)
     z, ix, iy, rb, PT = aligned_images(X); PTS = -np.sort(-PT, 1); PBIN = np.logspace(0, 3, 22)
     JPT = PT.sum(1); LPT = PTS[:, 0]; JB = np.linspace(*np.quantile(JPT, [.005, .995]), 31); LB = np.linspace(*np.quantile(LPT, [.005, .995]), 31)
     CTX['PT'] = (PTS, PBIN, JPT, JB, LPT, LB)
