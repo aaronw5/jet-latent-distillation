@@ -115,21 +115,22 @@ def stage_tune(setup, n, log=log):
     S = SETUPS[setup]; long = mars.load(setup, n); last = Network(n).last
     fit = sub(jets(n, 'fit', log), config.N_TUNE_FIT); dev = jets(n, 'dev', log); fams = dict(S.families or FAMILIES)
     if 'network' in fams: fams['network'] = (fams['network'][0], S.target or 'probabilities')
+    lam_s = FIDELITY_LAMBDA if S.lam is None else S.lam               # a setup may set its own λ (the weight of R)
     if S.truth_family is False: fams.pop('labels', None)
     drop_formulas(setup, n, lambda m: False)
     for fam, (Ks, target) in fams.items():
         for i, K in enumerate(Ks):
             f0 = tuning.refit([dict(nr, terms=nr['terms'][:K]) for nr in long], fit['Q'], fit['Z'])
             exact = []
-            f, path = tuning.prune(f0, fit['Q'], dev['Q'], target, fit, dev, last, lam=0.0 if target == 'neurons' else FIDELITY_LAMBDA, log=log, exact=exact)
+            f, path = tuning.prune(f0, fit['Q'], dev['Q'], target, fit, dev, last, lam=0.0 if target == 'neurons' else lam_s, log=log, exact=exact)
             title = TITLES['decisions' if target == 'decisions' else fam] + f' (from {K} if-statements per neuron, pruned)'
             tag = add_formula(setup, n, f, fam, 'main' if i == 0 else 'other', title)
-            (out_dir(setup, n) / 'formulas' / tag / 'tuning.json').write_text(json.dumps(dict(K=K, target=target, lam=FIDELITY_LAMBDA if target != 'neurons' else 0, path=path)))
+            (out_dir(setup, n) / 'formulas' / tag / 'tuning.json').write_text(json.dumps(dict(K=K, target=target, lam=lam_s if target != 'neurons' else 0, path=path)))
             log(f'{fam} K={K}: {tag}')
             ex = exact[0] if exact else None                # the smallest formula without loss on the validation jets (if pruned and not the main one)
             if ex is not None and F.n_terms(ex) < path[0][0] and F.n_terms(ex) != F.n_terms(f):
                 t2 = add_formula(setup, n, ex, fam, 'other', TITLES['decisions' if target == 'decisions' else fam] + f' (from {K} if-statements per neuron; the smallest without loss on the validation jets)')
-                (out_dir(setup, n) / 'formulas' / t2 / 'tuning.json').write_text(json.dumps(dict(K=K, target=target, lam=FIDELITY_LAMBDA if target != 'neurons' else 0, path=path, no_loss=True)))
+                (out_dir(setup, n) / 'formulas' / t2 / 'tuning.json').write_text(json.dumps(dict(K=K, target=target, lam=lam_s if target != 'neurons' else 0, path=path, no_loss=True)))
                 log(f'{fam} K={K}: smallest without loss {t2}')
 
 
