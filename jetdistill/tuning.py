@@ -104,12 +104,14 @@ def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, h
     return F.with_coefs(formula, [(np.asarray(c / s, np.float64), float(c0)) for (c, c0), s in zip(best[1], sd)]), best[0]
 
 
-def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=0.02, log=log):
-    """step 3; returns (pruned formula, path of (terms, validation score))"""
+def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=0.02, log=log, exact=None):
+    """step 3; returns (pruned formula, path of (terms, validation score)). exact: a list that receives the smallest formula of
+    the path whose validation score is at least step 2's (no loss)"""
     cur, ref = train(formula, Qf, Qd, target, fit, dev, last, lam); path = [(F.n_terms(cur), ref)]
+    ex = [cur]
     log(f'step 2: {path[-1][0]} terms, validation {ref:.4f}')
     if TAGGER == 'part' and target != 'neurons':
-        cur = prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log)
+        cur = prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log, ex)
     while frac >= min_frac:
         wn = np.linalg.norm(np.asarray(last[0]), axis=1) if TAGGER == 'part' else np.ones(len(cur))   # ParT: size of the term's effect on the class scores
         imp = sorted((abs(t['coef']) * float(b[:, i].std()) * float(wn[nr['neuron']]), j, i) for j, (nr, b) in enumerate(zip(cur, F.bases(cur, Qf))) for i, t in enumerate(nr['terms']))
@@ -118,8 +120,10 @@ def prune(formula, Qf, Qd, target, fit, dev, last, lam=0.0, frac=0.15, min_frac=
         trial, s = train([dict(nr, terms=[t for i, t in enumerate(nr['terms']) if (j, i) not in cut]) for j, nr in enumerate(cur)], Qf, Qd, target, fit, dev, last, lam)
         if s >= ref - TOL[target]:
             cur = trial; path.append((F.n_terms(cur), s)); log(f'  kept a cut of {len(cut)}: {path[-1][0]} terms, validation {s:.4f}')
+            if s >= ref: ex[0] = cur
         else:
             frac /= 2
+    if exact is not None: exact.append(ex[0])
     return cur, path
 
 
@@ -129,7 +133,7 @@ def decision_flips(formula, Q, last):
     return np.array([((L + np.outer(H[:, j].mean() - H[:, j], K[j])).argmax(1) != pred).mean() if np.ptp(H[:, j]) > 0 else 0.0 for j in range(H.shape[1])])
 
 
-def prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log=log):
+def prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log=log, ex=None):
     """step 3a (ParT): whole neurons replaced by constants (no terms; the intercept is retrained), the neurons whose
     fixing changes fewest validation decisions first; the first batch is every neuron that changes fewer than 0.1 %
     of them; a batch is kept while the validation score stays within TOL of step 2's, else it is halved"""
@@ -146,6 +150,7 @@ def prune_neurons(cur, ref, Qf, Qd, target, fit, dev, last, lam, path, log=log):
         if sc >= ref - TOL[target]:
             cur = trial; path.append((F.n_terms(cur), sc))
             log(f'  kept {sum(1 for nr in cur if nr["terms"])} of {len(cur)} neurons (cut {k}): {path[-1][0]} terms, validation {sc:.4f}')
+            if ex is not None and sc >= ref: ex[0] = cur
         else:
             k //= 2
     return cur
