@@ -93,6 +93,10 @@ if TAGGER == 'part':      # ParT: the best JEDI recipe (tuned on the network's p
                          masses_as_thresholds=False, step1_from='all', lam=0.1),
         'all_plus_reg': Setup(label='All quantities + 305 more, more regularization (λ = 0.1)', page_desc='as “All quantities + prongs, subjet flavour, vertices, mass resolution” (the same step 1); steps 2–3 with λ = 0.1 instead of 0.01',
                               masses_as_thresholds=False, step1_from='all_plus', lam=0.1),
+        'all_reg1': Setup(label='All quantities, strong regularization (λ = 1)', page_desc='as “All quantities” (the same step 1); steps 2–3 with λ = 1: the formula’s neurons are held close to ParT’s',
+                          masses_as_thresholds=False, step1_from='all', lam=1.0),
+        'all_plus_reg1': Setup(label='All quantities + 305 more, strong regularization (λ = 1)', page_desc='as “All quantities + prongs, subjet flavour, vertices, mass resolution” (the same step 1); steps 2–3 with λ = 1',
+                               masses_as_thresholds=False, step1_from='all_plus', lam=1.0),
         'all_truth': Setup(label='All quantities, tuned on the true labels', page_desc='as “All quantities” (the same step 1); steps 2–3 are tuned toward the true class of each jet instead of ParT’s probabilities (still with λ·R toward ParT’s neurons), pruning and step 4 keep validation accuracy',
                            masses_as_thresholds=False, step1_from='all', families=dict(labels=((100,), 'labels'))),
     }
