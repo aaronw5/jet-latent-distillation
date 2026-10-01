@@ -8,6 +8,8 @@ decision on about 9 of 10 jets (8 particles) and 19 of 20 jets (64 particles), a
 
 Site: https://aaronw5.github.io/jet-tagger-distillation/
 
+ParT (Particle Transformer on JetClass, `JETDISTILL_TAGGER=part`): https://aaronw5.github.io/jet-latent-distillation/ (built pages on the branch `part-site`)
+
 ## Results (setup "All observables", whole test file, 260,000 jets)
 
 | network | formula | if-statements | same class as the network | accuracy (network) |
