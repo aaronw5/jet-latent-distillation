@@ -279,7 +279,7 @@ def sort_formula(f):
 
 def run(start, jets, last, metric, total_budgets=BUDGETS, snapshots=(0, 1), log=log):
     """all candidates (budgets below the START size, pool rounds 0 and 1, 2 and 3 significant digits) and the choice"""
-    S = Step4(start, jets, last, metric); PPs = S.pools(log=log); cands = []
+    S = Step4(start, jets, last, metric); PPs = S.pools(rounds=max(snapshots), log=log); cands = []   # only the snapshots used
     total_budgets = total_budgets or tuple(int(round(f * F.n_terms(start))) for f in FRACTIONS)
     for r in snapshots:
         for b in total_budgets:
