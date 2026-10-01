@@ -37,17 +37,21 @@ def rnd(o, keep=('coef', 't', 't2', 'intercept')):
     return o
 
 
+MAX_DEPTH = 3          # ParT pages: levels of finer groups kept (anatomy.json keeps all; ParT's ~45 if-statements per neuron make deep trees large)
+
+
 def slim(full):
     """each group's worked example stores every observable's value once; fields the page does not use are dropped"""
-    def walk(c):
+    def walk(c, depth=0):
         c.pop('pattern', None); c.pop('formula_right', None); x = c.get('example')
+        if TAGGER == 'part' and depth >= MAX_DEPTH: c['children'] = []      # (ParT: the finer groups of the page stop at MAX_DEPTH levels)
         if x and 'values' in x:
             qv = {}
             for v in x.pop('values'):
                 qv[v['q']] = v['v']
                 if v.get('q2'): qv[v['q2']] = v['v2']
             x['qv'] = qv
-        for ch in c.get('children') or []: walk(ch)
+        for ch in c.get('children') or []: walk(ch, depth + 1)
     for n in full['anat']['neurons']:
         n.pop('regimes', None); n.pop('regime_r2', None)
         for c in n['combos']: walk(c)
