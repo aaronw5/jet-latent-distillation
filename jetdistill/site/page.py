@@ -61,7 +61,7 @@ def build(setup, n, site=SITE):
     fam = {t: FAMNAME[(m['family'], m['role'])] for t, m in reg.items()}; parent = {t: m['parent'] for t, m in reg.items() if m.get('parent')}
     models = [dict(r, family='network') if r['family'] == 'network' else dict(r, family='formula', kind='formula', title=r['name']) for r in M['models']]
     main = max((r for r in models if r.get('formula') and fam[r['formula']] == 'network'), key=lambda r: r['same_as_network'])['formula']
-    D = dict(n=n, classes=CLASSES, mode='rosetta', fam=fam, parent=parent, main=main, metrics=dict(n_jets=M['n_jets'], models=models),
+    D = dict(n=n, classes=CLASSES, mode='rosetta', fam=fam, parent=parent, main=main, metrics=dict(n_jets=M['n_jets'], models=models, step1=M.get('step1')),
              exp=dict(name=setup, label=S.label, obs=S.page_desc, lam=FIDELITY_LAMBDA),
              last=dict(K7=K.tolist(), b7=b.tolist(), i7=None if i_ is None else i_.tolist(), f7=None if f_ is None else f_.tolist()))
     if TAGGER == 'part':
@@ -75,7 +75,7 @@ def build(setup, n, site=SITE):
     for t, m in reg.items():
         tj = base / 'formulas' / t / 'tuning.json'
         if m['family'] == 'network' and tj.exists():
-            T = json.loads(tj.read_text()); method[str(T['K'])] = dict(step1=dict(terms=16 * T['K']), tuned=dict(terms=T['path'][0][0]), pruned=dict(terms=m['terms']))
+            T = json.loads(tj.read_text()); method[str(T['K'])] = dict(step1=dict(terms=M['step1']['terms'] if TAGGER == 'part' and M.get('step1') else 16 * T['K']), tuned=dict(terms=T['path'][0][0]), pruned=dict(terms=m['terms']))   # ParT: the step-1 formula's own size (128 neurons)
     D['tunenet'] = dict(n_jets=M['n_jets'], rows=rows, method=method)
     # explanation data, Python files, formula structures
     D['explain'], D['py'], D['forms'] = {}, {}, {}
