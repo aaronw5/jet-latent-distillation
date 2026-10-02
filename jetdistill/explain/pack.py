@@ -51,8 +51,9 @@ def scale_facts(h, y, shares=None, nb=30):
     if shares is not None:
         up = [f'{CL[c]} ({100 * shares[c]:+.0f}%)' for c in range(NC) if shares[c] > 0.02]; dn = [f'{CL[c]} ({100 * shares[c]:+.0f}%)' for c in range(NC) if shares[c] < -0.02]
         no = [CL[c] for c in range(NC) if abs(shares[c]) <= 0.02]
-        out['FACT_used_by'] = ('raises the score of ' + ', '.join(up) if up else '') + ('; ' if up and dn else '') + ('lowers the score of ' + ', '.join(dn) if dn else '') + \
-                              (f"; does not (or hardly) enter the score of {', '.join(no)}" if no else '') + ' (share of each class score’s average input)'
+        parts = (['raises the score of ' + ', '.join(up)] if up else []) + (['lowers the score of ' + ', '.join(dn)] if dn else []) + \
+                ([('does not (or hardly) enter any class score' if len(no) == NC else 'does not (or hardly) enter the score of ' + ', '.join(no))] if no else [])
+        out['FACT_used_by'] = '; '.join(parts) + ' (share of each class score’s average input)'
     return out
 
 
