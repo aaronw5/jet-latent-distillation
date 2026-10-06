@@ -80,10 +80,14 @@ class Step4:
 
     # ---------------- pools and backward paths
     def pool_for(self, nr, qset, qs=(0.1, 0.25, 0.5, 0.75, 0.9)):
-        D = self.jets['fit']['Q']; P = [dict(t) for t in nr['terms']]
+        D = self.jets['fit']['Q']; P = [dict(t) for t in nr['terms']]; smooth = any(t.get('s') for x in self.start for t in x['terms'])
         for q in sorted(qset):
-            P.append(dict(q=q, kind='lin', t=None, coef=0.0))
-            for v in np.unique(np.quantile(D[q], qs)): P += [dict(q=q, kind='gt', t=float(v), coef=0.0), dict(q=q, kind='lt', t=float(v), coef=0.0)]
+            P.append(dict(q=q, kind='lin', t=None, coef=0.0)); vs = np.unique(np.quantile(D[q], qs))
+            if smooth:
+                from .mars import widths
+                P += [dict(q=q, kind=k, t=float(v), s=w, coef=0.0) for v, w in zip(vs, widths(vs)) for k in ('gt', 'lt')]
+            else:
+                for v in vs: P += [dict(q=q, kind='gt', t=float(v), coef=0.0), dict(q=q, kind='lt', t=float(v), coef=0.0)]
         return P
 
     def build_paths(self, qset, W):
@@ -132,9 +136,12 @@ class Step4:
         k1 = jnp.asarray(np.array([KC[t['kind']] for _, t in flat])); k2 = jnp.asarray(np.array([KC[t['kind2']] if t.get('q2') else 0 for _, t in flat]))
         t1 = jnp.asarray(np.array([t.get('t') or 0.0 for _, t in flat], np.float32)); t2 = jnp.asarray(np.array([(t.get('t2') or 0.0) if t.get('q2') else 0.0 for _, t in flat], np.float32))
         has2 = jnp.asarray(np.array([bool(t.get('q2')) for _, t in flat])); s1 = jnp.asarray(qsd[q1]); s2 = jnp.asarray(qsd[q2])
-        fac = lambda x, k, t: jnp.where(k == 0, x, jnp.where(k == 1, jax.nn.relu(x - t), jax.nn.relu(t - x)))
+        w1 = jnp.asarray(np.array([t.get('s') or 0.0 for _, t in flat], np.float32)); w2 = jnp.asarray(np.array([(t.get('s2') or 0.0) if t.get('q2') else 0.0 for _, t in flat], np.float32))
+        def fac(x, k, t, w):                      # hinge, or s·GELU(u/s) for a term with a width
+            u = jnp.where(k == 1, x - t, t - x); ws = jnp.where(w > 0, w, 1.0)
+            return jnp.where(k == 0, x, jnp.where(w > 0, ws * jax.nn.gelu(u / ws, approximate=False), jax.nn.relu(u)))
         Xq1, Xq2 = X[:, jnp.asarray(q1)], X[:, jnp.asarray(q2)]
-        basis = lambda p: fac(Xq1, k1, t1 + p['d1'] * s1) * jnp.where(has2, fac(Xq2, k2, t2 + p['d2'] * s2), 1.0)
+        basis = lambda p: fac(Xq1, k1, t1 + p['d1'] * s1, w1) * jnp.where(has2, fac(Xq2, k2, t2 + p['d2'] * s2, w2), 1.0)
         bstd = jnp.asarray(np.asarray(basis(dict(d1=jnp.zeros_like(t1), d2=jnp.zeros_like(t2)))).std(0) + 1e-9)
         Zrj, Wj = jnp.asarray(Zr), jnp.asarray(Wm); on = jnp.asarray(is_on(Zr))
 
@@ -165,10 +172,10 @@ class Step4:
             b = nr['intercept']; acc = {}
             for t in nr['terms']:
                 t = dict(t)
-                if not t.get('q2') and t['kind'] != 'lin' and ((D[t['q']] > t['t']) if t['kind'] == 'gt' else (D[t['q']] < t['t'])).all():
+                if not t.get('q2') and not t.get('s') and t['kind'] != 'lin' and ((D[t['q']] > t['t']) if t['kind'] == 'gt' else (D[t['q']] < t['t'])).all():
                     s = 1 if t['kind'] == 'gt' else -1; b -= t['coef'] * s * t['t']; t = dict(q=t['q'], kind='lin', t=None, coef=t['coef'] * s)
                 if t['coef'] == 0 or np.abs(F.basis(t, D)).max() == 0: continue
-                key = (t['q'], t['kind'], t.get('t'), t.get('q2'), t.get('kind2'), t.get('t2'))
+                key = (t['q'], t['kind'], t.get('t'), t.get('s'), t.get('q2'), t.get('kind2'), t.get('t2'), t.get('s2'))
                 if key in acc: acc[key]['coef'] += t['coef']
                 else: acc[key] = t
             out.append(dict(neuron=nr['neuron'], intercept=b, terms=list(acc.values())))

@@ -84,5 +84,25 @@ class ParTNetwork:
                 if log and (i // batch) % 200 == 0: log(f'  network {self.n}: {i + len(idx)} / {N} jets')
         return dict(z=Z.astype(np.float64), h=Z.astype(np.float64), logits=L.astype(np.float64))
 
+    def run_internals(self, J, batch=256, log=None):
+        """run() plus the input of the class-attention blocks: dict(z, logits, x (J, 128, 128) float16 — each particle's
+        embedding after the 8 particle-attention blocks, in the jet dict's particle order, 0 in empty slots — mask (J, 128))"""
+        torch = self.torch; N = len(J['mask']); order = np.argsort(J['mask'].sum(1), kind='stable'); P = J['mask'].shape[1]
+        X = np.zeros((N, P, 128), np.float16); Z = np.zeros((N, 128), np.float32); L = np.zeros((N, 10), np.float32); cap = {}
+        hk = self.model.cls_blocks[0].register_forward_pre_hook(lambda mod, args, kwargs: cap.__setitem__('x', args[0].detach()), with_kwargs=True)
+        try:
+            with torch.no_grad():
+                for i in range(0, N, batch):
+                    idx = order[i:i + batch]; x, v, m = inputs({k: a[idx] for k, a in J.items()}, self.n)
+                    dev = lambda a: torch.from_numpy(a).to(self.device)
+                    out = self.model(dev(x), dev(v), dev(m)); L[idx] = out.cpu().numpy(); Z[idx] = self._cls['h'].cpu().numpy()
+                    xe = cap['x'].permute(1, 0, 2).cpu().numpy()            # (batch, P_trimmed, 128)
+                    X[idx, :xe.shape[1]] = xe.astype(np.float16)
+                    if log and (i // batch) % 200 == 0: log(f'  network {self.n} (internals): {i + len(idx)} / {N} jets')
+        finally:
+            hk.remove()
+        X *= (J['mask'] > 0)[..., None]
+        return dict(z=Z.astype(np.float64), logits=L.astype(np.float64), x=X, mask=J['mask'] > 0)
+
     def logits_from_h(self, H):
         return np.asarray(H, np.float64) @ self.last[0] + self.last[1]

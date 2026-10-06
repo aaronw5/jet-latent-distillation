@@ -99,6 +99,8 @@ if TAGGER == 'part':      # ParT: the best JEDI recipe (tuned on the network's p
                                masses_as_thresholds=False, step1_from='all_plus', lam=1.0),
         'all_plus_pairs': Setup(label='All quantities + 305 more + every particle pair', page_desc='as “All quantities + prongs, subjet flavour, vertices, mass resolution”, plus ParT’s pair inputs (ln ΔR, ln kT, ln z, ln m²) for every pair of particles as candidates (run with JETDISTILL_PAIR_BLOCK=1)',
                                 masses_as_thresholds=False),
+        'all_plus_gelu': Setup(label='All quantities + 305 more, smooth terms (GELU)', page_desc='as “All quantities + prongs, subjet flavour, vertices, mass resolution”, but every threshold term is smooth: s·GELU((Q − t)/s) instead of max(0, Q − t), s = the local spacing of the candidate thresholds',
+                               masses_as_thresholds=False, gelu=True),
         'all_truth': Setup(label='All quantities, tuned on the true labels', page_desc='as “All quantities” (the same step 1); steps 2–3 are tuned toward the true class of each jet instead of ParT’s probabilities (still with λ·R toward ParT’s neurons), pruning and step 4 keep validation accuracy',
                            masses_as_thresholds=False, step1_from='all', families=dict(labels=((100,), 'labels'))),
     }

@@ -25,9 +25,16 @@ def is_on(z):
     return np.asarray(z) > 0 if RELU else np.ones(np.shape(z), bool)
 
 
-def factor(x, kind, t):
+def gelu(u):
+    from scipy.special import erf
+    return 0.5 * u * (1 + erf(u / np.sqrt(2)))
+
+
+def factor(x, kind, t, s=None):
     x = np.asarray(x, np.float64)
     if kind == 'lin': return x
+    if s:                                   # smooth version (a GELU of width s)
+        return s * gelu(((x - t) if kind == 'gt' else (t - x)) / s)
     if kind == 'gt': return np.maximum(x - t, 0)
     if kind == 'lt': return np.maximum(t - x, 0)
     raise ValueError(kind)
@@ -35,8 +42,8 @@ def factor(x, kind, t):
 
 def basis(term, Q):
     """the value of one term without its coefficient; Q = {observable id: values}"""
-    b = factor(Q[term['q']], term['kind'], term.get('t'))
-    return b * factor(Q[term['q2']], term['kind2'], term.get('t2')) if term.get('q2') else b
+    b = factor(Q[term['q']], term['kind'], term.get('t'), term.get('s'))
+    return b * factor(Q[term['q2']], term['kind2'], term.get('t2'), term.get('s2')) if term.get('q2') else b
 
 
 def bases(formula, Q):

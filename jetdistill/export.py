@@ -42,7 +42,7 @@ def chains(neuron, ranges):
     c0 = neuron['intercept']; by, prods = {}, []
     for t in merged.values():
         if t['coef'] == 0: continue
-        (prods if t.get('q2') else by.setdefault(t['q'], [])).append(t)
+        (prods if t.get('q2') or t.get('s') else by.setdefault(t['q'], [])).append(t)      # smooth (GELU) terms are written out one by one
     pieces = []
     for q, ts in by.items():
         lo, hi = ranges[q]; edges = [lo] + sorted({t['t'] for t in ts if t['kind'] != 'lin' and lo < t['t'] < hi}) + [hi]; segs = []
@@ -60,7 +60,13 @@ def chains(neuron, ranges):
     return dict(intercept=c0, pieces=pieces, products=prods)
 
 
-def _factor(kind, t, x):
+def _gelu(kind, t, x, s):
+    u = f'(({x} - {g(t)}) / {g(s)})' if kind == 'gt' else f'(({g(t)} - {x}) / {g(s)})'
+    return f'({g(s)} * 0.5 * {u} * (1 + math.erf({u} / math.sqrt(2))))'
+
+
+def _factor(kind, t, x, s=None):
+    if s and kind != 'lin': return None, _gelu(kind, t, x, s)
     return (None, x) if kind == 'lin' else ((f'{x} > {g(t)}', f'({x} - {g(t)})') if kind == 'gt' else (f'{x} < {g(t)}', f'({g(t)} - {x})'))
 
 
@@ -75,8 +81,9 @@ def neuron_code(ch):
             cond = f'{x} < {g(hi)}' if s == 0 else (f'{x} >= {g(lo)}' if s == len(segs) - 1 else f'{g(lo)} <= {x} < {g(hi)}')
             L += [f'    if {cond}:', f'        z += {val}']
     for t in ch['products']:
-        c1, f1 = _factor(t['kind'], t.get('t'), 'Q.' + t['q']); c2, f2 = _factor(t['kind2'], t.get('t2'), 'Q.' + t['q2'])
-        conds = [c for c in (c1, c2) if c]; val = f'{g(t["coef"])} * {f1} * {f2}'
+        c1, f1 = _factor(t['kind'], t.get('t'), 'Q.' + t['q'], t.get('s'))
+        c2, f2 = _factor(t['kind2'], t.get('t2'), 'Q.' + t['q2'], t.get('s2')) if t.get('q2') else (None, '1')
+        conds = [c for c in (c1, c2) if c]; val = f'{g(t["coef"])} * {f1}' + (f' * {f2}' if t.get('q2') else '')
         L += [f'    if {" and ".join(conds)}:', f'        z += {val}'] if conds else [f'    z += {val}']
     return L
 
@@ -158,7 +165,8 @@ def normalize(formula, Qtrain, last):
     return out, dict(T=T.tolist(), share=(V / T).tolist(), neuron_importance=(np.abs(V).sum(1) / np.abs(V).sum()).tolist(), h_avg=hav.tolist())
 
 
-def _piece(q, k, t):
+def _piece(q, k, t, s=None):
+    if s and k != 'lin': return _gelu(k, t, f'Q.{q}', s)
     return f'Q.{q}' if k == 'lin' else (f'max(0.0, Q.{q} - {g(t)})' if k == 'gt' else f'max(0.0, {g(t)} - Q.{q})')
 
 
@@ -181,7 +189,7 @@ def write_normalized(formula, n, last, norm, title, stats, path):
     for nr in neurons:
         L += [f'def neuron_{nr["neuron"]}(Q):', f'    # scale S = {nr["scale"]:.4g}; each line: share * term / its average size', f'    z = {g(nr["scale"])} * ({g(nr["c"])}']
         for t in nr['terms']:
-            ex = _piece(t['q'], t['kind'], t.get('t')) + (' * ' + _piece(t['q2'], t['kind2'], t.get('t2')) if t.get('q2') else '')
+            ex = _piece(t['q'], t['kind'], t.get('t'), t.get('s')) + (' * ' + _piece(t['q2'], t['kind2'], t.get('t2'), t.get('s2')) if t.get('q2') else '')
             L.append(f"        {'+' if t['share'] >= 0 else '-'} {g(abs(t['share']))} * {ex} / {g(t['avg'])}   # {100 * t['share']:+.1f}%  {_readable(t)}")
         L += ['    )', RET, '', '']
     L += [f'def {LAYER}(Q):', '    return [' + ', '.join(f'neuron_{j}(Q)' for j in (nr['neuron'] for nr in neurons)) + ']', '', '',

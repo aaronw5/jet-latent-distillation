@@ -73,13 +73,33 @@ def thresholds(v, mass_like, offer_masses):
     return sorted(ks)
 
 
-def _one(v, kind, t):
-    return v if kind == 'lin' else np.maximum(0, v - t) if kind == 'gt' else np.maximum(0, t - v)
+SMOOTH = False          # step 1 of a setup with gelu=True: threshold terms are s·GELU((±(Q − t))/s), s = the local threshold spacing
+
+
+def widths(kn):
+    kn = np.asarray(kn, np.float64)
+    if len(kn) < 2: return [max(abs(kn[0]) * 0.1, 1e-6) if len(kn) else 1.0] * len(kn)
+    d = np.diff(kn); w = np.concatenate([[d[0]], (d[:-1] + d[1:]) / 2, [d[-1]]]); return [float(max(x, 1e-9)) for x in w]
+
+
+def cols(v, kn):
+    """candidate columns of one quantity: Q, then the threshold terms above and below each threshold; descriptors (kind, t, s)"""
+    if SMOOTH:
+        from .formula import gelu
+        ws = widths(kn)
+        M = [v] + [s * gelu((v - t) / s) for t, s in zip(kn, ws)] + [s * gelu((t - v) / s) for t, s in zip(kn, ws)]
+        return M, [('lin', None, None)] + [('gt', t, s) for t, s in zip(kn, ws)] + [('lt', t, s) for t, s in zip(kn, ws)]
+    return [v] + [np.maximum(0, v - t) for t in kn] + [np.maximum(0, t - v) for t in kn], [('lin', None, None)] + [('gt', t, None) for t in kn] + [('lt', t, None) for t in kn]
+
+
+def _one(v, kind, t, s=None):
+    from .formula import factor
+    return factor(v, kind, t, s)
 
 
 def term_value(tm, Q):
-    v = _one(Q[tm['q']], tm['kind'], tm.get('t'))
-    return v * _one(Q[tm['q2']], tm['kind2'], tm.get('t2')) if tm.get('q2') else v
+    v = _one(Q[tm['q']], tm['kind'], tm.get('t'), tm.get('s'))
+    return v * _one(Q[tm['q2']], tm['kind2'], tm.get('t2'), tm.get('s2')) if tm.get('q2') else v
 
 
 class Screen:
@@ -101,8 +121,7 @@ class Screen:
         if k not in self.cache:
             v = self.Qfit[k]; kn = self.knots.setdefault(k, thresholds(v, k in self.mids, self.offer)); vs = v[self.sel]
             if len(self.cache) >= N_CACHE: self.cache.pop(next(iter(self.cache)))
-            self.cache[k] = (np.stack([vs] + [np.maximum(0, vs - t) for t in kn] + [np.maximum(0, t - vs) for t in kn], 1).astype(np.float32),
-                             [('lin', None)] + [('gt', t) for t in kn] + [('lt', t) for t in kn])
+            M, D = cols(vs, kn); self.cache[k] = (np.stack(M, 1).astype(np.float32), D)
         return self.cache[k]
 
 
@@ -113,8 +132,7 @@ def fit_neuron(z, Q, keys, knots, sel, log=None, screen=None):
     cache = {}
     for k in keys:
         v = Q['fit'][k][sel]
-        cache[k] = (np.stack([v] + [np.maximum(0, v - t) for t in knots[k]] + [np.maximum(0, t - v) for t in knots[k]], 1).astype(np.float32),
-                    [('lin', None)] + [('gt', t) for t in knots[k]] + [('lt', t) for t in knots[k]])
+        M, D = cols(v, knots[k]); cache[k] = (np.stack(M, 1).astype(np.float32), D)
     chosen, Bsel, path = [], [np.ones(len(sel))], []; best = (-np.inf, 0); stall = 0
     ys = target[sel]; hd = act(zd)
     def gain(C, Qb, r):
@@ -124,7 +142,7 @@ def fit_neuron(z, Q, keys, knots, sel, log=None, screen=None):
         cand, rel = [], []
         get = lambda k: cache[k] if k in cache else screen.cand(k)
         for k in keys + (screen.top(r) if screen else []):
-            C, D = get(k); g, i = gain(C, Qb32, r32); cand.append((g, dict(q=k, kind=D[i][0], t=D[i][1])))
+            C, D = get(k); g, i = gain(C, Qb32, r32); cand.append((g, dict(q=k, kind=D[i][0], t=D[i][1], **({'s': D[i][2]} if D[i][2] else {}))))
             v = C[:, 0]; rel.append((abs(np.corrcoef(v, r)[0, 1]) if np.ptp(v) > 0 else 0, k))
         top = [k for _, k in sorted(rel, reverse=True)[:10]]
         for tm in chosen:                                   # products: a chosen threshold term × a threshold term of a related observable
@@ -133,7 +151,7 @@ def fit_neuron(z, Q, keys, knots, sel, log=None, screen=None):
             for k in top:
                 if k == tm['q']: continue
                 C, D = get(k); g, i = gain(C[:, 1:] * pv[:, None], Qb32, r32)
-                cand.append((g, dict(q=tm['q'], kind=tm['kind'], t=tm['t'], q2=k, kind2=D[i + 1][0], t2=D[i + 1][1])))
+                cand.append((g, dict(q=tm['q'], kind=tm['kind'], t=tm['t'], **({'s': tm['s']} if tm.get('s') else {}), q2=k, kind2=D[i + 1][0], t2=D[i + 1][1], **({'s2': D[i + 1][2]} if D[i + 1][2] else {}))))
         g, tm = max(cand, key=lambda c: c[0])
         if g <= 0: break
         chosen.append(tm); Bsel.append(term_value(tm, {k: Q['fit'][k][sel] for k in (tm['q'], tm.get('q2')) if k}))
@@ -183,7 +201,8 @@ def _one_thread():
 
 
 def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log, workers=None):
-    t0 = time.time(); setup = SETUPS[setup_name]
+    global SMOOTH
+    t0 = time.time(); setup = SETUPS[setup_name]; SMOOTH = bool(setup.gelu)
     S, net = splits(n, untrained)
     Q = {s: S[s][2] for s in S}; Z = {s: S[s][1]['z'] for s in S}
     keys = candidate_observables(setup, n, Q, lowlevel, log); mids = mass_ids(n)
