@@ -159,6 +159,11 @@ def _one_neuron(j):
     zj = {s: Z[s][:, j] for s in Z}; t0 = time.time()
     if np.ptp(zj['fit']) < 1e-9: return dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True)
     terms, coef, path = fit_neuron(zj, Q, keys, knots, sel, screen=screen)
+    return _finish(j, terms, coef, path, zj, Q, t0)
+
+
+def _finish(j, terms, coef, path, zj, Q, t0):
+    """a neuron's step-1 result: R² on the test split, each term's importance (R² lost without it), the log lines"""
     Bt = np.stack([np.ones(len(zj['test']))] + [term_value(t, Q['test']) for t in terms], 1); ht = act(zj['test']); zt = Bt @ coef
     r2h = lambda z: float(1 - ((ht - act(z)) ** 2).mean() / max(ht.var(), 1e-12)); r2 = r2h(zt)
     imp = [round(r2 - r2h(zt - c * Bt[:, i + 1]), 5) for i, c in enumerate(coef[1:])]         # R² lost when the term alone is left out
@@ -192,7 +197,18 @@ def run(setup_name, n, untrained=False, lowlevel=False, out=None, log=log, worke
     log(f'{len(keys)} observables, {sum(1 + 2 * len(v) for v in knots.values())} candidate terms, {time.time() - t0:.0f} s')
     _G.update(Q=Q, Z=Z, keys=keys, knots=knots, sel=sel, screen=screen)
     workers = workers or int(os.environ.get('JETDISTILL_WORKERS', 4 if TAGGER == 'part' else 1))
-    if workers > 1:
+    gpu = os.environ.get('JETDISTILL_STEP1_DEVICE')
+    if gpu and screen is not None:               # the same selection on a GPU (mars_gpu), all neurons in lockstep
+        from . import mars_gpu
+        from .observables.compute import block_matrix
+        from .pipeline import jets, sub
+        Jf = sub(jets(n, 'fit'), config.N_STEP1_FIT); bids, BM = block_matrix(n, Jf['x'][sel], Jf['jet'][sel], Jf['ext'][sel])
+        R = mars_gpu.select(Z, Q, keys, knots, sel, screen, (bids, BM), device=gpu, log=log); del BM
+        neurons = []
+        for j in range(Z['fit'].shape[1]):
+            zj = {s_: Z[s_][:, j] for s_ in Z}
+            neurons.append(_finish(j, *R[j], zj, Q, time.time()) if j in R else dict(neuron=j, intercept=float(zj['fit'].mean()), terms=[], constant=True))
+    elif workers > 1:
         import multiprocessing as mp
         with mp.get_context('fork').Pool(workers, initializer=_one_thread) as pool: neurons = pool.map(_one_neuron, range(Z['fit'].shape[1]), chunksize=1)
     else:
