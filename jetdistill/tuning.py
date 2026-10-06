@@ -49,10 +49,69 @@ def neuron_r2(H, Hn):
     return float(np.mean(1 - ((H - Hn) ** 2).mean(0)[ok] / v[ok]))
 
 
+def train_torch(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, history=None, device='mps', chunk=50000):
+    """train() on a GPU with torch (ParT: no activation, no rounding in the last layer): the same full-batch Adam, steps,
+    scaled coefficients and choice of the step (every 50), float32. All terms of all neurons are one matrix (each column
+    divided by its spread, as train() scales the coefficients); a neuron is the sum of its own columns (index_add); the
+    gradient is accumulated over chunks of jets."""
+    import torch
+    assert not RELU and last[2] is None and target != 'neurons' and history is None
+    steps = steps or STEPS_BY_TARGET.get(target, STEPS); dt = torch.float32
+    nn_ = len(formula); owner = np.concatenate([np.full(len(nr['terms']), j) for j, nr in enumerate(formula)]).astype(np.int64); T_ = len(owner)
+    def matrix(Q, N):
+        M = torch.empty((N, max(T_, 1)), dtype=dt, device=device); c = 0
+        for nr in formula:
+            if nr['terms']:
+                b = np.asarray(F.bases([nr], Q)[0], np.float32); M[:, c:c + b.shape[1]] = torch.from_numpy(b).to(device); c += b.shape[1]
+        return M
+    Nf, Nd = len(fit['P']), len(dev['P'])
+    Bf, Bd = matrix(Qf, Nf), matrix(Qd, Nd)
+    sd = Bf.std(0, unbiased=False) + 1e-9 if T_ else torch.ones(1, device=device); Bf /= sd; Bd /= sd   # scaled columns (train(): coefficient × spread)
+    C = [(np.asarray(c, np.float64), float(c0)) for c, c0 in F.coefs(formula)]
+    w = torch.tensor(np.concatenate([c for c, _ in C]) if T_ else np.zeros(1), dtype=dt, device=device) * sd
+    c0 = torch.tensor([c for _, c in C], dtype=dt, device=device); own = torch.from_numpy(owner).to(device)
+    K7, b7 = (torch.tensor(np.asarray(x), dtype=dt, device=device) for x in last[:2])
+    Tt = {'probabilities': fit['P'], 'decisions': np.eye(NC)[fit['net']], 'labels': np.eye(NC)[fit['y']]}[target]
+    Tt = torch.tensor(np.asarray(Tt), dtype=dt, device=device); Hn = torch.tensor(np.asarray(fit['H']), dtype=dt, device=device)
+    vn = torch.tensor(np.asarray(fit['H']).var(0) + 1e-6, dtype=dt, device=device)
+    ref = torch.tensor(dev['y'] if target == 'labels' else dev['net'], device=device)
+    def hidden(B, w, c0):
+        h = c0.expand(B.shape[0], nn_).clone()
+        return h.index_add(1, own, B * w) if T_ else h
+    def score(w, c0):
+        with torch.no_grad():
+            return float(torch.cat([(hidden(Bd[i:i + chunk], w, c0) @ K7 + b7).argmax(1) for i in range(0, Nd, chunk)]).eq(ref).float().mean())
+    m_w, v_w, m_c, v_c = (torch.zeros_like(x) for x in (w, w, c0, c0)); best = (-np.inf, w.clone(), c0.clone())
+    for i in range(steps):
+        gw, gc = torch.zeros_like(w), torch.zeros_like(c0)
+        for a in range(0, Nf, chunk):
+            wq, cq = w.detach().requires_grad_(True), c0.detach().requires_grad_(True)
+            h = hidden(Bf[a:a + chunk], wq, cq); L = h @ K7 + b7
+            loss = -(Tt[a:a + chunk] * torch.log_softmax(L, 1)).sum() / Nf
+            if lam > 0: loss = loss + lam * ((h - Hn[a:a + chunk]) ** 2 / vn).sum() / (Nf * nn_)
+            g1, g2 = torch.autograd.grad(loss, (wq, cq)); gw += g1; gc += g2
+        for p_, g_, m, v in ((w, gw, m_w, v_w), (c0, gc, m_c, v_c)):
+            m.mul_(.9).add_(.1 * g_); v.mul_(.999).add_(.001 * g_ * g_)
+            p_.sub_(lr * (m / (1 - .9 ** (i + 1))) / (torch.sqrt(v / (1 - .999 ** (i + 1))) + 1e-8))
+        if i % 50 == 49 or i == steps - 1:
+            s_ = score(w, c0)
+            if s_ > best[0]: best = (s_, w.clone(), c0.clone())
+    wb = (best[1] / sd).cpu().numpy().astype(np.float64) if T_ else np.zeros(0); cb = best[2].cpu().numpy().astype(np.float64); out, k = [], 0
+    for j, nr in enumerate(formula):
+        n_ = len(nr['terms']); out.append((wb[k:k + n_], float(cb[j]))); k += n_
+    del Bf, Bd
+    if device == 'mps': torch.mps.empty_cache()
+    return F.with_coefs(formula, out), best[0]
+
+
 def train(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr=LR, history=None):
     """fit/dev: dict(P=network probabilities, y=true class, net=network class, H=network neurons (ReLU)) of those jets.
     Returns (formula with trained coefficients, validation score of the kept step). history: a list that receives, every 50
     steps, the loss and the score on the training and on the validation jets (analysis/convergence.py)."""
+    import os
+    dev_ = os.environ.get('JETDISTILL_TUNE_DEVICE')
+    if dev_ and not RELU and last[2] is None and target != 'neurons' and history is None:
+        return train_torch(formula, Qf, Qd, target, fit, dev, last, lam, steps, lr, device=dev_)
     import jax, jax.numpy as jnp
     steps = steps or STEPS_BY_TARGET.get(target, STEPS)
     K7, b7 = (jnp.asarray(x, jnp.float32) for x in last[:2]); rounds = last[2] is not None

@@ -173,7 +173,7 @@ def library(n):
     return L
 
 
-PAIR_BLOCK = False                   # block B (ParT's pair inputs for all 8,128 pairs): off for now (step 1 cost)
+PAIR_BLOCK = __import__('os').environ.get('JETDISTILL_PAIR_BLOCK') == '1'   # block B (ParT's pair inputs for all 8,128 pairs): off unless JETDISTILL_PAIR_BLOCK=1 (step 1 cost)
 LNEPS = -18.420680743952367          # ln(1e-8): ParT's floor for its logarithms; also the value of a missing particle or pair
 BETAS = ((0.5, 'b05'), (2, 'b2'))   # the extra angular exponents of the energy correlations
 PPART = dict(kin=['lnpt', 'lne', 'lnptrel', 'lnerel', 'dr', 'eta', 'phi'],
