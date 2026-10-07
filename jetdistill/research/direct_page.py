@@ -24,6 +24,7 @@ INFO = {'S15p': ('The 128 neurons directly — per-particle formulas, ParT’s s
         'S15o': ('The 128 neurons directly — per-particle formulas, ParT’s selection, one term per input', None, None)}
 INFO['S15o'] = (INFO['S15o'][0], INFO['S15p'][1], INFO['S15p'][2].replace(' Pruned to the inputs each neuron needs and re-tuned toward ParT’s probabilities;', ' Re-tuned toward ParT’s probabilities;'))
 INFO['S15q'] = ('The 128 neurons directly — per-particle formulas, ParT’s selection, statements pruned', INFO['S15p'][1], INFO['S15p'][2] + ' Then single statements removed, smallest first, within 0.1 pt, re-tuned.')
+INFO['S17'] = ('The 128 neurons directly — one statement per input, shared by the heads', INFO['S15p'][1], INFO['S15p'][2] + ' Then every (neuron, input) keeps one statement — one kind and threshold shared by all 16 heads, each head with its own coefficient — re-tuned.')
 TYPE5 = ['charged hadron', 'neutral hadron', 'photon', 'electron', 'muon']
 HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
