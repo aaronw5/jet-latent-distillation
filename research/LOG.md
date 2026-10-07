@@ -245,3 +245,9 @@ explorer does not apply to these models.
   96.8 %, both blocks all formula 95.95 %. With S5's value formulas — ParT's α 93.9 %, formula ranking + ParT α_cls
   91.9 %, block 1 all formula 82.9 %: S5's values lean on the class-token term c·α_cls (large c), so α_cls errors are
   amplified → S12: re-tune S5's values on the formula α (stagewise).
+- S11 full (score formulas on 20k jets, α_cls on 100k, balanced 20k dev): per-head weights off ParT's by 6–21 %
+  (total variation) in block 1, 39–61 % in block 2; α_cls logit R² 0.76–0.98 (block 1), 0.32–0.84 (block 2).
+  Agreement — ParT's values: formula ranking + ParT α_cls (block 1) 96.89 %, + formula α_cls 96.67 %, both blocks
+  all formula **95.74 %**. S5's values: ParT's α 93.16 %, block-1 formula α 83.91 %, both 74.84 %.
+- Reading: α as formulas is good enough when the values are right (95.7 % with ParT's values, everything else
+  formula); S5's values were fit to ParT's α and do not transfer → S12 re-tunes them on the formula α.

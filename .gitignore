@@ -11,3 +11,5 @@ __pycache__/
 /site_part/
 /models_part/
 *.egg-info/
+research/results/*.npy
+research/results/*.npz
