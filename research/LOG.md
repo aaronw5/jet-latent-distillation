@@ -428,3 +428,4 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   the way ParT's values do (97 %) — the values' context is what compensates a wrong selection.
 - **P1** (no attention at all: the 12 hardest + 6 most displaced particles in fixed order, hinge terms + jet-level inputs
   → 128 neurons): least squares ~, tuned **76.0 %**. A fixed ordering is a worse selection than the jet-level formulas (80 %).
+- **S15q on the 2M test jets: 92.64 %** (accuracy 0.8412, AUC 0.9838; ParT 0.86 / 0.987) — 5,020 statements, 18 active neurons.
