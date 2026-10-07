@@ -389,3 +389,6 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   downstream MLP is not needed once the pooled terms are there. 'pre' variant (class token before the final LN,
   ParT's LN applied) running. If it holds: this is the cleanest ≥ 90 % model — per-particle formulas → 128 jet-level
   neurons → a linear layer — and goes through the full loop (one term per input, prune, 2M test, page).
+- S15 pre (class token before the final LN, ParT's LN applied): 93.02 % → the post variant (93.29 %) is carried.
+- User: S15 is the model to carry (simpler, no downstream MLP, no head values): one term per input → prune → re-tune →
+  2M test → a page in the JEDI-linear neuron layout (128 neurons). α stays ParT's.
