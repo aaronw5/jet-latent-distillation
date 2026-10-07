@@ -63,7 +63,8 @@ def run(n_fit=30000, n_dev=20000, epochs=20, n_jet=100000, lr=3e-4, bs=500, devi
                   s = (phi(F) @ Wc).masked_fill(~ok[..., None], -1e9); rel = torch.softmax(s, 1); acls = torch.sigmoid(-(Z @ Wz)); al = (1 - acls)[:, None] * rel
                   out[idx[a:a + bs]] = torch.cat([torch.einsum('nph,npk->nhk', al, tv(F[..., :NV])), acls[..., None], torch.ones_like(acls)[..., None]], -1).cpu().numpy()
           return out
-      Ef, Ed = pooled(Fft, okft, Zft, of), pooled(Fdt, okdt, Zdt, od); Hf = np.asarray(Jf['H'][rf], np.float32); Bf = Ef.reshape(n_fit, 16 * K)
+      Ef, Ed = pooled(Fft, okft, Zft, of), pooled(Fdt, okdt, Zdt, od); Hf = np.load(OUT / f"{os.environ['TARGET_FROM']}_neurons_fit.npy")[:n_fit] if os.environ.get('TARGET_FROM') else np.asarray(Jf['H'][rf], np.float32); Bf = Ef.reshape(n_fit, 16 * K)
+      if os.environ.get('TARGET_FROM'): log(f"  targets: the neurons of {os.environ['TARGET_FROM']} (ParT's values pooled with the formula weights)")
       G = Bf.T.astype(np.float64) @ Bf / n_fit; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); okc = d > 1e-9; Gs = G[np.ix_(okc, okc)] / d[okc][:, None] / d[okc][None]
       Wls = np.zeros((16 * K, 128)); Wls[okc] = np.linalg.solve(Gs + 1e-3 * np.eye(okc.sum()), (Bf[:, okc].T.astype(np.float64) @ Hf / n_fit) / d[okc][:, None]) / d[okc][:, None]
       with torch.no_grad(): Wv.data.copy_(T(Wls.reshape(16, K, 128).astype(np.float32))); mask.fill_(1)

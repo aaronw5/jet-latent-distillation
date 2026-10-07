@@ -213,9 +213,39 @@ def uniform2(src='W1q', out='W2', epochs=10, n_fit=30000, n_dev=20000, device='m
     (OUT / f'{out}_uniform2.json').write_text(json.dumps(r, indent=1)); log(f'{out}: block-1 selection formulas ({int(keep[:8].sum())} head–input pairs), block 2 a plain average, ParT values: {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
 
 
+def neurons_of(tag='W1q', which='fit', n=100000, chunk=5000, device='mps', log=print):
+    """the 128 neurons (after ParT's final LayerNorm) of a formula-selection model — ParT's values pooled with the formula weights —
+    for the first n fit jets or the balanced dev jets; saved as {tag}_neurons_{which}.npy (the target for the combined models)"""
+    import torch
+    from .direct_alpha import zfun
+    t0 = time.time(); model = ParTNetwork('full').model; model.eval()
+    for p in model.parameters(): p.requires_grad_(False)
+    PA = np.load(OUT / f'{tag}_alpha.npz'); T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
+    Wc, Wz, knt, mut, sdt = T(PA['W']), T(PA['cz'].T), T(PA['kn']), T(PA['mu']), T(PA['sd']); K = PA['kn'].shape[0]
+    def phi(F): return torch.cat([torch.ones_like(F[..., :1]), (F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(K)] + [torch.clamp(knt[k] - F, min=0) / sdt for k in range(K)], -1)
+    J = jets('full', which); rows = np.arange(n) if which == 'fit' else rows_of_split('dev', n); _, _, M_all, _, _ = extract(model, which, n, device)
+    Z = zfun(model, device)(J, rows, M_all); D = RESULTS / '_cls' / 'full'; Xall = np.load(D / which / 'x_f16.npy', mmap_mode='r'); Mall = np.load(D / which / 'mask.npy')
+    out = np.zeros((len(rows), 128), np.float32)
+    for a in range(0, len(rows), chunk):
+        r = rows[a:a + chunk]; _, V = internals(model, Xall[r], Mall[r], device); F, ok = feats(J, r, model); F = np.concatenate([F, rel_feats(F, ok)], -1)
+        Ft, okt, Zt, Vt = T(F, torch.float16), T(ok, torch.bool), T(Z[a:a + chunk]), T(V.transpose(1, 0, 2, 3, 4), torch.float16)
+        with torch.no_grad():
+            for c0 in range(0, len(r), 500):
+                sl = slice(c0, c0 + 500); P = int(okt[sl].sum(1).max()); Fb, ob, Vb = Ft[sl, :P].float(), okt[sl, :P], Vt[sl, :, :1 + P]
+                s = (phi(Fb) @ Wc).masked_fill(~ob[..., None], -1e9); rel = torch.softmax(s, 1); acls = torch.sigmoid(-(Zt[sl] @ Wz)); cls = model.cls_token[0, 0].expand(len(Fb), -1)
+                for b, blk in enumerate(model.cls_blocks):
+                    al = torch.cat([acls[:, 8 * b:8 * b + 8, None], (1 - acls[:, 8 * b:8 * b + 8, None]) * rel[:, :, 8 * b:8 * b + 8].permute(0, 2, 1)], 2)
+                    cls = after(blk, torch.einsum('nhp,nphd->nhd', al, Vb[:, b].float()), cls)
+                out[a + c0:a + c0 + len(Fb)] = model.norm(cls).cpu().numpy()
+        if device == 'mps': torch.mps.empty_cache()
+        log(f'  {tag} neurons, {which}: {a + len(r)} of {len(rows)} jets, {time.time() - t0:.0f} s')
+    np.save(OUT / f'{tag}_neurons_{which}.npy', out); return out
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
     elif cmd == 'test': test(*a)
+    elif cmd == 'neurons': neurons_of(a[0], a[1], int(a[2]))
     elif cmd == 'uniform2': uniform2(*a[:2], *(int(v) for v in a[2:]))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a[:5])), **dict(zip(('src', 'out'), a[5:])))
