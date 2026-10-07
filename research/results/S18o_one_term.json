@@ -1,0 +1,10 @@
+{
+ "experiment": "S18o",
+ "start": 0.9329,
+ "one_term_ls": 0.8625,
+ "best": 0.9249,
+ "best_epoch": 150,
+ "terms": 6080,
+ "terms_start": 36480,
+ "seconds": 121.0452311038971
+}

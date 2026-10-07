@@ -1,0 +1,19 @@
+{
+ "experiment": "S19b1_post",
+ "heads": [
+  0,
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7
+ ],
+ "terms": 1840,
+ "least_squares": 0.8512,
+ "best": 0.9051,
+ "best_epoch": 140,
+ "check": 1.0,
+ "seconds": 124.60329008102417
+}

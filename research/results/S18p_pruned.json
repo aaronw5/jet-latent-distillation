@@ -1,0 +1,72 @@
+{
+ "tol": 0.1,
+ "start": 0.9249,
+ "final": 0.92625,
+ "inputs_per_neuron": [
+  30,
+  27,
+  22,
+  26,
+  23,
+  26,
+  23,
+  21,
+  24,
+  19
+ ],
+ "path": [
+  {
+   "pairs": 380,
+   "agreement": 0.9249
+  },
+  {
+   "round": 1,
+   "removed": 64,
+   "pairs": 316,
+   "agreement": 0.9263
+  },
+  {
+   "round": 2,
+   "removed": 32,
+   "pairs": 284,
+   "agreement": 0.9265
+  },
+  {
+   "round": 3,
+   "removed": 8,
+   "pairs": 276,
+   "agreement": 0.9269
+  },
+  {
+   "round": 4,
+   "removed": 8,
+   "pairs": 268,
+   "agreement": 0.9259
+  },
+  {
+   "round": 5,
+   "removed": 7,
+   "pairs": 261,
+   "agreement": 0.92595
+  },
+  {
+   "round": 6,
+   "removed": 10,
+   "pairs": 251,
+   "agreement": 0.92545
+  },
+  {
+   "round": 7,
+   "removed": 6,
+   "pairs": 245,
+   "agreement": 0.92565
+  },
+  {
+   "round": 8,
+   "removed": 4,
+   "pairs": 241,
+   "agreement": 0.92625
+  }
+ ],
+ "seconds": 156.00356578826904
+}
