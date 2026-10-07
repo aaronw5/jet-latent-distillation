@@ -533,3 +533,6 @@ functionally right for ParT's values but different in detail; formula neurons ar
   (C3 82.01 %). Context helps the least-squares fit but not the tuned result here (fewer jets, 12k terms per neuron).
 - **C6q**: 57,010 statements, 82.55 %. Next: C6j (joint re-tune) + 2M test; then **C6s** = L1 sparsification of C6j to the
   fewest statements with ≥ 81 %, and its 2M test.
+- **C3j** (the one-term chain: C3 → one term 68.97 → pairs 66.55 → statements 74.05 → both halves re-tuned together):
+  **78.83 %** with 4,504 statements, one term per input. 2M test queued in its chain. The no-limit chain (C6) keeps ≈ 82.5 %
+  with 57,010 statements; the joint re-tune (C6j) and L1 sparsification (C6s) are next.
