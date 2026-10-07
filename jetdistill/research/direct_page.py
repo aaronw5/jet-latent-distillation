@@ -30,7 +30,7 @@ HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
 
 def load_model(tag):
-    P = dict(np.load(OUT / f'{tag}_model.npz')); K = 11 * NV + 2; return dict(W=P['W'].reshape(16, K, -1).astype(np.float64), knv=P['knv'], kn=P['kn'], names=(PFEAT + NBR)[:NV], logits=bool(P.get('logits', False)))
+    P = dict(np.load(OUT / f'{tag}_model.npz')); K = 11 * NV + 2; return dict(W=P['W'].reshape(16, K, -1).astype(np.float64), knv=P['knv'], kn=P['kn'], names=(PFEAT + NBR)[:NV], logits=bool(P.get('logits', False)), alpha_from=str(P.get('alpha_from', '')))
 
 
 def cols(f): return [f] + [NV + k * NV + f for k in range(5)] + [6 * NV + k * NV + f for k in range(5)]
@@ -51,6 +51,9 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
     from sklearn.metrics import roc_auc_score
     m = load_model(tag); W, knv, names = m['W'], m['knv'], m['names']; model = ParTNetwork('full').model; model.eval()
     J = jets('full', 'dev'); rows = rows_of_split('dev', n_dev); _, A, M, L, _ = extract(model, 'dev', n_dev, device); ref = L.argmax(1); ytrue = np.asarray(J['y'][rows])
+    if m['alpha_from']:                                                                       # combined models: the weights from the selection formulas
+        from .direct_alpha import zfun, formula_alpha
+        A = formula_alpha(m['alpha_from'], J, rows, model, zfun(model, device)(J, rows, M), device); log(f'  weights from the selection formulas {m["alpha_from"]}')
     Pd, _ = phi_pooled(J, rows, A, m['kn']); E = extend(Pd, knv, NV); V = np.einsum('nhk,hko->no', E, W)                           # the 128 neurons of the formula model
     NO = W.shape[2]; LG = m['logits']
     if LG: Hp = L.astype(np.float32); FW = np.eye(10); FB = np.zeros(10)                                     # S18: the outputs ARE the class scores
@@ -179,6 +182,26 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         heads.append(dict(block=b + 1, head=h % 8 + 1, selects=', '.join(out[:3]) if out else 'all particles about equally', self_weight=float(A[b, :, h % 8, 0].mean()), eff_particles=float(np.exp(-(al * np.log(al + 1e-12)).sum(1)).mean()),
                           selection=sel, drop=drop, inputs=nin, terms=nt, serves=[(int(n), float(share[n] / (share.sum() or 1))) for n in top],
                           by_class=[dict(cls=CLASSES[c], eff=float(np.exp(-(al * np.log(al + 1e-12)).sum(1))[ytrue == c].mean()), self=float(A[b, :, h % 8, 0][ytrue == c].mean())) for c in range(10)]))
+    def stmts_of(d):
+        out = []
+        for din in d['inputs']:
+            if din.get('categorical'): out.append(dict(t='cat', f=din['feature'], label='value by ' + din['feature'], table=din['table']))
+            elif din.get('shared'): out.append(dict(t='sh', f=din['feature'], fi=din['f'], kind=din['stat']['kind'], thr=din['stat']['thr'], coefs=din['stat']['coefs'], label=stmt(dict(coef=1.0, kind=din['stat']['kind'], thr=din['stat']['thr']), din['feature']).replace('add +1 · ', 'add c_h · ')))
+            else: out += [dict(t='h', f=din['feature'], fi=din['f'], kind=hd['kind'], thr=hd['thr'], coefs=[(hd['head'], hd['coef'])], label=f'[{HN(hd["head"])}] ' + stmt(hd, din['feature'])) for hd in din['heads']]
+        return out
+    def amounts(st_list, sl, tpj, qj):
+        res = []
+        for st in st_list:
+            if st['t'] == 'cat':
+                lvl = [TYPE5[k] for k in np.argmax(tpj, 1)] if st['f'] == 'particle type' else [str(int(round(q))) for q in qj]
+                amt = sum(float(AR[int(hn[1]) * 8 - 8 + int(hn[3]) - 1, sl] @ np.array([tb[l] for l in lvl])) for hn, tb in st['table'].items()); nf = len(lvl)
+            else:
+                x = XR[sl, st['fi']]; k, t = st['kind'], st['thr']; pc = x if k == 'lin' else np.maximum(0, x - t) if k == 'gt' else np.maximum(0, t - x)
+                amt = float(sum(c * (AR[h, sl] @ pc) for h, c in st['coefs'])); nf = int(len(x) if k == 'lin' else ((x > t) if k == 'gt' else (x < t)).sum())
+            res.append([round(amt, 4), nf])
+        return res
+    for d in neurons:
+        if d['inputs']: d['stmts'] = [dict(label=st['label'], f=st['f']) for st in stmts_of(d)]
     # example jets: 6 per ParT class; every head's weights, each particle's inputs and its contribution to every neuron
     rng = np.random.default_rng(0); ex = []; start = np.concatenate([[0], np.cumsum(npart)[:-1]])
     for c in range(10):
@@ -189,7 +212,8 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             sm = np.exp(Lm[i] - Lm[i].max()); sm /= sm.sum(); sp = np.exp(L[i] - L[i].max()); sp /= sp.sum()
             ex.append(dict(part=int(ref[i]), truth=int(ytrue[i]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts,
                            A=np.round(AR[:, sl], 4).tolist(), self=[round(float(A[h // 8, i, h % 8, 0]), 4) for h in range(16)], X=np.round(XR[sl], 4).tolist(), C=np.round(G[sl], 4).tolist(),
-                           V=np.round(V[i], 3).tolist(), H=np.round(Hp[i], 3).tolist()))
+                           V=np.round(V[i], 3).tolist(), H=np.round(Hp[i], 3).tolist(), logit=np.round(Lm[i], 3).tolist(), logit_part=np.round(L[i], 3).tolist(),
+                           ST={d['n']: amounts(stmts_of(d), sl, tp[sl], XR[sl, 7]) for d in neurons if d['inputs']}))
     return dict(tag=tag, agreement=a0, n_dev=n_dev, neurons=neurons, heads=heads, classes=classes, logits=LG, examples=ex, hists=HIST, fc=dict(W=FW.round(5).tolist(), b=FB.round(5).tolist()),
                 pairs=int(sum(len(d['inputs']) for d in neurons)), terms=int((W[:, :11 * NV] != 0).sum()), r2_mean=float(np.mean([d['r2'] for d in neurons])))
 
