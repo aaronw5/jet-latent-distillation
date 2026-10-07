@@ -43,13 +43,21 @@ def evaluate(tags='S5', which='full_test', device='mps', chunk=5000, log=print):
     net = ParTNetwork('full'); model = net.model; model.eval(); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device)
     for p_ in model.parameters(): p_.requires_grad_(False)
     from .one_term import to_standard
-    Wt = {t: T(to_standard(Ms[t]['W'], Ms[t]['knv'], int(Ms[t]['nv'])) if str(Ms[t].get('basis', '')) == 'extended' else Ms[t]['W']) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] for t in tags}
+    def std_W(Mt_):                                                      # extended → standard basis; direct (S15) models: per head (16, 11nv+2, 128) → flattened
+        W_ = Mt_['W']
+        if str(Mt_.get('basis', '')) != 'extended': return W_
+        nv_ = int(Mt_['nv'])
+        if W_.ndim == 2: K_ = 11 * nv_ + 2; return to_standard(W_.reshape(16, K_, W_.shape[1]), Mt_['knv'], nv_).reshape(16 * (6 * nv_ + 2), W_.shape[1])
+        return to_standard(W_, Mt_['knv'], nv_)
+    Wt = {t: T(std_W(Ms[t])) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] if 'uniform' in Ms[t] else [] for t in tags}
     J = jets('full', which)
+    direct = {t: Ms[t]['W'].ndim == 2 for t in tags}                      # S15-type: the 128 neurons = all heads' pooled terms @ W → ParT's last layer
     def logits_of(A, M, r):
         out = {}
         for t in tags:
             At = uniformize(A.copy(), M, blocks[t]); P, _ = phi_pooled(J, r, At, kn[t])
-            out[t] = np.concatenate([downstream(model, *torch.einsum('nhk,hko->nho', T(P[a:a + 5000]), Wt[t]).split(8, 1)).cpu().numpy() for a in range(0, len(r), 5000)])
+            if direct[t]: out[t] = np.concatenate([model.fc(T(P[a:a + 5000].reshape(min(5000, len(r) - a), -1)) @ Wt[t]).cpu().numpy() for a in range(0, len(r), 5000)])
+            else: out[t] = np.concatenate([downstream(model, *torch.einsum('nhk,hko->nho', T(P[a:a + 5000]), Wt[t]).split(8, 1)).cpu().numpy() for a in range(0, len(r), 5000)])
         return out
     if which == 'dev':
         rows = rows_of_split('dev', 20000); _, A, M, _, _ = extract(model, 'dev', 20000, device); L = logits_of(A, M, rows)
