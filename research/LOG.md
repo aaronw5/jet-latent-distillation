@@ -528,3 +528,8 @@ functionally right for ParT's values but different in detail; formula neurons ar
 - C6 statements: 74,208 → 59,632 in 5 rounds at ≈ 82.6 % — the bisection limit (0.1 pt per round) removes little per
   round; an L1 penalty during re-tuning or a target-agreement prune would cut deeper (next).
 - C3 (one term) loop: C3q 4,504 statements, 74.05 % (then C3j joint re-tune).
+- **C7** (combined; the neuron formulas read 126 inputs — + one hop of pair-kernel context —, standard basis, 60k jets): stage 1
+  least squares 76.48 % (C3 with 38 inputs and 100k jets: 74.72 %), after neuron tuning 78.65 % (78.44 %), joint **80.55 %**
+  (C3 82.01 %). Context helps the least-squares fit but not the tuned result here (fewer jets, 12k terms per neuron).
+- **C6q**: 57,010 statements, 82.55 %. Next: C6j (joint re-tune) + 2M test; then **C6s** = L1 sparsification of C6j to the
+  fewest statements with ≥ 81 %, and its 2M test.
