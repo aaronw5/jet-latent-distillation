@@ -17,6 +17,31 @@ DEFS = {
     'prong charge': 'Σ_{j ∈ prong(i)} q_j', 'prong n displaced': '#{j ∈ prong(i) : q_j ≠ 0, |d0_j| / σ(d0_j) > 3}', 'pT share in prong': 'pT_i / Σ_{j ∈ prong(i)} pT_j',
     'ΔR prong axis': 'ΔR between i and the seed particle of its prong (capped at 1.5)', 'ln kT with nearest': 'ln(min(pT_i, pT_nn(i)) · ΔR_i,nn(i))'}
 
+# plain words: every input describes ONE particle i of the jet (the particle being summed over by a head);
+# "nearest" = nearest TO PARTICLE i among the OTHER particles of the same jet, by angle ΔR in (η, φ)
+WORDS = {
+    'ln pT': 'how hard particle i is (its transverse momentum, log)', 'ln E': 'its energy (log)',
+    'ln pT/pT_jet': 'the fraction of the jet’s pT carried by particle i (log)', 'ln E/E_jet': 'the fraction of the jet’s energy carried by particle i (log)',
+    'ΔR': 'how far particle i is from the jet axis (the jet’s direction)', 'Δη': 'its offset from the jet axis in pseudorapidity', 'Δφ': 'its offset from the jet axis in azimuth',
+    'charge': 'the electric charge of particle i', 'charged hadron': 'is particle i a charged hadron (e.g. a pion)?', 'neutral hadron': 'is it a neutral hadron?', 'photon': 'is it a photon?',
+    'electron': 'is it an electron?', 'muon': 'is it a muon?',
+    'tanh d0': 'how far particle i’s track misses the collision point, sideways — large for tracks from a b or c hadron decay', 'σ(d0)': 'the uncertainty of that miss distance',
+    'tanh dz': 'how far its track misses the collision point along the beam', 'σ(dz)': 'the uncertainty of that',
+    'ln(1 + pT rank)': 'where particle i stands in the jet’s pT ordering: 0 for the hardest, larger for softer particles',
+    'ln(1+n within 0.1)': 'how many other particles of the jet are within ΔR 0.1 of particle i (a tight cone around it)', 'ln(1+n within 0.2)': 'the same within ΔR 0.2',
+    'pT share within 0.1': 'what fraction of the jet’s pT sits in the other particles within ΔR 0.1 of particle i — is i inside a dense, hard core?',
+    'pT share within 0.2': 'the same within ΔR 0.2', 'pT share within 0.4': 'the same within ΔR 0.4',
+    'ΔR nearest': 'the angle from particle i to the closest other particle of the jet — is i isolated or in a cluster?',
+    'ln pT nearest / pT': 'how hard that closest other particle is compared with particle i',
+    'ΔR hardest': 'the angle from particle i to the hardest particle of the jet', 'ΔR 2nd hardest': 'the angle from particle i to the second-hardest particle',
+    'ΔR nearest displaced': 'the angle from particle i to the closest OTHER particle of the jet that is a displaced track (charged, its track misses the collision point by more than 3σ — typical of b/c-hadron decays). Small: i sits next to a secondary vertex. 1.5 if the jet has no displaced track.',
+    'ΔR nearest lepton': 'the angle from particle i to the closest other electron or muon in the jet (1.5 if none)', 'ΔR nearest photon': 'the angle from particle i to the closest other photon in the jet (1.5 if none)',
+    'prong index': 'which of the jet’s 3 prongs particle i belongs to (the prongs are seeded by the 3 hardest particles; each particle joins the nearest seed): 0, 1 or 2',
+    'prong pT share': 'the fraction of the jet’s pT in particle i’s prong', 'prong ln mass': 'the mass of particle i’s prong (log)', 'prong charge': 'the total charge of particle i’s prong',
+    'prong n displaced': 'how many displaced tracks are in particle i’s prong', 'pT share in prong': 'the fraction of its prong’s pT that particle i carries — the prong’s leader or a soft companion?',
+    'ΔR prong axis': 'the angle from particle i to the seed (hardest particle) of its prong', 'ln kT with nearest': 'how hard and wide the splitting between particle i and its closest neighbour is (kT = softer pT × angle)'}
+
+
 PK_DEF = ('Context seen through ParT’s pair kernels: ParT adds to every particle-attention logit a learned bias U_h(i, j) = f_h(ln kT_ij, ln z_ij, ln ΔR_ij, ln m²_ij), one per head h = 1…8 '
           '(kT_ij = min(pT_i, pT_j)·ΔR_ij, z_ij = min(pT_i, pT_j)/(pT_i + pT_j), m_ij the pair mass). With w_hij = softmax_j U_h(i, j) over the other particles, “hk: P” = Σ_{j ≠ i} w_hij P_j for the property P of particle j '
           '(ln pT_j/pT_jet, q_j, its type, tanh d0_j, [charged and |d0_j|/σ > 3], ΔR_j to the axis), and “hk: ln ΔR to i” = Σ_j w_hij ln ΔR_ij.')

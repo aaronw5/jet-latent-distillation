@@ -14,7 +14,7 @@ from ..part.network import ParTNetwork
 from .nbr import NBR, PK, nbr_features, pk_features
 from .heads import extract, downstream, phi_pooled, rows_of_split, OUT
 from .heads_eval import uniformize
-from .heads_defs import DEFS, PK_DEF, COMPOSE, NOTATION, python_export, neuron_snippet
+from .heads_defs import DEFS, WORDS, PK_DEF, COMPOSE, NOTATION, python_export, neuron_snippet
 
 CSS = """:root{--ink:#1d2433;--mut:#667085;--line:#e4e7ec;--bg:#f7f8fa;--acc:#1f4e79;--good:#2f855a;--bad:#c05621}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -190,7 +190,7 @@ function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; do
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
 setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES))
     notation_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(v)}</td></tr>' for k, v in NOTATION)
-    defs_rows = ''.join(f'<tr><td>{html.escape(k)}</td><td>{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
+    defs_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(WORDS.get(k, ""))}</td><td class="cnt">{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
     if py: (outdir / f'{tag}_formulas.py').write_text(py)
     shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k != 'examples'}))
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
@@ -204,7 +204,7 @@ setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', j
 <div id="jetbox"><div class="card"><div class="cnt">jet (6 per ParT class; green border = this model agrees with ParT on it):</div><div>{jb}</div></div><div class="card" id="jet"></div><div class="card" id="contrib"></div></div>
 {panels}
 {metrics_html}
-<h2>Definitions of the per-particle inputs</h2><div class="card"><table><tr><th>input</th><th>definition, for particle i of the jet</th></tr>{defs_rows}</table><p class="cnt" style="margin-top:8px">{html.escape(PK_DEF)}</p><p class="cnt">Code: jetdistill/part/clsfit.py (particle_features), jetdistill/research/nbr.py (nbr_features, pk_features).</p></div>
+<h2>Definitions of the per-particle inputs</h2><div class="card"><table><tr><th>input</th><th>in words</th><th>definition (math)</th></tr>{defs_rows}</table><p class="cnt">Every input describes <b>one particle i</b> of the jet — the particle a head is summing over. “Nearest” always means nearest <b>to particle i</b>, among the <b>other particles of the same jet</b>, by the angle ΔR = √(Δη² + Δφ²).</p><p class="cnt" style="margin-top:8px">{html.escape(PK_DEF)}</p><p class="cnt">Code: jetdistill/part/clsfit.py (particle_features), jetdistill/research/nbr.py (nbr_features, pk_features).</p></div>
 <h2>Files</h2><div class="card"><a href="{tag}_formulas.py">{tag}_formulas.py</a> (exact formulation) · <a href="{tag}_model.npz">{tag}_model.npz</a> (coefficients, thresholds) · <a href="analysis.json">analysis.json</a> · code: branch part-features, jetdistill/research/{'joint.py' if joint else 'heads.py'}</div>
 <script>{js}</script></main></body></html>"""
     (outdir / 'index.html').write_text(doc); log(f'page: {outdir / "index.html"} {len(doc) // 1024} kB')
