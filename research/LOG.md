@@ -517,3 +517,8 @@ functionally right for ParT's values but different in detail; formula neurons ar
   ParT's weights). The user lifted it: **C6** = C3 (unrestricted, 82.01 %) → prune (neuron, input) pairs → prune single
   statements → joint re-tune of both halves → 2M test. (A 2-term variant, C5, was started and stopped in favour of C6.)
   Cancelling term pairs will be checked on the result.
+- **C4** (combined, neurons fitted toward W1q's own neurons — ParT's values pooled with the formula weights — instead of
+  ParT's, 100k jets, 60 joint epochs): **82.05 %** (C3, toward ParT's neurons: 82.01 %). The target makes no difference:
+  the combined structure plateaus at ≈ 82 % on dev however the neurons are targeted.
+- C3o one term 68.97 %; C3p pairs pruned (summed single costs) 4,864 → 361 in one round, 66.55 % — overshoot → C6's
+  pair pruning switched to bisection on the measured agreement (prune_pairs).
