@@ -429,3 +429,17 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
 - **P1** (no attention at all: the 12 hardest + 6 most displaced particles in fixed order, hinge terms + jet-level inputs
   → 128 neurons): least squares ~, tuned **76.0 %**. A fixed ordering is a worse selection than the jet-level formulas (80 %).
 - **S15q on the 2M test jets: 92.64 %** (accuracy 0.8412, AUC 0.9838; ParT 0.86 / 0.987) — 5,020 statements, 18 active neurons.
+
+### A12 — which side needs the context? (clock ~12:35)
+ParT's class attention run with keys or values replaced by ridge predictions from k-hop physics (A8's inputs, dev 10k):
+| inputs | values predicted (ParT's α) | keys predicted (ParT's values) | both |
+|---|---|---|---|
+| own (38) | 72.5 % | **92.8 %** | 60.9 % |
+| + kernel hop (126) | 78.4 % | 94.7 % | 71.6 % |
+| + 2nd hop, pT-weighted (302) | 80.4 % | 95.2 % | 74.3 % |
+| + 3 plain hops (356) | 80.7 % | 95.2 % | 75.1 % |
+→ **The selection is the easy side: linear keys from a particle's own physics already give 92.8 % with ParT's values;
+the values (what a head reads off a particle) are the side that needs ParT's context** — 80 % even with 3 hops, and
+that is where the all-formula models lose (A10 84 %, A11 79 %). The two > 90 % lines are complementary: S15/S15q
+(formula content, ParT's selection, 92.6 % test) and W1 (formula selection, ParT's content, 96.9 % dev). A fully
+formula model needs formula VALUES with context — the per-particle embedding — which 3 hops of physics do not supply.
