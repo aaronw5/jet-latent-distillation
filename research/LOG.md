@@ -251,3 +251,16 @@ explorer does not apply to these models.
   all formula **95.74 %**. S5's values: ParT's α 93.16 %, block-1 formula α 83.91 %, both 74.84 %.
 - Reading: α as formulas is good enough when the values are right (95.7 % with ParT's values, everything else
   formula); S5's values were fit to ParT's α and do not transfer → S12 re-tunes them on the formula α.
+
+### S12 — S5's values re-tuned on the S11 formula α (stagewise all-formula; clock ~03:45)
+- Least squares 75.5 % → best **82.6 %** (epoch 90), flat after: the same wall as S10 (83.0 %).
+- The 2 × 2 picture (balanced dev): ParT values + ParT α 100 %; ParT values + formula α 95.7 %; formula values +
+  ParT α 93.2 %; formula values + formula α ≈ 83 %. The losses compound rather than add (additive would give ≈ 89 %):
+  ParT's α brings in context from the particle embeddings (each particle's relation to the whole jet); once α is also a
+  formula of the same per-particle inputs, no context enters, and the model falls back to the information limit of
+  those inputs — a flexible per-particle model with them reached 84 % (E3).
+- Consequence (90 % rule): the all-formula line needs better per-particle context inputs, not a better fit.
+  Candidates: multi-hop pair-kernel context (kernel averages of kernel averages, mimicking stacked attention),
+  kernel-weighted sums of more properties at several scales, the particle's prong / neighbourhood composition.
+  Cheap formula-based test: do they bring S11's weights closer to ParT's (total variation) and raise formula values +
+  ParT α above 93.2 %?
