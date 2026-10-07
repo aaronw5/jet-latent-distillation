@@ -1,0 +1,51 @@
+{
+ "tol": 0.1,
+ "src": "S15p",
+ "start": 0.92765,
+ "final": 0.92855,
+ "terms_start": 5872,
+ "terms": 5020,
+ "path": [
+  {
+   "terms": 5872,
+   "agreement": 0.92765
+  },
+  {
+   "round": 1,
+   "removed": 512,
+   "terms": 5360,
+   "agreement": 0.92835
+  },
+  {
+   "round": 2,
+   "removed": 120,
+   "terms": 5240,
+   "agreement": 0.92825
+  },
+  {
+   "round": 3,
+   "removed": 122,
+   "terms": 5118,
+   "agreement": 0.92795
+  },
+  {
+   "round": 4,
+   "removed": 4,
+   "terms": 5114,
+   "agreement": 0.92795
+  },
+  {
+   "round": 5,
+   "removed": 46,
+   "terms": 5068,
+   "agreement": 0.9283
+  },
+  {
+   "round": 6,
+   "removed": 48,
+   "terms": 5020,
+   "agreement": 0.92855
+  }
+ ],
+ "seconds": 89.77423691749573
+}
