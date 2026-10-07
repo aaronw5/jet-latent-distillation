@@ -145,11 +145,12 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
     res['heads'] = heads; res['all_block1'] = agree(np.concatenate([pred[:, :8], Od_[:, 8:]], 1)); res['all_block2'] = agree(np.concatenate([Od_[:, :8], pred[:, 8:]], 1)); res['all'] = agree(pred)
     log(f"  all block-1 heads as formulas: {100 * res['all_block1']:.2f}%; all block-2 heads: {100 * res['all_block2']:.2f}%; all 16 heads: {100 * res['all']:.2f}% (ParT's own weights), {time.time() - t0:.0f} s")
     if steps:                                                               # S5: tune all heads' coefficients toward ParT's probabilities
+        import os; ridge = float(os.environ.get('JOINT_RIDGE', 1e-7)); l1 = float(os.environ.get('JOINT_L1', 0)); evf = float(os.environ.get('JOINT_EVFLOOR', 1e-6))
         Ms, Us = [], []                                                      # per head: whitened terms (uncorrelated, unit spread) — Adam on raw hinge terms diverges
         for h in range(16):
             B = Pf[:, h].astype(np.float64); G = B.T @ B / len(B); d = np.sqrt(np.maximum(np.diag(G), 1e-12))
-            W0 = np.linalg.solve(G / d[:, None] / d[None] + 1e-7 * np.eye(len(d)), (B.T @ Of_[:, h] / len(B)) / d[:, None]) / d[:, None]
-            ev, Q = np.linalg.eigh(G / d[:, None] / d[None]); ev = np.maximum(ev, 1e-6 * ev.max())
+            W0 = np.linalg.solve(G / d[:, None] / d[None] + ridge * np.eye(len(d)), (B.T @ Of_[:, h] / len(B)) / d[:, None]) / d[:, None]
+            ev, Q = np.linalg.eigh(G / d[:, None] / d[None]); ev = np.maximum(ev, evf * ev.max())
             Mh = Q / np.sqrt(ev)[None] / d[:, None]; Ms.append(Mh.astype(np.float32)); Us.append((np.sqrt(ev)[:, None] * (Q.T @ (d[:, None] * W0))).astype(np.float32))
         Mt = T(np.stack(Ms)); W = torch.nn.Parameter(T(np.stack(Us))); opt = torch.optim.Adam([W], lr)
         Pft, Pdt = T(Pf), T(Pd); pf = torch.softmax(T(Lf), 1); Oft = T(Of_); vo = Oft.var(0) + 1e-6
@@ -158,7 +159,7 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
             with torch.no_grad():
                 return float((torch.cat([downstream(model, *heads_of(Pdt[a:a + 5000]).split(8, 1)).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
         best = (agree_t(), 0); path = [best]; bestW = W.detach().clone()
-        tag = 'S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5'
+        tag = ('S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5') + os.environ.get('HEADS_TAG', '')
         def save(Wb):
             extra = dict(score_W=prm['W'], score_kn=prm['kn'], score_mu=prm['mu'], score_sd=prm['sd']) if weights == 'formula' else {}
             np.savez(OUT / f'{tag}_model.npz', W=torch.einsum('hkj,hjo->hko', Mt, Wb).cpu().numpy(), kn=kn, uniform=uniform, weights=weights or 'part', **extra)
@@ -167,12 +168,15 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
             for a in range(0, n_fit, 5000):
                 o = heads_of(Pft[a:a + 5000]); Lg = downstream(model, o[:, :8], o[:, 8:])
                 loss = -(pf[a:a + 5000] * torch.log_softmax(Lg, 1)).sum(1).mean() + lam * ((o - Oft[a:a + 5000]) ** 2 / vo).mean()
+                if l1: loss = loss + l1 * torch.einsum('hkj,hjo->hko', Mt, W).abs().mean()      # sparse, non-cancelling raw coefficients
                 opt.zero_grad(); loss.backward(); opt.step()
             if i % 10 == 9 or i == steps - 1:
                 ag = agree_t(); path.append((ag, i + 1))
                 if ag > best[0]: best = (ag, i + 1); save(W.detach())
+                if l1 and i % 50 == 49:
+                    with torch.no_grad(): wr = torch.einsum('hkj,hjo->hko', Mt, W).abs(); log(f'    raw coefficients: mean |c| {wr.mean():.3f}, max {wr.max():.1f}, share < 0.01: {100 * (wr < .01).float().mean():.0f}%')
                 log(f'  S5 tuning epoch {i + 1}: all 16 heads as formulas {100 * ag:.2f}%, {time.time() - t0:.0f} s')
-        res['tuned'] = dict(best=best[0], epoch=best[1], path=path, lr=lr, lam=lam)
+        res['tuned'] = dict(best=best[0], epoch=best[1], path=path, lr=lr, lam=lam, ridge=ridge, l1=l1, ev_floor=evf)
     res['seconds'] = time.time() - t0
     return res
 
