@@ -173,3 +173,19 @@ def if_lines(inputs, share=.99):
             elif k == 'gt': out.append(f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})')
             else: out.append(f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})')
     return out
+
+
+def neuron_python(block, head, o, inputs, c, b):
+    """the complete Python function of one value neuron (every term)"""
+    L = [f'def neuron_b{block}_h{head}_n{o + 1}(particles, alpha, alpha_cls):',
+         f'    """block {block}, head {head}, value neuron {o + 1}: sum over the particles of alpha_i * f(x_i), plus c * alpha_cls + b.',
+         f'    particles: list of dicts of the per-particle inputs; alpha: this head\'s weights of those particles; alpha_cls: its weight on the class token"""',
+         '    total = 0.0', '    for x, a in zip(particles, alpha):', '        f = 0.0']
+    for d in inputs:
+        for cf, k, t in d['terms']:
+            v = f'x["{d["feature"]}"]'
+            if k == 'lin': L.append(f'        f += {cf:.6g} * {v}')
+            elif k == 'gt': L.append(f'        if {v} > {t:.6g}: f += {cf:.6g} * ({v} - {t:.6g})')
+            else: L.append(f'        if {v} < {t:.6g}: f += {cf:.6g} * ({t:.6g} - {v})')
+    L += ['        total += a * f', f'    return total + {c:.6g} * alpha_cls + {b:.6g}']
+    return '\n'.join(L)
