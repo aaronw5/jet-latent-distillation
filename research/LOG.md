@@ -478,3 +478,16 @@ that drive it; neurons sorted by importance everywhere.
   read; both blocks read the same, unchanged particles), so the final 128 neurons contain both blocks' reads; S15/S17/S18
   fit only that final output, summing over the 16 heads' selections. **S19** tests one block's selection only (block-2
   heads / block-1 heads, 128 neurons, same fit as S15): running. C1o (combined, one term per input): 65.21 % (C1 78.35 %).
+
+### 14:00–15:30
+- **S17 on the 2M test: 92.13 %** (accuracy 0.8386, AUC 0.9832) — 367 statements, one per (neuron, input), shared by the heads.
+- **S19** (one block's selection only, 128 neurons, same fit as S15, dev): block 1's 8 heads **90.51 %**, block 2's 8 heads
+  88.89 % (both blocks 93.29 %). The class token is a residual stream; block 1's read is part of the output, and block 2's
+  query depends on block 1, so neither block alone carries it; block 1 alone is the better half.
+- **S18** (the 10 logits directly): fit 93.29 % (least squares 91.22 % — identical to S15's because least squares commutes
+  with ParT's linear last layer); one term per input per (class, head) **92.49 %** (6,080 terms); pruned by (class, input)
+  **241 pairs, 92.62 %**. Statement pruning (S18q) failed on an argument-parsing bug — fixed, rerunning, then test + page.
+- **C1** (W1q selection formulas + formula neurons, only ParT's last layer): fit 78.35 %; one term 65.21 %; pruned 525 pairs
+  64.95 %; statements 8,400 → 5,355, **70.06 %** (re-tuning recovered some). 2M test running (slow: formula selection).
+- Published batch 3 (14:45): S17, S15q, S5rpc1 (merged type/charge statements, firing-pattern groups, importance order),
+  W2, and the **Try-a-jet** page (jet/).

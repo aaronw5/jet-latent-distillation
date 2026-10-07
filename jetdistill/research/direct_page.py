@@ -25,6 +25,7 @@ INFO = {'S15p': ('The 128 neurons directly — per-particle formulas, ParT’s s
 INFO['S15o'] = (INFO['S15o'][0], INFO['S15p'][1], INFO['S15p'][2].replace(' Pruned to the inputs each neuron needs and re-tuned toward ParT’s probabilities;', ' Re-tuned toward ParT’s probabilities;'))
 INFO['S15q'] = ('The 128 neurons directly — per-particle formulas, ParT’s selection, statements pruned', INFO['S15p'][1], INFO['S15p'][2] + ' Then single statements removed, smallest first, within 0.1 pt, re-tuned.')
 INFO['S17'] = ('The 128 neurons directly — one statement per input, shared by the heads', INFO['S15p'][1], INFO['S15p'][2] + ' Then every (neuron, input) keeps one statement — one kind and threshold shared by all 16 heads, each head with its own coefficient — re-tuned.')
+INFO['S18q'] = ('The 10 class scores directly — per-particle formulas, ParT’s selection, pruned', INFO['S15p'][1].replace(' and ParT’s last layer (128 → 10)', ''), 'Each of the 10 class scores (logits) is a sum over the particles of formulas of each particle’s own physics, one formula per head, weighted by that head’s attention. Nothing else of ParT: no values, no MLPs, no LayerNorms, not even its last layer. At most one term per input per head and class, pruned to the inputs each class needs, single statements pruned, re-tuned toward ParT’s probabilities.')
 TYPE5 = ['charged hadron', 'neutral hadron', 'photon', 'electron', 'muon']
 HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
