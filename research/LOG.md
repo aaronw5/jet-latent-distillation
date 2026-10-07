@@ -327,3 +327,10 @@ re-tuned, end to end):
   ParT's (S11: 5.7–19.5 %). ParT values + formula α: block 1 97.14 % (96.89), both blocks **95.95 %** (95.74);
   S5 values + formula α both 75.77 % (74.84). A small gain: ParT's own kernels applied twice do not capture what its
   8 blocks build. End-to-end re-tune (A1_values) next, then A2 (decision-focused) and A3 (learnable pair interaction).
+- A2 (decision-focused weight formulas, ParT's values fixed, 20k jets, 30 epochs): from S11 95.73 → **96.84 %**; from
+  A1 (richer context) 95.95 → **97.04 %**. (Writing A2h's weights for 100k jets ran out of GPU memory → fixed with
+  batches, rewritten from the saved formulas; a run that started without a weight source was stopped.)
+- A2h end to end (formula values re-tuned on A2h's weights): 74.4 % → best **82.5 %** (epoch 130). Same wall as S10 /
+  S12: weights that serve ParT's values at 97 % do not lift formula values — plain per-particle values only work with
+  ParT's own weights, which carry the context. Next: A3 (learned pair interaction in the weights), then A6 (the same
+  learned context in the values).
