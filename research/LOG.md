@@ -222,3 +222,13 @@ explorer does not apply to these models.
   cancel to a total spread of 0.7 — unpenalized least squares + whitened tuning on near-duplicate inputs.
 - Fixes (S10c): degenerate hinge columns masked (duplicate thresholds, thresholds at a clip value), ridge 1e-3 in the
   starts, L1 = 0.01 on the raw coefficients during tuning, whitening eigenvalue floor 1e-3; then pruning by input.
+
+### Pages for the per-head models (clock ~02:30–02:50)
+- heads_S5 and heads_S8_uniform2 published (validation numbers; test metrics added when the 2M pass ends). A `%%`
+  left in the page's JavaScript broke every button in the first version — fixed (node --check on the script is now part
+  of the build check). Added on the user's request: a card showing in code how the class scores are composed; an exact
+  Python formulation per model ({tag}_formulas.py + the .npz) and a Python-like text of every value neuron (terms
+  covering 99 % of its weight); math definitions of all per-particle inputs (e.g. “ΔR nearest displaced” = min ΔR_ij
+  over the other particles j with q_j ≠ 0 and |d0_j|/σ(d0_j) > 3, 1.5 if none).
+- Compute rule from the user: only lines that can reach > 90 % agreement run (S5, S8b and their refinements);
+  the all-formula line (≈ 83 %) is parked.
