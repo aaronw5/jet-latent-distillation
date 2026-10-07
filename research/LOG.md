@@ -456,3 +456,8 @@ formula model needs formula VALUES with context — the per-particle embedding �
 - User (12:50): S15p's statements look repeated (one per head on the same input) → S17: one statement per (neuron, input)
   shared by the heads, per-head coefficients (running); more particle groups (firing patterns of the statements, JEDI-linear
   style) with qualitative descriptions; neurons sorted by importance.
+- **S17** (from S15q: one statement per (neuron, input) shared by all heads — kind and threshold chosen jointly by least
+  squares over the heads' pieces — per-head coefficients kept): 72.1 % before tuning → **91.50 %** after 60 epochs
+  (**367 statements**, 5,020 coefficients; S15q 92.86 % with 5,020 statements). Longer tune running. Pages: the one-hot
+  particle-type inputs and the charge are combined into one lookup statement each (exact), neurons listed most important
+  first, particle groups = the firing patterns of the most discriminating statements (top 10, with descriptions).
