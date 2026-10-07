@@ -89,3 +89,15 @@ def neuron_snippet(tag, block, head, o, terms, share=.99):
         lines.append(f'      {t["coef"]:+.4g} * ' + (x if thr is None else f'max(0, {x} - {thr})'))
     return (f'# value neuron {o + 1} of block {block}, head {head}:  sum over the particles i of alpha_i * f(x_i)   (+ c * alpha_cls + bias)\n'
             f'def f(x):   # x: the inputs of one particle\n    return (\n' + '\n'.join(lines) + f'\n      # ... {max(0, len(terms) - len(lines))} smaller terms; exact: {tag}_formulas.py\n    )')
+
+
+NOTATION = [
+    ('jet, particles', 'a jet has n particles i = 1…n (up to 128); x_i = the per-particle inputs of particle i (defined in the table at the bottom).'),
+    ('class token', 'ParT’s learned 128-number vector c that “reads” the jet. In class block 1 it is a constant (the same for every jet); class block 2 reads with the output of block 1.'),
+    ('class blocks b, heads h', 'ParT ends with 2 class-attention blocks (b = 1, 2), each with 8 heads (h = 1…8): 16 heads in total.'),
+    ('score s_bhi', 'how strongly head h of block b looks at particle i: s_bhi = q_bh · k_bhi / 4, with q_bh = W_q,bh · c (the query of the class token) and k_bhi = W_k,bh · LN(e_i) (the key of particle i; e_i its embedding after ParT’s 8 particle blocks, LN a LayerNorm). The class token has its own score s_bh0 = q_bh · k_bh0.'),
+    ('attention weight α_bhi', 'α_bhi = exp(s_bhi) / Σ_{j=0…n} exp(s_bhj), i = 0 (the class token itself) … n: a softmax over [class token, particles] of this jet; the n + 1 weights of a head sum to 1. Per jet and per head.'),
+    ('terms t(x)', 'for every input x_f: x_f itself and max(0, x_f − θ_f,k) at 5 thresholds θ_f,1…5 (the 15–85 % quantiles of x_f over particles): 6 terms per input.'),
+    ('value neuron o_bh,m', 'm = 1…16: o_bh,m = Σ_{i=1…n} α_bhi · f_bh,m(x_i) + c_bh,m · α_bh0 + b_bh,m, with f_bh,m(x) = Σ_terms w · t(x): a sum over the particles, weighted by the head’s attention, of a formula of each particle’s inputs; plus the class token’s share α_bh0 times a constant.'),
+    ('ParT_downstream', 'the 16 × 16 = 256 head outputs o go through ParT’s own fixed operations: out-projection, per-head scale, LayerNorm, residual and a 128→512→128 MLP in each class block, the final LayerNorm and the last layer → 10 class scores. Not fitted.'),
+]

@@ -14,7 +14,7 @@ from ..part.network import ParTNetwork
 from .nbr import NBR, PK, nbr_features, pk_features
 from .heads import extract, downstream, phi_pooled, rows_of_split, OUT
 from .heads_eval import uniformize
-from .heads_defs import DEFS, PK_DEF, COMPOSE, python_export, neuron_snippet
+from .heads_defs import DEFS, PK_DEF, COMPOSE, NOTATION, python_export, neuron_snippet
 
 CSS = """:root{--ink:#1d2433;--mut:#667085;--line:#e4e7ec;--bg:#f7f8fa;--acc:#1f4e79;--good:#2f855a;--bad:#c05621}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -189,6 +189,7 @@ function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Ma
 function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
 setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES))
+    notation_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(v)}</td></tr>' for k, v in NOTATION)
     defs_rows = ''.join(f'<tr><td>{html.escape(k)}</td><td>{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
     if py: (outdir / f'{tag}_formulas.py').write_text(py)
     shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k != 'examples'}))
@@ -197,6 +198,7 @@ setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', j
 <p class="cnt">ParT_full · JetClass · ParT’s class attention written per head. A head applies one rule to every jet: a score for each particle → attention weights by softmax (with the class token’s own share) → a sum over the particles of a formula of each particle’s physics (16 value neurons). ParT’s fixed arithmetic after the heads turns the 256 head outputs into the class scores.</p>
 <div>{kpi}</div>
 <div class="card"><div class="keep"><b>Kept of ParT:</b> {kept}<br><span class="cnt">{DOWN}</span></div><div class="form"><b>Formulas:</b> {formula}</div></div>
+<h2>Notation</h2><div class="card"><table>{notation_rows}</table></div>
 <h2>What the output is composed of</h2><div class="card"><pre>{html.escape(COMPOSE[joint])}</pre><p class="cnt">Exact formulation with the fitted coefficients: <a href="{tag}_formulas.py">{tag}_formulas.py</a> (+ <a href="{tag}_model.npz">{tag}_model.npz</a>). Each head’s 16 value neurons are written out term by term in its tab.</p></div>
 <div id="bar"><span class="cnt">head (and its cost when removed, in points of agreement):</span><br>{hb}</div>
 <div id="jetbox"><div class="card"><div class="cnt">jet (6 per ParT class; green border = this model agrees with ParT on it):</div><div>{jb}</div></div><div class="card" id="jet"></div><div class="card" id="contrib"></div></div>
