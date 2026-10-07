@@ -471,3 +471,6 @@ function class. Fit on ParT's logits (least squares, then toward ParT's probabil
 input per (class, head), pruned by (class, input), then single statements. Running. Pages: the 128-neuron page gets a
 class tab per class listing the neurons that go into its score (W × spread, linked to their drop-downs) and the inputs
 that drive it; neurons sorted by importance everywhere.
+- (13:40) Combined study **C1** (W1q selection formulas feeding the S15 neuron formulas; only ParT's last layer kept) running
+  the full loop (fit → one term → prune → statements → 2M test). Try-a-jet page (weights ParT/formula × content
+  ParT/formula, per-head and per-neuron drop-downs) builds with publish batch 3 after S17's test.
