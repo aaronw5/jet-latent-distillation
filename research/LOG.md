@@ -113,3 +113,6 @@ Class-attention output = 2 blocks × 8 heads × 16 numbers; each head depends on
 values it pools; the rest is a fixed chain of ParT operations (out_proj, per-head scale, LayerNorms, MLP, residuals,
 final LN, last layer). Targets: the 256 head outputs, fitted head by head (JEDI with per-head neurons), ParT's exact
 downstream kept. Steps: oracle (ParT's true weights) → formula weights → head-by-head agreement cost → all, tuned.
+- Correction (03:05): in ParT's class attention the query is the raw class token (attn(x_cls, u, u); only keys and
+  values are LayerNorm-ed). S1 had normalized the query → S1's weights were somewhat off; S1 rerun as S1b. The exact
+  downstream reimplementation (heads.py) reproduces ParT: 100 % same class, logits within 0.002.

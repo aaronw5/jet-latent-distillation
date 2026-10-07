@@ -28,7 +28,7 @@ def scores(model, X, M, device='mps'):
             n = x.shape[1]; cls = model.cls_token.expand(1, n, -1)
             for b, blk in enumerate(model.cls_blocks):
                 u = blk.pre_attn_norm(torch.cat([cls, x], 0)); W, bi = blk.attn.in_proj_weight, blk.attn.in_proj_bias
-                q = (u[:1] @ W[:128].T + bi[:128]).view(1, n, 8, 16); k = (u @ W[128:256].T + bi[128:256]).view(-1, n, 8, 16)
+                q = (cls @ W[:128].T + bi[:128]).view(1, n, 8, 16); k = (u @ W[128:256].T + bi[128:256]).view(-1, n, 8, 16)
                 s = torch.einsum('qnhd,pnhd->nhp', q, k) / 4.0
                 s = s.masked_fill(~torch.cat([torch.ones_like(m[:, :1]), m], 1)[:, None], -float('inf'))
                 S[b, a:a + n] = s.cpu().numpy(); cls = blk(x, x_cls=cls, padding_mask=~m)
