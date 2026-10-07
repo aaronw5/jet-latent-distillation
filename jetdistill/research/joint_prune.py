@@ -23,9 +23,9 @@ def term_index(nf, kn_rows):
     return sc, vl
 
 
-def run(tol=0.1, epochs=30, n_fit=100000, n_dev=20000, lr=3e-4, lam=0.01, chunk=2000, device='mps', log=print):
+def run(tag='S10', tol=0.1, epochs=30, n_fit=100000, n_dev=20000, lr=3e-4, lam=0.01, chunk=2000, device='mps', log=print):
     import torch
-    t0 = time.time(); Pz = dict(np.load(OUT / 'S10_model.npz')); model = ParTNetwork('full').model; model.eval()
+    t0 = time.time(); Pz = dict(np.load(OUT / f'{tag}_model.npz')); model = ParTNetwork('full').model; model.eval()
     for p in model.parameters(): p.requires_grad_(False)
     Of, _, Mf, Lf, _ = extract(model, 'fit', n_fit, device); _, _, Md, Ld, _ = extract(model, 'dev', n_dev, device); ref = Ld.argmax(1)
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rows_f, rows_d = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
@@ -67,11 +67,11 @@ def run(tol=0.1, epochs=30, n_fit=100000, n_dev=20000, lr=3e-4, lam=0.01, chunk=
         a_now = agree(Ws, Wv); path.append(dict(features=int(keep.sum()), removed=[NAMES[f] for f in rem], agreement=a_now))
         log(f'  round {rnd + 1}: removed {len(rem)} features → {int(keep.sum())} kept, re-tuned: {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop (this round kept)'); break
-    np.savez(OUT / 'S10_pruned.npz', Ws=Ws.detach().cpu().numpy(), Wv=Wv.detach().cpu().numpy(), cself=cs.detach().cpu().numpy(), bias=b.detach().cpu().numpy(),
-             kns=Pz['kns'], mus=Pz['mus'], sds=Pz['sds'], knv=Pz['knv'], muv=Pz['muv'], sdv=Pz['sdv'], keep=keep)
+    np.savez(OUT / f'{tag}_pruned.npz', Ws=Ws.detach().cpu().numpy(), Wv=Wv.detach().cpu().numpy(), cself=cs.detach().cpu().numpy(), bias=b.detach().cpu().numpy(),
+             kns=Pz['kns'], mus=Pz['mus'], sds=Pz['sds'], knv=Pz['knv'], muv=Pz['muv'], sdv=Pz['sdv'], keep=keep, **({'ms': Pz['ms'], 'mv': Pz['mv']} if 'ms' in Pz else {}))
     r = dict(tol=tol, epochs=epochs, kept=[NAMES[f] for f in np.flatnonzero(keep)], removed=[NAMES[f] for f in np.flatnonzero(~keep)], path=path, final=a_now, seconds=time.time() - t0)
-    (OUT / 'S10_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned: {int(keep.sum())} of {nf} features kept, {100 * a_now:.2f}%'); return r
+    (OUT / f'{tag}_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned: {int(keep.sum())} of {nf} features kept, {100 * a_now:.2f}%'); return r
 
 
 if __name__ == '__main__':
-    a = sys.argv[1:]; run(float(a[0]) if a else 0.1, int(a[1]) if len(a) > 1 else 30)
+    a = sys.argv[1:]; run(a[0] if a else 'S10', float(a[1]) if len(a) > 1 else 0.1, int(a[2]) if len(a) > 2 else 30)
