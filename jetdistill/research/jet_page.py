@@ -37,10 +37,10 @@ def build(outdir, s_tag='S17', w_tag='W1q', c_tag='C1q', device='mps', log=print
         ew = an_w['examples'][i]; assert es['n'] == ew['n'] and es['part'] == ew['part'], (i, es['n'], ew['n'])
         j = dict(particles=es['particles'], truth=es['truth'], part=es['part'], p=dict(PP=es['p_part'], PF=es['p_model'], FP=ew['p_model']), cls=dict(PP=es['part'], PF=es['model'], FP=ew['model']),
                  aP=es['A'], selfP=es['self'], aF=[hd['w'] for hd in ew['heads']], selfF=[hd['self'] for hd in ew['heads']], sF=[hd['s'] for hd in ew['heads']], topF=[hd['top'] for hd in ew['heads']],
-                 V=dict(PF=es['V']), ST=dict(PF=es['ST']), H=es['H'])
+                 V=dict(PF=es['V']), ST=dict(PF=es['ST']), HC=dict(PF=es['HC']), B=dict(PF=es['B']), H=es['H'])
         if an_c:
             ec = an_c['examples'][i]; assert ec['n'] == es['n']
-            j['p']['FF'] = ec['p_model']; j['cls']['FF'] = ec['model']; j['V']['FF'] = ec['V']; j['ST']['FF'] = ec['ST']
+            j['p']['FF'] = ec['p_model']; j['cls']['FF'] = ec['model']; j['V']['FF'] = ec['V']; j['ST']['FF'] = ec['ST']; j['HC']['FF'] = ec['HC']; j['B']['FF'] = ec['B']
         jets_.append(j)
     models = dict(PP=dict(name='ParT', desc='ParT itself: its weights and its values.', m=dict(value=1.0, where='by definition')),
                   PF=dict(name=f'{s_tag}: ParT’s weights, formula neurons', desc='the 128 neurons written as per-particle formulas, summed with ParT’s attention weights, then ParT’s last layer', m=metric(s_tag), page=f'../heads_{s_tag}/full/index.html'),
@@ -60,7 +60,7 @@ def build(outdir, s_tag='S17', w_tag='W1q', c_tag='C1q', device='mps', log=print
 def render(outdir, D, log=print):
     """the page from its data (re-render without re-analysing: `python -m ... render OUT_DIR`, data read back from the page)"""
     outdir = pathlib.Path(outdir)
-    js = r"""const D=__D__, CL=D.classes; let S={j:0, w:'P', c:'F', oh:new Set(), on:new Set(), p:null, ph:null, why:true};
+    js = r"""const D=__D__, CL=D.classes; let S={j:0, w:'P', c:'F', oh:new Set(), on:new Set(), p:null, ph:null, why:true, sum:true};
 function selP(k,q){if(S.p===k&&S.ph===q){S.p=null;S.ph=null;}else{S.p=k;S.ph=q;}draw();}
 function tg(set,k,el){if(el.open)set.add(k);else set.delete(k);}
 function key(){return S.w+S.c}
@@ -101,10 +101,15 @@ function draw(){const e=D.jets[S.j],k=key(),M=D.models[k];
  // content
  if(S.c=='F'){const V=e.V[k],ST=e.ST[k],meta=D.meta[k],FW=D.fc.W;const act=Object.keys(meta).map(Number);
   const dif=act.map(n=>[n,V[n]*(FW[win][n]-FW[run][n])]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  const sc=c=>{let v=D.fc.b[c];for(let n=0;n<V.length;n++)v+=FW[c][n]*V[n];return v;};const contr=c=>act.map(n=>[n,FW[c][n]*V[n]]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  h+='<div class="card"><details'+(S.sum?' open':'')+' ontoggle="S.sum=this.open"><summary><b>How the neurons add up into the class scores</b> <span class="cnt">(score<sub>c</sub> = b<sub>c</sub> + Σ<sub>n</sub> W<sub>cn</sub> · neuron<sub>n</sub>, ParT’s last layer; '+act.length+' neurons have particle inputs, the other '+(V.length-act.length)+' are constants and go into “the rest”)</span></summary><div class="grid">'+[win,run].map(c=>{const cs=contr(c);let top=0;const rows=cs.slice(0,8).map(([n,v])=>{top+=v;return '<tr><td>neuron '+(n+1)+'</td><td class="num">'+FW[c][n].toFixed(2)+'</td><td class="num">'+V[n].toFixed(2)+'</td><td class="num">'+(v>=0?'+':'')+v.toFixed(2)+'</td></tr>';}).join('');const tot=sc(c);
+   return '<div><b>'+CL[c]+' score = '+tot.toFixed(2)+'</b><table><tr><th>neuron</th><th class="num">weight W</th><th class="num">value</th><th class="num">W × value</th></tr><tr><td>bias</td><td></td><td></td><td class="num">'+D.fc.b[c].toFixed(2)+'</td></tr>'+rows+'<tr><td>the rest</td><td></td><td></td><td class="num">'+(tot-top-D.fc.b[c]>=0?'+':'')+(tot-top-D.fc.b[c]).toFixed(2)+'</td></tr></table></div>';}).join('')+'</div><div class="cnt">The class with the largest score wins; the probabilities are the softmax of the 10 scores.</div></details></div>';
   h+='<div class="card"><b>Why '+CL[win]+' and not '+CL[run]+'</b> <span class="cnt">— the formula neurons, the ones that decide between the two first (the neuron’s value × the difference of its two last-layer weights). Open a neuron for its if-statements on this jet.</span>';
   for(const [n,v] of dif){const m=meta[n],rows=m.stmts.map((s,i)=>[s,ST[n][i]]).sort((a,b)=>Math.abs(b[1][0])-Math.abs(a[1][0]));let tot=0;rows.forEach(r=>tot+=r[1][0]);const nfire=rows.filter(r=>r[1][1]>0).length;
    h+='<details class="nd"'+(S.on.has(n)?' open':'')+' ontoggle="tg(S.on,'+n+',this)"><summary><b>neuron '+(n+1)+'</b> — '+m.title+' <span class="pill" style="background:'+(m.importance=='major'?'#1d2433':m.importance=='moderate'?'#98a2b3':'#e4e7ec')+';color:'+(m.importance=='major'?'#fff':'#1d2433')+'">'+m.importance+'</span> <span class="cnt">value '+V[n].toFixed(2)+' (ParT’s '+e.H[n].toFixed(2)+') · '+(v>=0?'helps '+CL[win]:'helps '+CL[run])+' by '+Math.abs(v).toFixed(2)+' · '+nfire+' of '+rows.length+' statements fire</span></summary>';
-   h+='<div class="tjd"><table><tr><th></th><th>if-statement</th><th class="num">fires on</th><th class="num">adds</th></tr>'+rows.map(([s,a])=>'<tr style="'+(a[1]==0?'color:#99a':'')+'"><td>'+(a[1]>0?'✓':'✗')+'</td><td><code>'+s.label.replace(/</g,'&lt;')+'</code></td><td class="num">'+a[1]+' of '+e.particles.length+'</td><td class="num">'+(a[0]>=0?'+':'')+a[0].toFixed(3)+'</td></tr>').join('')+'<tr><td></td><td>class-token terms and bias</td><td></td><td class="num">'+(V[n]-tot>=0?'+':'')+(V[n]-tot).toFixed(3)+'</td></tr><tr><td></td><td><b>neuron '+(n+1)+'</b></td><td></td><td class="num"><b>'+V[n].toFixed(3)+'</b></td></tr></table><div class="cnt">“adds” = Σ over the heads and this jet’s particles of the head’s weight × what the statement gives that particle.</div></div></details>';}
+   h+='<div class="tjd"><table><tr><th></th><th>if-statement</th><th class="num">fires on</th><th class="num">adds</th></tr>'+rows.map(([s,a])=>'<tr style="'+(a[1]==0?'color:#99a':'')+'"><td>'+(a[1]>0?'✓':'✗')+'</td><td><code>'+s.label.replace(/</g,'&lt;')+'</code></td><td class="num">'+a[1]+' of '+e.particles.length+'</td><td class="num">'+(a[0]>=0?'+':'')+a[0].toFixed(3)+'</td></tr>').join('')+'<tr><td></td><td>class-token terms and bias</td><td></td><td class="num">'+(V[n]-tot>=0?'+':'')+(V[n]-tot).toFixed(3)+'</td></tr><tr><td></td><td><b>neuron '+(n+1)+'</b></td><td></td><td class="num"><b>'+V[n].toFixed(3)+'</b></td></tr></table><div class="cnt">“adds” = Σ over the heads and this jet’s particles of the head’s weight × what the statement gives that particle.</div>';
+   const HC=e.HC[k][n],Bn=e.B[k][n];let hs=Bn;HC.forEach(x=>hs+=x[0]+x[1]);
+   h+='<details style="margin-top:6px"><summary><b>How the 16 heads add up into neuron '+(n+1)+'</b> <span class="cnt">(neuron = bias + Σ over heads of [Σ<sub>i</sub> α<sub>hi</sub> f<sub>h</sub>(particle i) + c<sub>h</sub> · class-token share])</span></summary><table><tr><th>head</th><th class="num">Σ over particles of weight × f</th><th class="num">class-token term</th><th class="num">head total</th></tr>'+HC.map((x,q)=>'<tr><td>'+D.heads[q]+'</td><td class="num">'+x[0].toFixed(3)+'</td><td class="num">'+x[1].toFixed(3)+'</td><td class="num"><b>'+(x[0]+x[1]).toFixed(3)+'</b></td></tr>').join('')+'<tr><td>bias</td><td></td><td></td><td class="num">'+Bn.toFixed(3)+'</td></tr><tr><td><b>neuron '+(n+1)+'</b></td><td></td><td></td><td class="num"><b>'+hs.toFixed(3)+'</b></td></tr></table></details></div></details>';}
   h+='</div>';}
  else{const FW=D.fc.W,H=e.H;const dif=H.map((v,n)=>[n,v*(FW[win][n]-FW[run][n])]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,12);
   h+='<div class="card"><b>ParT’s own content</b> <span class="cnt">— the heads sum ParT’s values (from its particle embeddings, not formulas'+(S.w=='F'?', here with the formula weights':'')+'). ParT’s neurons that decide between '+CL[win]+' and '+CL[run]+' (shown for ParT’s own pass):</span><table><tr><th>neuron</th><th class="num">value</th><th class="num">pushes '+CL[win]+' over '+CL[run]+' by</th></tr>'+dif.map(([n,v])=>'<tr><td>'+(n+1)+'</td><td class="num">'+H[n].toFixed(2)+'</td><td class="num">'+v.toFixed(2)+'</td></tr>').join('')+'</table></div>';}
@@ -114,6 +119,24 @@ draw();""".replace('__D__', json.dumps(D))
 .tjg{{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:8px;margin-top:8px}}.tjc{{border:1px solid var(--line);border-radius:8px;padding:6px 8px;cursor:pointer;background:#fff}}.tjc.open{{outline:2px solid var(--acc)}}.tjd{{grid-column:1/-1;border:1px solid var(--line);border-radius:8px;padding:8px;background:#fbfcfe;overflow-x:auto}}</style></head><body><main>
 <p class="cnt"><a href="../index.html">← all setups</a> · <a href="../research/index.html">research log</a></p><h1>Try a jet</h1>
 <p class="cnt">ParT’s class attention has two halves: <b>which particles</b> each of its 16 heads looks at (the weights) and <b>what</b> it reads off them (the content). Each half can be ParT’s own or a formula. Pick a jet and a combination to see the answer, which particles each head weights, and — with the formula content — which if-statements fire on this jet and what they add.</p>
+<details class="card"><summary><b>How everything adds up</b> <span class="cnt">(the arithmetic from particles to class scores, for each combination)</span></summary>
+<pre>for every head h (16: block 1 heads b1h1…b1h8, block 2 heads b2h1…b2h8):
+    weights   α_h0 (class token), α_h1 … α_hn (particles); all ≥ 0, sum to 1          ParT’s, or the selection formulas: α_hi ∝ e^(score_h(particle i))
+
+FORMULA CONTENT (S17 with ParT’s weights, C1q with the formula weights):
+    neuron_n  = b_n + Σ_h [ Σ_i α_hi · f_hn(particle i) + c_hn · α_h0 ]              f_hn = the if-statements of neuron n for head h
+              — the 16 heads simply ADD into each neuron; each head contributes its weighted sum over the particles plus its class-token term
+    score_c   = B_c + Σ_n W_cn · neuron_n                                               ParT’s last layer (10 × 128), the neurons ADD with weights W
+    answer    = the class with the largest score; probabilities = softmax(scores)
+
+PART’S CONTENT (ParT itself, W1q with the formula weights):
+    head h    : o_h = Σ_j α_hj · v_hj  (16 numbers; v = ParT’s value vectors of the class token and the particles)
+    block b   : the 8 heads’ outputs are put side by side (128 numbers), mixed by a fixed matrix (out-projection), scaled per head,
+                LayerNorm-ed and ADDED to the class token; then an MLP (128 → 512 → 128) is ADDED on top
+    block 2 repeats this, reading the same particles with a query made from block 1’s result
+    neurons   = LayerNorm(class token after block 2)  (128 numbers, positive or negative)
+    score_c   = B_c + Σ_n W_cn · neuron_n  — the same last layer</pre>
+<p class="cnt">Neurons and scores are not passed through a ReLU: both can be negative. Only the weights α are ≥ 0 (a softmax).</p></details>
 <div id="app"></div></main><script>{js}</script></body></html>"""
     (outdir / 'index.html').write_text(doc); log(f'page: {outdir / "index.html"} {len(doc) // 1024} kB')
 

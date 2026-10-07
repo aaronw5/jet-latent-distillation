@@ -215,7 +215,9 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             ex.append(dict(part=int(ref[i]), truth=int(ytrue[i]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts,
                            A=np.round(AR[:, sl], 4).tolist(), self=[round(float(A[h // 8, i, h % 8, 0]), 4) for h in range(16)], X=np.round(XR[sl], 4).tolist(), C=np.round(G[sl], 4).tolist(),
                            V=np.round(V[i], 3).tolist(), H=np.round(Hp[i], 3).tolist(), logit=np.round(Lm[i], 3).tolist(), logit_part=np.round(L[i], 3).tolist(),
-                           ST={d['n']: amounts(stmts_of(d), sl, tp[sl], XR[sl, 7]) for d in neurons if d['inputs']}))
+                           ST={d['n']: amounts(stmts_of(d), sl, tp[sl], XR[sl, 7]) for d in neurons if d['inputs']},
+                           HC={d['n']: [[round(float(AR[h, sl] @ FH[h, sl, d['n']]), 4), round(float(W[h, -2, d['n']] * A[h // 8, i, h % 8, 0]), 4)] for h in range(16)] for d in neurons if d['inputs']},
+                           B={d['n']: round(float(W[:, -1, d['n']].sum()), 4) for d in neurons if d['inputs']}))
     return dict(tag=tag, agreement=a0, n_dev=n_dev, neurons=neurons, heads=heads, classes=classes, logits=LG, examples=ex, hists=HIST, fc=dict(W=FW.round(5).tolist(), b=FB.round(5).tolist()),
                 pairs=int(sum(len(d['inputs']) for d in neurons)), terms=int((W[:, :11 * NV] != 0).sum()), r2_mean=float(np.mean([d['r2'] for d in neurons])))
 
