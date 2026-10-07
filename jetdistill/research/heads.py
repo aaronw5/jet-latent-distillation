@@ -75,13 +75,17 @@ def phi_pooled(J, n, A, kn=None, chunk=2000):
     return out, kn
 
 
-def run(n_fit=40000, n_dev=20000, steps=0, lr=3e-4, lam=0.01, device='mps', log=print):
+def run(n_fit=40000, n_dev=20000, steps=0, uniform='', lr=3e-4, lam=0.01, device='mps', log=print):
     import torch
     t0 = time.time(); model = ParTNetwork('full').model; model.eval()
     for p in model.parameters(): p.requires_grad_(False)
     Of, Af, Mf, Lf, Lfd = extract(model, 'fit', n_fit, device); Od, Ad, Md, Ld, Ldd = extract(model, 'dev', n_dev, device)
     ref = Ld.argmax(1); res = dict(n_fit=n_fit, n_dev=n_dev, downstream_check=float((Ldd.argmax(1) == ref).mean()))
     log(f'  downstream from ParT\'s own head outputs: same class {100 * res["downstream_check"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
+    for b in (int(c) - 1 for c in uniform):                                 # S8: these blocks' weights uniform over [class token, particles]
+        for A_, M_ in ((Af, Mf), (Ad, Md)):
+            okm = np.concatenate([np.ones((len(M_), 1), bool), M_], 1); A_[b] = (okm / okm.sum(1, keepdims=True))[:, None, :]
+    res['uniform_blocks'] = uniform
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev')
     Pf, kn = phi_pooled(Jf, n_fit, Af); Pd, _ = phi_pooled(Jd, n_dev, Ad, kn); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
     Of_, Od_ = Of.transpose(1, 0, 2, 3).reshape(n_fit, 16, 16), Od.transpose(1, 0, 2, 3).reshape(n_dev, 16, 16)
@@ -128,5 +132,5 @@ def run(n_fit=40000, n_dev=20000, steps=0, lr=3e-4, lam=0.01, device='mps', log=
 
 
 if __name__ == '__main__':
-    a = [int(v) for v in sys.argv[1:]]; r = run(*a); OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / ('S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))
+    a = [int(v) for v in sys.argv[1:4]]; r = run(*a, uniform=sys.argv[4] if len(sys.argv) > 4 else ''); OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / (f'S8_heads_uniform{r["uniform_blocks"]}.json' if r['uniform_blocks'] else 'S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))

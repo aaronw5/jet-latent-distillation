@@ -147,3 +147,16 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   (JEDI-linear's structure) and reproduce ParT to > 90 %. The open part: the weights as formulas (S6).
 - S5c: 100k fitting jets, 500 epochs: least squares 82.7 % → 86.9 (10) / 91.5 (50) / 92.6 (100) / 92.9 (200) /
   93.0 (300) / **93.2 % (400)** / 93.2 (500). The ceiling of per-head formula values with ParT's own weights ≈ 93 %.
+
+### S6 — formula keys and values, ParT's own queries (2026-10-07 04:05)
+- Per particle, hinge terms (757) of own + neighbourhood + ParT pair-kernel context → its keys and values in both class
+  blocks (512); ParT's queries, self key/value, softmax and downstream (check with ParT's own keys/values: 100 %).
+  Key/value R² (medians): block 1 0.47 / 0.56, block 2 0.39 / 0.41. Least squares 65.9 %; tuned (Adam, plain
+  coefficients, λ = 0.1 on keys/values) oscillating 73.5–76.1 %, best **76.1 %**.
+
+### S7 — how precise must the class-attention weights be? (04:10)
+- ParT's own values, only the weights swapped: block 2 uniform 99.1 %; block 1 uniform 92.8 %; block 1 particles
+  uniform with ParT's self-weight 88.7 %. The information is in the values; the weights matter little (block 2 hardly
+  at all). Reading of S6: wrong-but-peaked formula weights hurt far more than uniform ones.
+- Next S8: S5 (per-head formula values) with uniform weights — means over particles of per-particle physics functions,
+  ParT's exact downstream: JEDI-linear's structure.

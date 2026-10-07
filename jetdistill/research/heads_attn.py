@@ -64,7 +64,7 @@ def run(n_fit=40000, n_dev=20000, epochs=40, lr=1e-3, lam=0.1, bs=2000, device='
         with torch.no_grad():
             o = np.argsort(Mx.sum(1)); pred = np.empty(nn, int)
             for a in range(0, nn, bs):
-                i = o[a:a + bs]; P = int(Mx[i].sum(1).max()); pred[i] = forward(model, kv_of(i, P), T(Mx[i, :P])).argmax(1).cpu().numpy()
+                i = o[a:a + bs]; P = int(Mx[i].sum(1).max()); pred[i] = forward(model, kv_of(i, P), T(Mx[i, :P], torch.bool)).argmax(1).cpu().numpy()
         return float((pred == ref).mean())
     chk = agree(lambda i, P: T(KVd[i, :P]), Md, n_dev); log(f'  ParT\'s own keys/values through this forward: {100 * chk:.2f}% (must be 100), {time.time() - t0:.0f} s')
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); Ff, okf = feats(Jf, n_fit, model); Fd, okd = feats(Jd, n_dev, model)
@@ -77,7 +77,7 @@ def run(n_fit=40000, n_dev=20000, epochs=40, lr=1e-3, lam=0.1, bs=2000, device='
     # least squares on a sample of particles
     rs = np.random.default_rng(0); sel = np.argwhere(okf); sel = sel[rs.choice(len(sel), min(400000, len(sel)), replace=False)]
     with torch.no_grad():
-        B = phi(T(Ff[sel[:, 0], sel[:, 1]])).double().cpu().numpy(); Y = KVf[sel[:, 0], sel[:, 1]].astype(np.float64)
+        B = phi(T(Ff[sel[:, 0], sel[:, 1]])).cpu().double().numpy(); Y = KVf[sel[:, 0], sel[:, 1]].astype(np.float64)
     G = B.T @ B; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); W0 = np.linalg.solve(G / d[:, None] / d[None] + 1e-6 * np.eye(len(d)), (B.T @ Y) / d[:, None]) / d[:, None]
     r2 = 1 - ((B @ W0 - Y) ** 2).mean(0) / Y.var(0).clip(1e-9); del B, Y
     log(f'  {W0.shape[0]} terms per particle; key/value R² (fit particles): block 1 keys {np.median(r2[:128]):.3f}, values {np.median(r2[128:256]):.3f}, '
@@ -90,7 +90,7 @@ def run(n_fit=40000, n_dev=20000, epochs=40, lr=1e-3, lam=0.1, bs=2000, device='
     for ep in range(epochs):
         for a in np.random.default_rng(ep).permutation(np.arange(0, n_fit, bs)):
             i = o[a:a + bs]; P = int(Mf[i].sum(1).max()); kv = kv_f(i, P)
-            loss = -(pf[i] * torch.log_softmax(forward(model, kv, T(Mf[i, :P])), 1)).sum(1).mean() + lam * ((kv - T(KVf[i, :P])) ** 2).mean()
+            loss = -(pf[i] * torch.log_softmax(forward(model, kv, T(Mf[i, :P], torch.bool)), 1)).sum(1).mean() + lam * ((kv - T(KVf[i, :P])) ** 2).mean()
             opt.zero_grad(); loss.backward(); opt.step()
         if device == 'mps': torch.mps.empty_cache()
         if ep % 5 == 4 or ep == epochs - 1:
