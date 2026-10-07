@@ -114,7 +114,8 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         effF = float(np.exp(-np.add.reduceat(rel[:, h] * np.log(rel[:, h] + 1e-12), starts)).mean()); alP = A[b, :, h % 8, 1:]; effP = float(np.exp(-(alP * np.log(alP + 1e-12)).sum(1)).mean())
         zt = sorted(range(len(ZN)), key=lambda i: -abs(CZ[h, i] * zsd[i]))[:8]
         ph = lambda d: PHRASE.get(d['feature'], ('high ' + d['feature'], 'low ' + d['feature']))[0 if d['direction'] > 0 else 1]
-        heads.append(dict(block=b + 1, head=h % 8 + 1, inputs=ins, intercept=float(W[0, h]), selects=', '.join(out[:3]) if out else 'all particles about equally', profiles=prof,
+        ftxt = [f'score = {float(W[0, h]):+.3f}'] + [('    ' + (f'{c:+.3g} × ({NAMES[d["f"]]} − {mu[d["f"]]:.3g}) / {sd[d["f"]]:.3g}' if k == 'lin' else f'if {NAMES[d["f"]]} > {t:.3g}:  {c:+.3g} × ({NAMES[d["f"]]} − {t:.3g}) / {sd[d["f"]]:.3g}' if k == 'gt' else f'if {NAMES[d["f"]]} < {t:.3g}:  {c:+.3g} × ({t:.3g} − {NAMES[d["f"]]}) / {sd[d["f"]]:.3g}')) for d in ins for c, k, t in [(st_['coef'], st_['kind'], st_['thr']) for st_ in d['terms']]]
+        heads.append(dict(block=b + 1, head=h % 8 + 1, inputs=ins, ftxt=ftxt, intercept=float(W[0, h]), selects=', '.join(out[:3]) if out else 'all particles about equally', profiles=prof,
                           tau=float(np.nanmean(taus)), dalpha=float(np.abs(AF[h] - AP[h]).mean() * npart[JR].mean()), eff_formula=effF, eff_part=effP, self_formula=float(acls[:, h].mean()), self_part=float(selfP[:, h].mean()),
                           self_corr=float(np.corrcoef(acls[:, h], selfP[:, h])[0, 1]), cls_terms=[(ZN[i], float(CZ[h, i]), float(CZ[h, i] * zsd[i])) for i in zt],
                           title=(f'weights up {ph(ins[0])}' + (f', {ph(ins[1])}' if len(ins) > 1 else '')) if ins else 'uniform',
@@ -148,7 +149,8 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                         cond = 'a linear term' if k_ == 'lin' else (f'above {t_:.3g}' if k_ == 'gt' else f'below {t_:.3g}')
                         return f'{x:.3g} ({cond})'
                     tops.append([[n_, round(byf[n_][0], 2), why(n_)] for n_ in tj])
-                hs.append(dict(s=np.round(SC[sl, h], 3).tolist(), w=np.round(AF[h, sl], 4).tolist(), wp=np.round(AP[h, sl], 4).tolist(), self=round(float(acls[i, h]), 4), selfp=round(float(selfP[i, h]), 4), top=tops))
+                uz = Zd[i] * CZ[h]; ut = np.argsort(-np.abs(uz))[:6]
+                hs.append(dict(u=round(float(uz.sum()), 4), uterms=[[ZN[q_], round(float(Zd[i, q_]), 3), round(float(uz[q_]), 4)] for q_ in ut], s=np.round(SC[sl, h], 3).tolist(), w=np.round(AF[h, sl], 4).tolist(), wp=np.round(AP[h, sl], 4).tolist(), self=round(float(acls[i, h]), 4), selfp=round(float(selfP[i, h]), 4), top=tops))
             sm = np.exp(Lm[i] - Lm[i].max()); sm /= sm.sum(); sp = np.exp(L[i] - L[i].max()); sp /= sp.sum()
             ex.append(dict(part=int(ref[i]), truth=int(ytrue[i]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs, X=np.round(Fd[i, ps][:, :38], 4).tolist()))
     return dict(tag=tag, agreement=a0, n_dev=n_dev, heads=heads, examples=ex, hists=HIST, znames=ZN, statements=int(sum(len(d['terms']) for hd in heads for d in hd['inputs'])), pairs=int(sum(len(hd['inputs']) for hd in heads)))
