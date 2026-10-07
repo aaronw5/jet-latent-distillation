@@ -156,14 +156,20 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
         def agree_t():
             with torch.no_grad():
                 return float((torch.cat([downstream(model, *heads_of(Pdt[a:a + 5000]).split(8, 1)).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
-        best = (agree_t(), 0); path = [best]
+        best = (agree_t(), 0); path = [best]; bestW = W.detach().clone()
+        tag = 'S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5'
+        def save(Wb):
+            extra = dict(score_W=prm['W'], score_kn=prm['kn'], score_mu=prm['mu'], score_sd=prm['sd']) if weights == 'formula' else {}
+            np.savez(OUT / f'{tag}_model.npz', W=torch.einsum('hkj,hjo->hko', Mt, Wb).cpu().numpy(), kn=kn, uniform=uniform, weights=weights or 'part', **extra)
+        OUT.mkdir(parents=True, exist_ok=True); save(bestW)
         for i in range(steps):
             for a in range(0, n_fit, 5000):
                 o = heads_of(Pft[a:a + 5000]); Lg = downstream(model, o[:, :8], o[:, 8:])
                 loss = -(pf[a:a + 5000] * torch.log_softmax(Lg, 1)).sum(1).mean() + lam * ((o - Oft[a:a + 5000]) ** 2 / vo).mean()
                 opt.zero_grad(); loss.backward(); opt.step()
             if i % 10 == 9 or i == steps - 1:
-                ag = agree_t(); path.append((ag, i + 1)); best = max(best, (ag, i + 1))
+                ag = agree_t(); path.append((ag, i + 1))
+                if ag > best[0]: best = (ag, i + 1); save(W.detach())
                 log(f'  S5 tuning epoch {i + 1}: all 16 heads as formulas {100 * ag:.2f}%, {time.time() - t0:.0f} s')
         res['tuned'] = dict(best=best[0], epoch=best[1], path=path, lr=lr, lam=lam)
     res['seconds'] = time.time() - t0
