@@ -71,3 +71,24 @@ ParT-shaped quantities are attention-pooled sums Σᵢ αᵢ f(particleᵢ), wit
 Steps: (1) ParT's class-attention weights per head → formulas of particle physics (its selection rule);
 (2) pooled quantities with those weights (+ the class token's self-weight); (3) ceiling check (MLP on old + new
 quantities); (4) JEDI pipeline. The component-swap code (replace.py) is kept but not pursued.
+
+### E3 — per-particle route with neighbourhood physics (2026-10-07 02:00)
+- As E2 + 20 neighbourhood features per particle (local density and pT share within ΔR 0.1/0.2/0.4, nearest
+  neighbour ΔR / pT / kT, ΔR to the hardest, 2nd hardest, nearest displaced track, lepton, photon, its prong of the 3
+  hardest directions with the prong's pT share, mass, charge, displaced count): **84.0 %** (accuracy 78.3 %) vs 81.8 %.
+- Conclusion: physics context per particle carries real information ParT uses (+2.2 pt), and it is interpretable.
+
+### S1 — ParT's class attention read as physics (2026-10-07 02:15)
+research/results/S1_cls_attention.json (6k fitting jets for the score formulas, 4k check jets).
+- Class block 1 (class token constant): selective heads, often with a large self-weight. Heads 1, 2, 3, 6: the ~2–4
+  hardest charged particles; heads 4, 5: wide-angle particles (ΔR ≈ 0.4 vs 0.23); head 8: displaced tracks
+  (|tanh d0| 0.22 vs 0.06; the b/c head); head 7: broad (~15 particles), self-weight ∝ multiplicity (corr −0.86).
+  Self-weights: 0.40, 0.00, 0.58, 0.80, 0.00, 0.10, 0.35, 0.45.
+- Class block 2: all 8 heads ≈ a plain average over all particles (≈37 effective), self-weight 0.02–0.03 falling
+  with multiplicity (corr −0.6 to −0.8), i.e. 1/(N + c) normalization.
+- Score formulas (within-jet R², own → +nbr → +pk): block 1 heads 0.29–0.83 → 0.42–0.87 → 0.49–0.90; block 2 low
+  (0.11–0.42 → 0.23–0.62), but block-2 weights are nearly uniform, so their scores hardly matter.
+- Conclusion (JEDI spirit): ParT's neurons ≈ a function of (mean over particles of a per-particle function of each
+  embedding) + (a few selected particles: hardest charged, widest, most displaced). The quantities to give MARS:
+  means over particles of per-particle physics functions (own + neighbourhood + ParT-kernel context, as hinges) and
+  the features of the selected particles. Next: ceiling check of these quantities (step 3).
