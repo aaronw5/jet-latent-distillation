@@ -133,3 +133,43 @@ NOTATION = [
     ('value neuron o_bh,m', 'm = 1…16: o_bh,m = Σ_{i=1…n} α_bhi · f_bh,m(x_i) + c_bh,m · α_bh0 + b_bh,m, with f_bh,m(x) = Σ_terms w · t(x): a sum over the particles, weighted by the head’s attention, of a formula of each particle’s inputs; plus the class token’s share α_bh0 times a constant.'),
     ('ParT_downstream', 'the 16 × 16 = 256 head outputs o go through ParT’s own fixed operations: out-projection, per-head scale, LayerNorm, residual and a 128→512→128 MLP in each class block, the final LayerNorm and the last layer → 10 class scores. Not fitted.'),
 ]
+
+
+# short phrases for a neuron's title: (what a high value of the input means, what a low value means), for particle i
+PHRASE = {
+    'ln pT': ('hard particles', 'soft particles'), 'ln E': ('energetic particles', 'low-energy particles'),
+    'ln pT/pT_jet': ('particles carrying much of the jet pT', 'particles carrying little of the jet pT'),
+    'ln E/E_jet': ('particles carrying much of the jet energy', 'particles carrying little of the jet energy'),
+    'ΔR': ('particles far from the jet axis', 'particles near the jet axis'), 'Δη': ('particles at larger η than the axis', 'particles at smaller η than the axis'),
+    'Δφ': ('particles at larger φ than the axis', 'particles at smaller φ than the axis'), 'charge': ('positive particles', 'negative particles'),
+    'charged hadron': ('charged hadrons', 'particles that are not charged hadrons'), 'neutral hadron': ('neutral hadrons', 'particles that are not neutral hadrons'),
+    'photon': ('photons', 'particles that are not photons'), 'electron': ('electrons', 'particles that are not electrons'), 'muon': ('muons', 'particles that are not muons'),
+    'tanh d0': ('tracks displaced to one side', 'tracks displaced to the other side'), 'σ(d0)': ('poorly measured tracks', 'well-measured tracks'),
+    'tanh dz': ('tracks displaced along the beam', 'tracks displaced the other way along the beam'), 'σ(dz)': ('tracks with uncertain dz', 'tracks with precise dz'),
+    'ln(1 + pT rank)': ('low-ranked (softer) particles', 'the leading particles'),
+    'ln(1+n within 0.1)': ('particles in a dense core', 'particles with few close neighbours'), 'ln(1+n within 0.2)': ('particles in a crowded region', 'particles in a sparse region'),
+    'pT share within 0.1': ('particles next to a hard core', 'particles away from hard activity'), 'pT share within 0.2': ('particles in a hard region (ΔR < 0.2)', 'particles in a soft region'),
+    'pT share within 0.4': ('particles in the hard part of the jet', 'particles in the soft periphery'),
+    'ΔR nearest': ('isolated particles', 'particles with a close neighbour'), 'ln pT nearest / pT': ('particles next to a harder neighbour', 'particles next to a softer neighbour'),
+    'ΔR hardest': ('particles far from the hardest particle', 'particles close to the hardest particle'), 'ΔR 2nd hardest': ('particles far from the 2nd-hardest particle', 'particles close to the 2nd-hardest particle'),
+    'ΔR nearest displaced': ('particles far from any displaced track', 'particles next to a displaced track (secondary vertex)'),
+    'ΔR nearest lepton': ('particles far from a lepton', 'particles next to a lepton'), 'ΔR nearest photon': ('particles far from a photon', 'particles next to a photon'),
+    'prong index': ('particles in the softer prongs', 'particles in the leading prong'), 'prong pT share': ('particles in a hard prong', 'particles in a soft prong'),
+    'prong ln mass': ('particles in a massive prong', 'particles in a light prong'), 'prong charge': ('particles in a positive prong', 'particles in a negative prong'),
+    'prong n displaced': ('particles in a prong with displaced tracks', 'particles in a prong without displaced tracks'),
+    'pT share in prong': ('the leaders of their prong', 'soft members of their prong'), 'ΔR prong axis': ('particles at the edge of their prong', 'particles at the core of their prong'),
+    'ln kT with nearest': ('particles in a hard, wide splitting', 'particles in a soft, collinear splitting')}
+
+
+def if_lines(inputs, share=.99):
+    """one value neuron as if-statements, one per input (its single term), largest first"""
+    tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, []
+    for d in inputs:
+        if acc >= share * tot and len(out) >= 3: break
+        acc += d['importance']
+        for c, k, t in d['terms']:
+            v = f'x["{d["feature"]}"]'
+            if k == 'lin': out.append(f'add {c:+.4g} · {v}')
+            elif k == 'gt': out.append(f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})')
+            else: out.append(f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})')
+    return out

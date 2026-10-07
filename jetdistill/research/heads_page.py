@@ -14,7 +14,7 @@ from ..part.network import ParTNetwork
 from .nbr import NBR, PK, nbr_features, pk_features
 from .heads import extract, downstream, phi_pooled, rows_of_split, OUT
 from .heads_eval import uniformize
-from .heads_defs import DEFS, WORDS, PK_DEF, COMPOSE, NOTATION, python_export, neuron_snippet
+from .heads_defs import DEFS, WORDS, PK_DEF, COMPOSE, NOTATION, PHRASE, python_export, neuron_snippet, if_lines
 
 CSS = """:root{--ink:#1d2433;--mut:#667085;--line:#e4e7ec;--bg:#f7f8fa;--acc:#1f4e79;--good:#2f855a;--bad:#c05621}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -127,6 +127,55 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         heads.append(dict(block=b + 1, head=h % 8 + 1, drop=drop, self_weight=float(A[b, :, h % 8, 0].mean()), eff_particles=float(np.exp(-(al * np.log(al + 1e-12)).sum(1)).mean()),
                           features=[dict(feature=vnames[f], importance=float(imp_f[f])) for f in top], curves=curves, neurons=neurons, selection=sel, rule=rule))
         log(f'  block {b + 1} head {h % 8 + 1}: ablation −{100 * drop:.2f} pt; values use ' + ', '.join(vnames[f] for f in top[:4]))
+    # per value neuron, facts in the style of the JEDI-linear explorer
+    from sklearn.metrics import roc_auc_score
+    ytrue = J['y'][rows]; Lm_ = Lm
+    def head_sel_phrase(hd):
+        sel = hd['selection']; out = []
+        w = [v for v in sel['ln pT/pT_jet']['weight'] if v is not None]
+        if len(w) > 2 and w[-1] > 1.6 * max(w[0], 1e-9): out.append('the hard particles')
+        w = [v for v in sel['ΔR']['weight'] if v is not None]
+        if len(w) > 2 and w[0] > 1.4 * max(w[-1], 1e-9): out.append('particles near the axis')
+        elif len(w) > 2 and w[-1] > 1.4 * max(w[0], 1e-9): out.append('wide-angle particles')
+        for k, nm, th in (('lepton', 'leptons', 1.5), ('charged', 'charged particles', 1.15), ('photon', 'photons', 1.2)):
+            if sel.get(k) and sel[k] > th: out.append(nm)
+        w = [v for v in sel['|d0|/σ']['weight'] if v is not None]
+        if len(w) > 2 and w[-1] > 1.5 * max(w[0], 1e-9): out.append('displaced tracks')
+        return ', '.join(out[:3]) if out else 'all particles about equally'
+    def direction(d):
+        """+1 if the input's piece rises with the input over its range, −1 if it falls"""
+        f = vnames.index(d['feature']); lo, hi = float(kn[0, f]), float(kn[-1, f]); xs = np.linspace(lo - .3 * (hi - lo + 1e-9), hi + .3 * (hi - lo + 1e-9), 25)
+        g = sum(c * (xs if k == 'lin' else np.maximum(0, xs - t) if k == 'gt' else np.maximum(0, t - xs)) for c, k, t in d['terms'])
+        return 1 if np.polyfit(xs, g, 1)[0] >= 0 else -1
+    for hi_, hd in enumerate(heads):
+        selp = head_sel_phrase(hd); hd['selects'] = selp; facts = []
+        for o_ in range(16):
+            v = O[:, hi_, o_]; ins = hd['neurons'][o_]
+            Oa = O.copy(); Oa[:, hi_, o_] = v.mean(); La = logits(Oa); dL = (Lm_ - La)
+            drop = a0 - float((La.argmax(1) == ref).mean())
+            means = [float(v[ytrue == c].mean()) for c in range(10)]
+            auc = [float(roc_auc_score(ytrue == c, v)) if 0 < (ytrue == c).sum() < len(v) else 0.5 for c in range(10)]
+            eff = [float(dL[:, c].mean()) for c in range(10)]; mag = np.abs(dL).mean(0)
+            order = np.argsort(-np.abs(eff))[:3]
+            role = '; '.join(f'{"raises" if eff[c] > 0 else "lowers"} the {CLASSES[c]} score ({eff[c]:+.2f} on average)' for c in order if abs(eff[c]) > .02) or 'hardly moves any class score'
+            tot = sum(d['importance'] for d in ins) or 1.0; parts = []
+            for d in ins[:3]:
+                hi_p, lo_p = PHRASE.get(d['feature'], (f'high {d["feature"]}', f'low {d["feature"]}'))
+                parts.append(f'{"rises" if direction(d) > 0 else "falls"} with {d["feature"]} — up for {hi_p if direction(d) > 0 else lo_p} ({100 * d["importance"] / tot:.0f} %)')
+            top = ins[0] if ins else None
+            title = (f'{(PHRASE.get(top["feature"], ("high " + top["feature"], "low " + top["feature"]))[0 if direction(top) > 0 else 1]) if top else "constant"}'
+                     + (f', {PHRASE.get(ins[1]["feature"], ("high " + ins[1]["feature"], "low " + ins[1]["feature"]))[0 if direction(ins[1]) > 0 else 1]}' if len(ins) > 1 else ''))
+            big = int(np.argmax(means)); sep = int(np.argmax(np.abs(np.array(auc) - .5)))
+            facts.append(dict(title=title, importance=None, strength=float(mag.mean()), drop=drop,
+                              measures=f'Sums, over the particles this head weights ({selp}), a formula that ' + '; '.join(parts) + '.',
+                              role=f'Removing it (set to its mean): {role}; agreement with ParT {-100 * drop:+.2f} pt.',
+                              scale=f'largest for {CLASSES[big]} jets; separates {CLASSES[sep]} jets best (AUC {max(auc[sep], 1 - auc[sep]):.2f})',
+                              means=means, auc=auc, effect=eff, ifs=if_lines(ins)))
+        hd['facts'] = facts
+        log(f'  block {hd["block"]} head {hd["head"]}: per-neuron facts done ({sum(f["importance"] == "major" for f in facts)} major)')
+    allst = np.array([f['strength'] for hd in heads for f in hd['facts']]); q80, q50 = np.quantile(allst, .8), np.quantile(allst, .5)
+    for hd in heads:                                                        # importance: how much the neuron moves the class scores, ranked over all 256
+        for f in hd['facts']: f['importance'] = 'major' if f['strength'] >= q80 else 'moderate' if f['strength'] >= q50 else 'minor'
     # example jets: n_ex per ParT class (the smallest multiplicities ≥ 8 first, then random), with every head's weights and the score decomposition
     rng = np.random.default_rng(0); ex = []
     for c in range(10):
@@ -195,8 +244,19 @@ def page(tag, outdir, device='mps', log=print):
             rule = f'<h3>The rule: score formula of this head</h3><div class="card"><div class="cnt">score(particle) = {hd["rule"]["intercept"]:+.2f} + Σ terms; the class token’s own score is 0; weights = softmax over the jet. Inputs by weight (coefficient × spread):</div>{rb}<div class="grid">{rcv}</div></div>'
         fb = '<table class="bars">' + ''.join(f'<tr><td>{html.escape(f["feature"])}</td><td style="width:180px"><div class="bar" style="width:{160 * f["importance"] / hd["features"][0]["importance"]:.0f}px"></div></td></tr>' for f in hd['features']) + '</table>'
         cv = ''.join(f'<div><div class="cnt">16 neurons vs {html.escape(k)}</div>{svg_lines(v["x"], v["y"])}</div>' for k, v in list(hd['curves'].items())[:4])
-        nb = ''.join(f'<span class="nbtn{" on" if j == 0 else ""}" onclick="showNeu({i},{j})">{j + 1}</span>' for j in range(16))
-        np_ = ''.join(f'<div class="neu{" on" if j == 0 else ""}" id="n{i}_{j}"><pre>{html.escape(neuron_snippet(tag, hd["block"], hd["head"], j, terms))}</pre></div>' for j, terms in enumerate(hd['neurons']))
+        imp_col = {'major': '#1d2433', 'moderate': '#98a2b3', 'minor': '#e4e7ec'}
+        nb = ''.join(f'<span class="nbtn{" on" if j == 0 else ""}" style="border-left:4px solid {imp_col[hd["facts"][j]["importance"]]}" title="{html.escape(hd["facts"][j]["title"])}" onclick="showNeu({i},{j})">{j + 1}</span>' for j in range(16))
+        def bars(vals, lab, fmt, center=None):
+            mx = max(abs(x - (center or 0)) for x in vals) or 1
+            return '<table class="bars">' + ''.join(f'<tr><td>{CLASSES[c]}</td><td style="width:150px"><div class="bar" style="width:{130 * abs(v - (center or 0)) / mx:.0f}px;background:{"#2f855a" if v - (center or 0) >= 0 else "#c05621"}"></div></td><td class="num">{fmt(v)}</td></tr>' for c, v in enumerate(vals)) + f'</table><div class="cnt">{lab}</div>'
+        np_ = ''.join(f'''<div class="neu{" on" if j == 0 else ""}" id="n{i}_{j}">
+<h3 style="margin:8px 0 2px">Neuron {j + 1}: {html.escape(fa["title"])} <span class="pill" style="background:{imp_col[fa["importance"]]};color:{"#fff" if fa["importance"] == "major" else "#1d2433"}">{fa["importance"]}</span></h3>
+<p style="margin:4px 0"><b>What it measures.</b> {html.escape(fa["measures"])}</p><p style="margin:4px 0"><b>Role.</b> {html.escape(fa["role"])} <span class="cnt">Scale: {html.escape(fa["scale"])}.</span></p>
+<div class="grid"><div><b>As if-statements</b> <span class="cnt">(per particle i; the neuron = Σ_i α_i · (sum of these) + c·α_cls + b)</span><pre>{html.escape(chr(10).join(fa["ifs"]))}</pre></div>
+<div><b>As a formula</b><pre>{html.escape(neuron_snippet(tag, hd["block"], hd["head"], j, hd["neurons"][j]))}</pre></div></div>
+<div class="grid"><div><b>Mean value by true class</b>{bars(fa["means"], "the neuron’s mean on jets of each true class", lambda v: f"{v:.2f}", center=float(np.mean(fa["means"])))}</div>
+<div><b>Separation (AUC vs the rest)</b>{bars(fa["auc"], "0.5 = no separation; above: higher for that class", lambda v: f"{v:.2f}", center=0.5)}</div>
+<div><b>Effect on the class scores</b>{bars(fa["effect"], "average change of each class score caused by this neuron (vs its mean)", lambda v: f"{v:+.2f}")}</div></div></div>''' for j, fa in enumerate(hd['facts']))
         panels += f'''<div class="head{" on" if i == 0 else ""}" id="h{i}"><h2>Block {hd["block"]}, head {hd["head"]} <span class="cnt">— removing it: −{100 * hd["drop"]:.2f} pt agreement · class token’s own share {hd["self_weight"]:.2f} · {hd["eff_particles"]:.1f} effective particles · selection: {selmode(hd)}</span></h2>
 {rule}<h3>The rule applied to a jet</h3><div class="slot"></div><h3>What the selection does on average</h3><div class="card"><div class="grid">{prof}</div><div class="cnt">{flags}</div></div>
 <h3>What it sums over the selected particles: the 16 value neurons</h3><div class="card"><p style="margin:0 0 8px"><b>How to read a neuron:</b> neuron = Σ over <b>every particle i of the jet</b> of α<sub>i</sub> · f(particle i) + c · α<sub>cls</sub> + b. f is the function written below, evaluated on that particle’s inputs; α<sub>i</sub> is this head’s weight for that particle in this jet (the weights of all particles and the class token sum to 1, so it is a weighted average). All 16 neurons of a head share the same weights α and differ in f: 16 properties averaged over the same selection.</p><span class="cnt">inputs by total weight:</span>{fb}<div class="grid">{cv}</div><div style="margin-top:8px"><span class="cnt">neuron:</span> {nb}</div>{np_}</div></div>'''
@@ -204,7 +264,7 @@ def page(tag, outdir, device='mps', log=print):
 function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.hb').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.head')[i].querySelector('.slot').appendChild(document.getElementById('jetbox'));drawJet();}
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
 let NN=0; function setNN(j){NN=j;document.querySelectorAll('.nnb').forEach((e,k)=>e.classList.toggle('on',k==j));drawJet();}
-function showNeu(i,j){for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
+function showNeu(i,j){ if(i==H){NN=j; drawJet();} for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
 function core(w){const o=w.map((v,k)=>[v,k]).sort((a,b)=>b[0]-a[0]); let acc=0, tot=w.reduce((a,b)=>a+b,0), S=new Set(); for(const [v,k] of o){if(acc>=0.9*tot) break; acc+=v; S.add(k);} return S;}
 function jetSVG(e,h,S){const W=360,Hh=300,R=0.8, X=v=>W/2+v/R*(W/2-20), Y=v=>Hh/2-v/R*(Hh/2-20); const mx=Math.max(...h.w);
  let g='<svg viewBox="0 0 '+W+' '+Hh+'" style="width:100%;max-width:'+W+'px;background:#fbfcfe;border:1px solid #e4e7ec;border-radius:8px">';
