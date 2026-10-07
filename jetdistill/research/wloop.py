@@ -106,11 +106,11 @@ def one_term(n_fit=30000, n_dev=20000, epochs=20, device='mps', log=print):
     (OUT / 'W1o_one_term.json').write_text(json.dumps(r, indent=1)); log(f'W1o: selection formulas with one term per input per head, ParT values: {100 * best[0]:.2f}% (start {100 * a0:.2f}%)'); return r
 
 
-def prune(tol=0.1, rounds=5, epochs=5, n_fit=30000, n_dev=20000, device='mps', log=print):
+def prune(tol=0.1, rounds=5, epochs=5, n_fit=30000, n_dev=20000, device='mps', log=print, src='W1o', out='W1p'):
     """remove (head, input) pairs — smallest contribution to the head's scores first; how many per round by bisection on the
     agreement drop (≤ tol points per round, measured on 5k dev jets) — then re-tune; stop when the full dev falls below tolerance"""
     import torch
-    t0 = time.time(); S = setup(n_fit, n_dev, device, log); net = Net(S, device); nf, K = net.nf, net.K; P1 = np.load(OUT / 'W1o_alpha.npz')
+    t0 = time.time(); S = setup(n_fit, n_dev, device, log); net = Net(S, device); nf, K = net.nf, net.K; P1 = np.load(OUT / f'{src}_alpha.npz')
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); W = P1['W'].copy(); Wz = T(P1['cz'].T)
     cols = lambda f: [1 + f] + [1 + nf + k * nf + f for k in range(K)] + [1 + nf + K * nf + k * nf + f for k in range(K)]
     keep = np.array([[np.any(W[cols(f), h]) for f in range(nf)] for h in range(16)])
@@ -134,11 +134,11 @@ def prune(tol=0.1, rounds=5, epochs=5, n_fit=30000, n_dev=20000, device='mps', l
         for h, f in order[:lo]: keep[h, f] = False
         W = after(lo); mask = (W != 0).astype(np.float32); mask[0] = 1
         best = net.tune(T(W), Wz, T(mask), epochs, log=log, label=f'W1 prune round {rnd + 1}'); W = best[1].cpu().numpy(); Wz = best[2]; a_now = best[0]
-        path.append(dict(round=rnd + 1, removed=lo, pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / 'W1p_alpha.npz', W=W, cz=Wz.cpu().numpy().T, kn=P1['kn'], mu=P1['mu'], sd=P1['sd'], basis='extended', keep=keep)
+        path.append(dict(round=rnd + 1, removed=lo, pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / f'{out}_alpha.npz', W=W, cz=Wz.cpu().numpy().T, kn=P1['kn'], mu=P1['mu'], sd=P1['sd'], basis='extended', keep=keep)
         log(f'  round {rnd + 1}: removed {lo} (head, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per head), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, start=a_ref, final=a_now, inputs_per_head=keep.sum(1).tolist(), path=path, seconds=time.time() - t0)
-    (OUT / 'W1p_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned W1: {int(keep.sum())} (head, input) pairs, {100 * a_now:.2f}%'); return r
+    (OUT / f'{out}_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned W1: {int(keep.sum())} (head, input) pairs, {100 * a_now:.2f}%'); return r
 
 
 def _agree_on(net, Wc, Wz, idx, bs=500):
@@ -199,4 +199,4 @@ if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
     elif cmd == 'test': test(*a)
-    else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
+    else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a[:5])), **dict(zip(('src', 'out'), a[5:])))
