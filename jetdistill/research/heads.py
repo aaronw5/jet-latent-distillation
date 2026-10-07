@@ -157,7 +157,7 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
     res['heads'] = heads; res['all_block1'] = agree(np.concatenate([pred[:, :8], Od_[:, 8:]], 1)); res['all_block2'] = agree(np.concatenate([Od_[:, :8], pred[:, 8:]], 1)); res['all'] = agree(pred)
     log(f"  all block-1 heads as formulas: {100 * res['all_block1']:.2f}%; all block-2 heads: {100 * res['all_block2']:.2f}%; all 16 heads: {100 * res['all']:.2f}% (ParT's own weights), {time.time() - t0:.0f} s")
     if steps:                                                               # S5: tune all heads' coefficients toward ParT's probabilities
-        import os; ridge = float(os.environ.get('JOINT_RIDGE', 1e-7)); l1 = float(os.environ.get('JOINT_L1', 0)); evf = float(os.environ.get('JOINT_EVFLOOR', 1e-6))
+        ridge = float(os.environ.get('JOINT_RIDGE', 1e-7)); l1 = float(os.environ.get('JOINT_L1', 0)); evf = float(os.environ.get('JOINT_EVFLOOR', 1e-6))
         Ms, Us = [], []                                                      # per head: whitened terms (uncorrelated, unit spread) — Adam on raw hinge terms diverges
         for h in range(16):
             B = Pf[:, h].astype(np.float64); G = B.T @ B / len(B); d = np.sqrt(np.maximum(np.diag(G), 1e-12))
