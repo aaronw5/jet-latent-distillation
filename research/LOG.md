@@ -513,3 +513,7 @@ functionally right for ParT's values but different in detail; formula neurons ar
   2M test of C3 started; the loop on C3 (one term → prune → statements, selection fixed) followed by a joint re-tune of both
   halves (C3j, 40 epochs) and its 2M test. C4 (neurons fitted toward W1q's own neurons): stage 1 78.41 % — no better than
   toward ParT's (78.44 %); stage 2 running.
+- (user, 18:30) Terms per input: the one-term rule costs the combined model 13 pt (C3 82.01 → C3o 68.97 %; S15 lost 0.4 with
+  ParT's weights). The user lifted it: **C6** = C3 (unrestricted, 82.01 %) → prune (neuron, input) pairs → prune single
+  statements → joint re-tune of both halves → 2M test. (A 2-term variant, C5, was started and stopped in favour of C6.)
+  Cancelling term pairs will be checked on the result.
