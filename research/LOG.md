@@ -346,3 +346,13 @@ re-tuned, end to end):
   weights already serve ParT's values at 97 % (A2h); every all-formula variant with one hop of context stops at
   83 %. The only remaining candidate is multi-hop context (A7); if it fails too, the stand-alone-formula line ends
   here and the > 90 % models are the S5 family (ParT's selection kept): S5rpc1 93.0 % on the 2M test jets.
+
+### Why 83 % when ParT's values give 97 % — the shuffle test (clock ~10:55)
+Same formula values (S5rpc1), same downstream, 20k balanced dev jets; only the weights change: ParT's own 93.06 %;
+ParT's own **shuffled among the particles of each jet** (same distribution, wrong particles) **60.96 %**; ParT's
+class-token share with uniform particles 63.21 %; A2h formula weights with these values untouched 19.42 % (82.5 %
+after re-tuning the values on them). → 32 pt of the 93 % come from ParT's weights picking the right particles per jet
+(context from its embeddings), not from their shape. With ParT's values the context is in the values and any smooth
+weighting works (the 97 % was the easy test); with per-particle formula values the weights must carry the context,
+and formula weights (per-particle too) cannot.
+- A7 (3 learned hops): tracking A6 (≈ 83 %) — learned context from scratch does not recover the selection either.
