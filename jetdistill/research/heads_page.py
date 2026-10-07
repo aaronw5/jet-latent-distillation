@@ -14,6 +14,7 @@ from ..part.network import ParTNetwork
 from .nbr import NBR, PK, nbr_features, pk_features
 from .heads import extract, downstream, phi_pooled, rows_of_split, OUT
 from .heads_eval import uniformize
+from .heads_defs import DEFS, PK_DEF, COMPOSE, python_export, neuron_snippet
 
 CSS = """:root{--ink:#1d2433;--mut:#667085;--line:#e4e7ec;--bg:#f7f8fa;--acc:#1f4e79;--good:#2f855a;--bad:#c05621}
 body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}
@@ -87,7 +88,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             x = np.linspace(kn[0, f] - (kn[-1, f] - kn[0, f]) * .3, kn[-1, f] + (kn[-1, f] - kn[0, f]) * .3, 40); xs = (x - mu[f]) / sd[f]
             basis = np.stack([xs] + [np.maximum(0, x - kn[k, f]) / sd[f] for k in range(len(kn))], 1); cols = [f] + [nv + k * nv + f for k in range(len(kn))]
             y = basis @ Wv[h][cols]; y -= y.mean(0); curves[vnames[f]] = dict(x=x.round(4).tolist(), y=y.round(4).T.tolist())
-        neurons = [[dict(feature=vnames[j % nv], term='linear' if j < nv else f'max(0, x − {kn[(j - nv) // nv, j % nv]:.3g})', coef=float(Wv[h][j, o_]), importance=float(imp_t[j, o_])) for j in np.argsort(-imp_t[:, o_])[:6]] for o_ in range(16)]
+        neurons = [[dict(feature=vnames[j % nv], term='linear' if j < nv else f'max(0, x − {kn[(j - nv) // nv, j % nv]:.4g})', coef=float(Wv[h][j, o_]), importance=float(imp_t[j, o_])) for j in np.argsort(-imp_t[:, o_])[:40]] for o_ in range(16)]
         b = h // 8; al = A[b, :, h % 8, 1:]; rel = al * npart[:, None]; sel = {}
         for name, v, bins in (('ln pT/pT_jet', F0[..., 2], np.linspace(-7, -0.5, 9)), ('ΔR', F0[..., 4], np.linspace(0, 0.8, 9)), ('|d0|/σ', d0s, np.array([0, .5, 1, 2, 3, 5, 10, 1e9]))):
             idx = np.clip(np.searchsorted(bins, v) - 1, 0, len(bins) - 2); sel[name] = dict(edges=[float(e) if e < 1e8 else None for e in bins], weight=[float(rel[ok & (idx == i)].mean()) if (ok & (idx == i)).any() else None for i in range(len(bins) - 1)])
@@ -171,7 +172,7 @@ def page(tag, outdir, device='mps', log=print):
         fb = '<table class="bars">' + ''.join(f'<tr><td>{html.escape(f["feature"])}</td><td style="width:180px"><div class="bar" style="width:{160 * f["importance"] / hd["features"][0]["importance"]:.0f}px"></div></td></tr>' for f in hd['features']) + '</table>'
         cv = ''.join(f'<div><div class="cnt">16 neurons vs {html.escape(k)}</div>{svg_lines(v["x"], v["y"])}</div>' for k, v in list(hd['curves'].items())[:4])
         nb = ''.join(f'<span class="nbtn{" on" if j == 0 else ""}" onclick="showNeu({i},{j})">{j + 1}</span>' for j in range(16))
-        np_ = ''.join(f'<div class="neu{" on" if j == 0 else ""}" id="n{i}_{j}"><pre>' + '\n'.join(f'{t["coef"]:+.4f} × {html.escape(t["feature"])}' + ('' if t['term'] == 'linear' else f'  [{html.escape(t["term"])}]') for t in terms) + '</pre></div>' for j, terms in enumerate(hd['neurons']))
+        np_ = ''.join(f'<div class="neu{" on" if j == 0 else ""}" id="n{i}_{j}"><pre>{html.escape(neuron_snippet(tag, hd["block"], hd["head"], j, terms))}</pre></div>' for j, terms in enumerate(hd['neurons']))
         panels += f'''<div class="head{" on" if i == 0 else ""}" id="h{i}"><h2>Block {hd["block"]}, head {hd["head"]} <span class="cnt">— removing it: −{100 * hd["drop"]:.2f} pt agreement · class token’s own share {hd["self_weight"]:.2f} · {hd["eff_particles"]:.1f} effective particles · selection: {selmode(hd)}</span></h2>
 {rule}<h3>The rule applied to a jet</h3><div class="slot"></div><h3>What the selection does on average</h3><div class="card"><div class="grid">{prof}</div><div class="cnt">{flags}</div></div>
 <h3>What it sums over the selected particles: the 16 value neurons</h3><div class="card"><span class="cnt">inputs by total weight:</span>{fb}<div class="grid">{cv}</div><div style="margin-top:8px"><span class="cnt">neuron:</span> {nb}</div>{np_}</div></div>'''
@@ -180,7 +181,7 @@ function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.clas
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
 function showNeu(i,j){for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
 function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Math.max(h.self,...h.w);
- let s='<div class="cnt">ParT: <b>'+CL[e.part]+'</b> ('+(100*e.p_part[e.part]).toFixed(0)+'%) · this model: <b>'+CL[e.model]+'</b> ('+(100*e.p_model[e.model]).toFixed(0)+'%) · truth '+CL[e.truth]+' · '+e.n+' particles. Head b'+(H<8?1:2)+' h'+(H%%8+1)+': '+(hasS?'score = formula(particle); ':'')+'weights = softmax over [class token, particles].'+(hasS?' Click a particle for what set its score.':'')+'</div>';
+ let s='<div class="cnt">ParT: <b>'+CL[e.part]+'</b> ('+(100*e.p_part[e.part]).toFixed(0)+'%) · this model: <b>'+CL[e.model]+'</b> ('+(100*e.p_model[e.model]).toFixed(0)+'%) · truth '+CL[e.truth]+' · '+e.n+' particles. Head b'+(H<8?1:2)+' h'+(H%8+1)+': '+(hasS?'score = formula(particle); ':'')+'weights = softmax over [class token, particles].'+(hasS?' Click a particle for what set its score.':'')+'</div>';
  s+='<table><tr><th>#</th><th class="num">pT share</th><th class="num">ΔR</th><th>type</th><th class="num">charge</th><th class="num">|d0|/σ</th>'+(hasS?'<th class="num">score</th>':'')+'<th class="num">weight</th><th></th></tr>';
  s+='<tr class="cls"><td>class token</td><td></td><td></td><td></td><td></td><td></td>'+(hasS?'<td class="num">0.00</td>':'')+'<td class="num">'+h.self.toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.self/mx)+'px"></span></td></tr>';
  e.particles.forEach((p,k)=>{s+='<tr class="p" onclick="showP('+k+')"><td>'+(k+1)+'</td><td class="num">'+p.z.toFixed(3)+'</td><td class="num">'+p.dr.toFixed(2)+'</td><td>'+p.type+'</td><td class="num">'+(p.q>0?'+':'')+p.q+'</td><td class="num">'+p.d0s.toFixed(1)+'</td>'+(hasS?'<td class="num">'+h.s[k].toFixed(2)+'</td>':'')+'<td class="num">'+h.w[k].toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.w[k]/mx)+'px"></span></td></tr>';});
@@ -188,17 +189,21 @@ function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Ma
 function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
 setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES))
+    defs_rows = ''.join(f'<tr><td>{html.escape(k)}</td><td>{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
+    if py: (outdir / f'{tag}_formulas.py').write_text(py)
     shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k != 'examples'}))
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
 <p class="cnt"><a href="../../index.html">← all setups</a> · <a href="../../research/index.html">research log</a></p><h1>{html.escape(title)}</h1>
 <p class="cnt">ParT_full · JetClass · ParT’s class attention written per head. A head applies one rule to every jet: a score for each particle → attention weights by softmax (with the class token’s own share) → a sum over the particles of a formula of each particle’s physics (16 value neurons). ParT’s fixed arithmetic after the heads turns the 256 head outputs into the class scores.</p>
 <div>{kpi}</div>
 <div class="card"><div class="keep"><b>Kept of ParT:</b> {kept}<br><span class="cnt">{DOWN}</span></div><div class="form"><b>Formulas:</b> {formula}</div></div>
+<h2>What the output is composed of</h2><div class="card"><pre>{html.escape(COMPOSE[joint])}</pre><p class="cnt">Exact formulation with the fitted coefficients: <a href="{tag}_formulas.py">{tag}_formulas.py</a> (+ <a href="{tag}_model.npz">{tag}_model.npz</a>). Each head’s 16 value neurons are written out term by term in its tab.</p></div>
 <div id="bar"><span class="cnt">head (and its cost when removed, in points of agreement):</span><br>{hb}</div>
 <div id="jetbox"><div class="card"><div class="cnt">jet (6 per ParT class; green border = this model agrees with ParT on it):</div><div>{jb}</div></div><div class="card" id="jet"></div><div class="card" id="contrib"></div></div>
 {panels}
 {metrics_html}
-<h2>Files</h2><div class="card"><a href="{tag}_model.npz">{tag}_model.npz</a> (coefficients, thresholds) · <a href="analysis.json">analysis.json</a> · code: branch part-features, jetdistill/research/{'joint.py' if joint else 'heads.py'}</div>
+<h2>Definitions of the per-particle inputs</h2><div class="card"><table><tr><th>input</th><th>definition, for particle i of the jet</th></tr>{defs_rows}</table><p class="cnt" style="margin-top:8px">{html.escape(PK_DEF)}</p><p class="cnt">Code: jetdistill/part/clsfit.py (particle_features), jetdistill/research/nbr.py (nbr_features, pk_features).</p></div>
+<h2>Files</h2><div class="card"><a href="{tag}_formulas.py">{tag}_formulas.py</a> (exact formulation) · <a href="{tag}_model.npz">{tag}_model.npz</a> (coefficients, thresholds) · <a href="analysis.json">analysis.json</a> · code: branch part-features, jetdistill/research/{'joint.py' if joint else 'heads.py'}</div>
 <script>{js}</script></main></body></html>"""
     (outdir / 'index.html').write_text(doc); log(f'page: {outdir / "index.html"} {len(doc) // 1024} kB')
 
