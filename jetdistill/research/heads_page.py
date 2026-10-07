@@ -188,14 +188,16 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             # particle groups: the populated firing patterns of the neuron's largest if-statements (top 8 hinge statements → ≤ 256 patterns), the 10 largest by their share of the neuron
             groups = []
             if m['kind'] == 'heads' and ins:
-                hinges = [(d, next((k_, t) for c_, k_, t in d['terms'] if k_ in ('gt', 'lt'))) for d in ins if any(k_ in ('gt', 'lt') for c_, k_, t in d['terms'])][:8]
+                hinges = [(d, next((k_, t) for c_, k_, t in d['terms'] if k_ in ('gt', 'lt'))) for d in ins if any(k_ in ('gt', 'lt') for c_, k_, t in d['terms'])]
+                bal = lambda d, k_, t: (lambda fr: min(fr, 1 - fr))(float(((XR[:, vnames.index(d['feature'])] > t) if k_ == 'gt' else (XR[:, vnames.index(d['feature'])] < t)).mean()))
+                hinges = sorted(hinges, key=lambda q: -q[0]['importance'] * bal(q[0], *q[1]))[:8]                      # the 8 most discriminating statements (importance × balance of firing)
                 if hinges:
                     fval = TR @ Wv[hi_][:6 * nv, o_]; awt = AR[hi_ // 8][:, hi_ % 8]; contrib = awt * fval; tot_c = np.abs(contrib).sum() or 1.0
                     Mk = np.stack([(XR[:, vnames.index(d['feature'])] > t) if k_ == 'gt' else (XR[:, vnames.index(d['feature'])] < t) for d, (k_, t) in hinges], 1); code = (Mk * (1 << np.arange(len(hinges)))).sum(1)
                     short = lambda d, k_, t: f"{d['feature']} {'>' if k_ == 'gt' else '<'} {t:.3g}"; pats = []
                     for cval in np.unique(code):
                         g = code == cval; on = [short(d, k_, t) for b_, (d, (k_, t)) in enumerate(hinges) if cval >> b_ & 1]; off = [short(d, k_, t) for b_, (d, (k_, t)) in enumerate(hinges) if not cval >> b_ & 1]
-                        pats.append(dict(name=('fires: ' + ', '.join(on) if on else 'no statement fires') + (' · not: ' + ', '.join(off) if off and on else ''), share=float(g.mean()), mean_f=float(fval[g].mean()), mean_w=float(awt[g].mean() * nmean),
+                        pats.append(dict(name=('fires: ' + ', '.join(on) if on else 'none of the statements fires') + (' · not: ' + ', '.join(off) if off and on and len(off) <= 3 else ''), share=float(g.mean()), mean_f=float(fval[g].mean()), mean_w=float(awt[g].mean() * nmean),
                                          contrib=float(contrib[g].sum() / tot_c), abs_share=float(np.abs(contrib[g]).sum() / tot_c), kinds={k2: float(v2[g].mean()) for k2, v2 in KR.items()}, hard=float(ZR[g].mean()),
                                          by_class=[float(contrib[g & (YR == c)].sum() / max((ytrue == c).sum(), 1)) for c in range(10)]))
                     pats.sort(key=lambda g: -g['abs_share']); groups = pats[:10]
