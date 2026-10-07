@@ -123,8 +123,10 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                     e['top'] = tops
                 hs.append(e)
             sm = np.exp(Lm[i] - Lm[i].max()); sm /= sm.sum(); sp = np.exp(L[i] - L[i].max()); sp /= sp.sum()
-            ex.append(dict(part=int(ref[i]), truth=int(J['y'][rows[i]]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs))
-    return dict(tag=tag, agreement=a0, heads=heads, examples=ex)
+            xin = np.round(F[i, ps][:, :nv], 5).tolist() if m['kind'] == 'heads' else None
+            ex.append(dict(X=xin, part=int(ref[i]), truth=int(J['y'][rows[i]]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs))
+    model_js = dict(W=np.round(m['W'], 6).tolist(), kn=np.round(m['kn'][:, :nv], 6).tolist(), nv=nv) if m['kind'] == 'heads' else None
+    return dict(tag=tag, agreement=a0, heads=heads, examples=ex, model_js=model_js)
 
 
 def svg_lines(x, Y, w=250, h=100, color='#1f4e79', op=.45):
@@ -176,23 +178,32 @@ def page(tag, outdir, device='mps', log=print):
         panels += f'''<div class="head{" on" if i == 0 else ""}" id="h{i}"><h2>Block {hd["block"]}, head {hd["head"]} <span class="cnt">— removing it: −{100 * hd["drop"]:.2f} pt agreement · class token’s own share {hd["self_weight"]:.2f} · {hd["eff_particles"]:.1f} effective particles · selection: {selmode(hd)}</span></h2>
 {rule}<h3>The rule applied to a jet</h3><div class="slot"></div><h3>What the selection does on average</h3><div class="card"><div class="grid">{prof}</div><div class="cnt">{flags}</div></div>
 <h3>What it sums over the selected particles: the 16 value neurons</h3><div class="card"><p style="margin:0 0 8px"><b>How to read a neuron:</b> neuron = Σ over <b>every particle i of the jet</b> of α<sub>i</sub> · f(particle i) + c · α<sub>cls</sub> + b. f is the function written below, evaluated on that particle’s inputs; α<sub>i</sub> is this head’s weight for that particle in this jet (the weights of all particles and the class token sum to 1, so it is a weighted average). All 16 neurons of a head share the same weights α and differ in f: 16 properties averaged over the same selection.</p><span class="cnt">inputs by total weight:</span>{fb}<div class="grid">{cv}</div><div style="margin-top:8px"><span class="cnt">neuron:</span> {nb}</div>{np_}</div></div>'''
-    js = """const EX=__EX__, CL=__CL__; let H=0, JJ=0;
+    js = """const EX=__EX__, CL=__CL__, MJ=__MJ__; let H=0, JJ=0;
 function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.hb').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.head')[i].querySelector('.slot').appendChild(document.getElementById('jetbox'));drawJet();}
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
+let NN=0; function setNN(j){NN=j;document.querySelectorAll('.nnb').forEach((e,k)=>e.classList.toggle('on',k==j));drawJet();}
 function showNeu(i,j){for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
 function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Math.max(h.self,...h.w);
  let s='<div class="cnt">ParT: <b>'+CL[e.part]+'</b> ('+(100*e.p_part[e.part]).toFixed(0)+'%) · this model: <b>'+CL[e.model]+'</b> ('+(100*e.p_model[e.model]).toFixed(0)+'%) · truth '+CL[e.truth]+' · '+e.n+' particles. Head b'+(H<8?1:2)+' h'+(H%8+1)+': '+(hasS?'score = formula(particle); ':'')+'weights = softmax over [class token, particles].'+(hasS?' Click a particle for what set its score.':'')+'</div>';
  s+='<table><tr><th>#</th><th class="num">pT share</th><th class="num">ΔR</th><th>type</th><th class="num">charge</th><th class="num">|d0|/σ</th>'+(hasS?'<th class="num">score</th>':'')+'<th class="num">weight</th><th></th></tr>';
  s+='<tr class="cls"><td>class token</td><td></td><td></td><td></td><td></td><td></td>'+(hasS?'<td class="num">0.00</td>':'')+'<td class="num">'+h.self.toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.self/mx)+'px"></span></td></tr>';
  e.particles.forEach((p,k)=>{s+='<tr class="p" onclick="showP('+k+')"><td>'+(k+1)+'</td><td class="num">'+p.z.toFixed(3)+'</td><td class="num">'+p.dr.toFixed(2)+'</td><td>'+p.type+'</td><td class="num">'+(p.q>0?'+':'')+p.q+'</td><td class="num">'+p.d0s.toFixed(1)+'</td>'+(hasS?'<td class="num">'+h.s[k].toFixed(2)+'</td>':'')+'<td class="num">'+h.w[k].toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.w[k]/mx)+'px"></span></td></tr>';});
- document.getElementById('jet').innerHTML=s+'</table>'; document.getElementById('contrib').innerHTML=hasS?'<span class="cnt">click a particle</span>':'<span class="cnt">this head’s weights are '+(hasS?'':'not from a formula on this page')+'</span>';}
+ if(MJ&&e.X){const W=MJ.W[H], kn=MJ.kn, nv=MJ.nv, K=W.length;
+  const fval=x=>{let v=0; for(let f=0;f<nv;f++){v+=W[f][NN]*x[f]; for(let k=0;k<5;k++){v+=W[nv+k*nv+f][NN]*Math.max(0,x[f]-kn[k][f]);}} return v;};
+  const fv=e.X.map(fval); h.f=fv.map(v=>{const a=[];a[NN]=v;return a;}); h.c=W[K-2].slice(); h.b=W[K-1].slice();
+  let tot=0; e.particles.forEach((p,k)=>{tot+=h.w[k]*h.f[k][NN];});
+  let nb='<div style="margin-top:10px"><b>Worked example — value neuron:</b> '+[...Array(16).keys()].map(j=>'<span class="nbtn nnb'+(j==NN?' on':'')+'" onclick="setNN('+j+')">'+(j+1)+'</span>').join('')+'</div>';
+  nb+='<table><tr><th>#</th><th class="num">weight α<sub>i</sub></th><th class="num">f(x<sub>i</sub>)</th><th class="num">α<sub>i</sub> · f(x<sub>i</sub>)</th></tr>';
+  e.particles.forEach((p,k)=>{nb+='<tr><td>'+(k+1)+'</td><td class="num">'+h.w[k].toFixed(3)+'</td><td class="num">'+h.f[k][NN].toFixed(3)+'</td><td class="num">'+(h.w[k]*h.f[k][NN]).toFixed(3)+'</td></tr>';});
+  const c=h.c[NN], b=h.b[NN]; nb+='</table><pre>neuron '+(NN+1)+' = Σ_i α_i · f(x_i)  +  c · α_cls  +  b\\n          = '+tot.toFixed(3)+'  +  '+c.toFixed(3)+' × '+h.self.toFixed(3)+'  +  '+b.toFixed(3)+'\\n          = '+(tot+c*h.self+b).toFixed(3)+'</pre><div class="cnt">f is the formula shown under “What it sums” below (neuron '+(NN+1)+'); every particle of the jet contributes its own f(x_i), weighted by this head’s α_i.</div>';
+  s+='</table>'+nb; document.getElementById('jet').innerHTML=s;} else document.getElementById('jet').innerHTML=s+'</table>'; document.getElementById('contrib').innerHTML=hasS?'<span class="cnt">click a particle</span>':'<span class="cnt">this head’s weights are '+(hasS?'':'not from a formula on this page')+'</span>';}
 function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
-setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES))
+setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES)).replace('__MJ__', json.dumps(an['model_js']))
     notation_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(v)}</td></tr>' for k, v in NOTATION)
     defs_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(WORDS.get(k, ""))}</td><td class="cnt">{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
     if py: (outdir / f'{tag}_formulas.py').write_text(py)
-    shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k != 'examples'}))
+    shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k not in ('examples', 'model_js')}))
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
 <p class="cnt"><a href="../../index.html">← all setups</a> · <a href="../../research/index.html">research log</a></p><h1>{html.escape(title)}</h1>
 <p class="cnt">ParT_full · JetClass · ParT’s class attention written per head. A head applies one rule to every jet: a score for each particle → attention weights by softmax (with the class token’s own share) → a sum over the particles of a formula of each particle’s physics (16 value neurons). ParT’s fixed arithmetic after the heads turns the 256 head outputs into the class scores.</p>
