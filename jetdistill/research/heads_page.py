@@ -26,7 +26,7 @@ th{font-weight:600;background:#f2f4f7}.num{text-align:right;font-variant-numeric
 .keep{border-left:4px solid var(--bad);background:#fff7f2;padding:8px 12px;border-radius:6px}.form{border-left:4px solid var(--good);background:#f2fbf5;padding:8px 12px;border-radius:6px;margin-top:6px}
 .btn{display:inline-block;border:1px solid #c9ced6;border-radius:8px;padding:3px 9px;margin:2px;cursor:pointer;background:#fff;font-size:12.5px}.btn.on{outline:2px solid var(--acc)}.btn small{color:var(--mut)}
 .pill{display:inline-block;border-radius:10px;padding:0 7px;font-size:11.5px;color:#fff;background:#667}.wbar{display:inline-block;height:10px;background:var(--acc);border-radius:2px;vertical-align:middle}
-tr.p{cursor:pointer}tr.p:hover{background:#f2f6fb}tr.p.on{background:#e8f0fa}tr.cls td{background:#fffaf0;font-style:italic}
+tr.p{cursor:pointer}tr.p:hover{background:#f2f6fb}tr.p.on{background:#e8f0fa}tr.p.core td:first-child{border-left:3px solid #c05621;font-weight:600}tr.cls td{background:#fffaf0;font-style:italic}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.bars td{padding:2px 8px}.bar{height:10px;background:var(--acc);border-radius:3px}
 .head{display:none}.head.on{display:block}#bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:6px 0 8px;margin-bottom:8px}.tab{border:none;background:none;padding:6px 10px;font:inherit;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}.tab.on{color:var(--acc);border-bottom-color:var(--acc)}.tab small{font-weight:400}.nbtn{display:inline-block;border:1px solid #c9ced6;border-radius:6px;padding:1px 6px;margin:2px;cursor:pointer;background:#fff;font-size:12px}.nbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}.neu{display:none}.neu.on{display:block}
 pre{font:12px/1.55 ui-monospace,Menlo,monospace;background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:pre-wrap;margin:4px 0}#contrib{min-height:60px}"""
@@ -110,7 +110,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
     for c in range(10):
         cand = np.flatnonzero((ref == c) & (npart >= 8)); pick = list(cand[np.argsort(npart[cand])[:n_ex // 2]]) + list(rng.choice(cand, n_ex - n_ex // 2, replace=False))
         for i in pick:
-            ps = np.flatnonzero(ok[i]); parts = [dict(z=float(np.exp(F0[i, p, 2])), dr=float(F0[i, p, 4]), type=TYPES[int(np.argmax(F0[i, p, 8:13]))], q=int(F0[i, p, 7]), d0s=float(d0s[i, p])) for p in ps]
+            ps = np.flatnonzero(ok[i]); parts = [dict(eta=round(float(F0[i, p, 5]), 4), phi=round(float(F0[i, p, 6]), 4), z=float(np.exp(F0[i, p, 2])), dr=float(F0[i, p, 4]), type=TYPES[int(np.argmax(F0[i, p, 8:13]))], q=int(F0[i, p, 7]), d0s=float(d0s[i, p])) for p in ps]
             hs = []
             for h in range(16):
                 b = h // 8; w = A[b, i, h % 8]; e = dict(self=float(w[0]), w=[float(w[1 + p]) for p in ps])
@@ -125,7 +125,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             sm = np.exp(Lm[i] - Lm[i].max()); sm /= sm.sum(); sp = np.exp(L[i] - L[i].max()); sp /= sp.sum()
             xin = np.round(F[i, ps][:, :nv], 5).tolist() if m['kind'] == 'heads' else None
             ex.append(dict(X=xin, part=int(ref[i]), truth=int(J['y'][rows[i]]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs))
-    model_js = dict(W=np.round(m['W'], 6).tolist(), kn=np.round(m['kn'][:, :nv], 6).tolist(), nv=nv) if m['kind'] == 'heads' else None
+    model_js = dict(W=np.round(m['W'], 6).tolist(), kn=np.round(m['kn'][:, :nv], 6).tolist(), nv=nv, names=vnames) if m['kind'] == 'heads' else None
     return dict(tag=tag, agreement=a0, heads=heads, examples=ex, model_js=model_js)
 
 
@@ -183,11 +183,20 @@ function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.clas
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
 let NN=0; function setNN(j){NN=j;document.querySelectorAll('.nnb').forEach((e,k)=>e.classList.toggle('on',k==j));drawJet();}
 function showNeu(i,j){for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
-function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Math.max(h.self,...h.w);
+function core(w){const o=w.map((v,k)=>[v,k]).sort((a,b)=>b[0]-a[0]); let acc=0, tot=w.reduce((a,b)=>a+b,0), S=new Set(); for(const [v,k] of o){if(acc>=0.9*tot) break; acc+=v; S.add(k);} return S;}
+function jetSVG(e,h,S){const W=360,Hh=300,R=0.8, X=v=>W/2+v/R*(W/2-20), Y=v=>Hh/2-v/R*(Hh/2-20); const mx=Math.max(...h.w);
+ let g='<svg viewBox="0 0 '+W+' '+Hh+'" style="width:100%;max-width:'+W+'px;background:#fbfcfe;border:1px solid #e4e7ec;border-radius:8px">';
+ g+='<line x1="'+X(-R)+'" x2="'+X(R)+'" y1="'+Y(0)+'" y2="'+Y(0)+'" stroke="#eee"/><line y1="'+Y(-R)+'" y2="'+Y(R)+'" x1="'+X(0)+'" x2="'+X(0)+'" stroke="#eee"/>';
+ [0.2,0.4,0.8].forEach(r=>{g+='<circle cx="'+X(0)+'" cy="'+Y(0)+'" r="'+(r/R*(W/2-20))+'" fill="none" stroke="#e4e7ec" stroke-dasharray="2 3"/><text x="'+(X(r)+2)+'" y="'+(Y(0)-2)+'" font-size="9" fill="#99a">ΔR '+r+'</text>';});
+ const ord=e.particles.map((p,k)=>k).sort((a,b)=>h.w[a]-h.w[b]);
+ ord.forEach(k=>{const p=e.particles[k], a=h.w[k]/mx, r=3+10*Math.sqrt(p.z); g+='<circle cx="'+X(p.eta)+'" cy="'+Y(p.phi)+'" r="'+r.toFixed(1)+'" fill="rgb('+Math.round(31+(192-31)*(1-a))+','+Math.round(78+(197-78)*(1-a))+','+Math.round(121+(220-121)*(1-a))+')" fill-opacity="'+(0.25+0.75*a).toFixed(2)+'" stroke="'+(S.has(k)?'#c05621':'none')+'" stroke-width="1.6" style="cursor:pointer" onclick="showP('+k+')"><title>particle '+(k+1)+': α = '+h.w[k].toFixed(3)+', pT share '+p.z.toFixed(3)+', '+p.type+'</title></circle>';});
+ g+='<text x="8" y="'+(Hh-8)+'" font-size="10" fill="#667">Δη →   (Δφ ↑) · size: pT share · colour: α in this head (dark = high) · orange ring: carries 90 % of the weight</text></svg>'; return g;}
+function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Math.max(h.self,...h.w); const S=core(h.w);
  let s='<div class="cnt">ParT: <b>'+CL[e.part]+'</b> ('+(100*e.p_part[e.part]).toFixed(0)+'%) · this model: <b>'+CL[e.model]+'</b> ('+(100*e.p_model[e.model]).toFixed(0)+'%) · truth '+CL[e.truth]+' · '+e.n+' particles. Head b'+(H<8?1:2)+' h'+(H%8+1)+': '+(hasS?'score = formula(particle); ':'')+'weights = softmax over [class token, particles].'+(hasS?' Click a particle for what set its score.':'')+'</div>';
+ s+='<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin:8px 0"><div>'+jetSVG(e,h,S)+'</div><div class="cnt" style="max-width:360px"><b>'+S.size+' of '+e.n+' particles</b> carry 90 % of this head’s weight on the particles (orange rings; highlighted rows). The class token keeps '+(100*h.self).toFixed(1)+' % for itself. Every particle is included in the sums; the others just count little. The weights α are recomputed for every jet — switch heads to see how differently they look at the same jet. Click a particle to see all its inputs.</div></div>';
  s+='<table><tr><th>#</th><th class="num">pT share</th><th class="num">ΔR</th><th>type</th><th class="num">charge</th><th class="num">|d0|/σ</th>'+(hasS?'<th class="num">score</th>':'')+'<th class="num">weight</th><th></th></tr>';
  s+='<tr class="cls"><td>class token</td><td></td><td></td><td></td><td></td><td></td>'+(hasS?'<td class="num">0.00</td>':'')+'<td class="num">'+h.self.toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.self/mx)+'px"></span></td></tr>';
- e.particles.forEach((p,k)=>{s+='<tr class="p" onclick="showP('+k+')"><td>'+(k+1)+'</td><td class="num">'+p.z.toFixed(3)+'</td><td class="num">'+p.dr.toFixed(2)+'</td><td>'+p.type+'</td><td class="num">'+(p.q>0?'+':'')+p.q+'</td><td class="num">'+p.d0s.toFixed(1)+'</td>'+(hasS?'<td class="num">'+h.s[k].toFixed(2)+'</td>':'')+'<td class="num">'+h.w[k].toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.w[k]/mx)+'px"></span></td></tr>';});
+ e.particles.forEach((p,k)=>{s+='<tr class="p'+(S.has(k)?' core':'')+'" onclick="showP('+k+')"><td>'+(k+1)+'</td><td class="num">'+p.z.toFixed(3)+'</td><td class="num">'+p.dr.toFixed(2)+'</td><td>'+p.type+'</td><td class="num">'+(p.q>0?'+':'')+p.q+'</td><td class="num">'+p.d0s.toFixed(1)+'</td>'+(hasS?'<td class="num">'+h.s[k].toFixed(2)+'</td>':'')+'<td class="num">'+h.w[k].toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*h.w[k]/mx)+'px"></span></td></tr>';});
  if(MJ&&e.X){const W=MJ.W[H], kn=MJ.kn, nv=MJ.nv, K=W.length;
   const fval=x=>{let v=0; for(let f=0;f<nv;f++){v+=W[f][NN]*x[f]; for(let k=0;k<5;k++){v+=W[nv+k*nv+f][NN]*Math.max(0,x[f]-kn[k][f]);}} return v;};
   const fv=e.X.map(fval); h.f=fv.map(v=>{const a=[];a[NN]=v;return a;}); h.c=W[K-2].slice(); h.b=W[K-1].slice();
@@ -197,7 +206,10 @@ function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Ma
   e.particles.forEach((p,k)=>{nb+='<tr><td>'+(k+1)+'</td><td class="num">'+h.w[k].toFixed(3)+'</td><td class="num">'+h.f[k][NN].toFixed(3)+'</td><td class="num">'+(h.w[k]*h.f[k][NN]).toFixed(3)+'</td></tr>';});
   const c=h.c[NN], b=h.b[NN]; nb+='</table><pre>neuron '+(NN+1)+' = Σ_i α_i · f(x_i)  +  c · α_cls  +  b\\n          = '+tot.toFixed(3)+'  +  '+c.toFixed(3)+' × '+h.self.toFixed(3)+'  +  '+b.toFixed(3)+'\\n          = '+(tot+c*h.self+b).toFixed(3)+'</pre><div class="cnt">f is the formula shown under “What it sums” below (neuron '+(NN+1)+'); every particle of the jet contributes its own f(x_i), weighted by this head’s α_i.</div>';
   s+='</table>'+nb; document.getElementById('jet').innerHTML=s;} else document.getElementById('jet').innerHTML=s+'</table>'; document.getElementById('contrib').innerHTML=hasS?'<span class="cnt">click a particle</span>':'<span class="cnt">this head’s weights are '+(hasS?'':'not from a formula on this page')+'</span>';}
-function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
+function showP(k){const e=EX[JJ], h=e.heads[H]; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
+ let t='<div class="cnt">particle '+(k+1)+' — weight α = '+h.w[k].toFixed(3)+' in this head.'+(MJ&&e.X?' Its inputs x_i (what f(x_i) is evaluated on):':'')+'</div>';
+ if(MJ&&e.X){t+='<table>'+MJ.names.map((nm,f)=>'<tr><td>'+nm+'</td><td class="num">'+e.X[k][f].toPrecision(4)+'</td></tr>').join('')+'</table>';}
+ if(h.top===undefined){document.getElementById('contrib').innerHTML=t; return;} document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
 setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES)).replace('__MJ__', json.dumps(an['model_js']))
     notation_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(v)}</td></tr>' for k, v in NOTATION)

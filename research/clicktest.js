@@ -9,3 +9,5 @@ d.querySelectorAll('#h5 .nbtn:not(.nnb)')[3].click(); console.log('after clickin
 d.querySelectorAll('#jet tr.p')[0].click(); console.log('particle click (needs score formulas; S5 keeps ParT weights):', d.getElementById('contrib').textContent.slice(0, 80));
 console.log('errors:', errs.length ? errs : 'none');
 const nn = d.querySelectorAll('.nnb'); if (nn.length) { nn[2].click(); console.log('worked example after neuron 3:', d.querySelector('#jet pre').textContent.replace(/\s+/g, ' ').slice(0, 140)); }
+console.log('jet picture circles:', d.querySelectorAll('#jet svg circle').length, '| core rows:', d.querySelectorAll('#jet tr.p.core').length);
+d.querySelectorAll('#jet tr.p')[1].click(); console.log('particle 2 inputs shown:', d.getElementById('contrib').querySelectorAll('tr').length, 'rows');
