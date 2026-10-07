@@ -192,3 +192,7 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
 - S7-bal (ParT's values, weights swapped): block 1 uniform **78.4 %** (skewed dev had said 92.8 %); block 1 particles
   uniform with ParT's self-weight 88.9 %; block 2 uniform 96.4 % (was 99.1 %). The weights matter more than the
   skewed sample suggested, block 1's self-weight in particular.
+- S7-bal (cont.): ParT's values with weights from per-particle score formulas (within-jet fit, ParT's per-jet mean
+  score kept): block 1 **96.0 %**, block 2 98.2 %. The relative weighting is formula-shaped; the per-jet level of the
+  scores (the self-weight balance; in block 1 the self score is a constant, so the level is the formula's job) is what
+  S9 lacked (its self score was fixed at 0 with a least-squares intercept) — S10 tunes it.
