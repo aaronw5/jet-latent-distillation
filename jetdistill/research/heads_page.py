@@ -39,6 +39,8 @@ INFO = {
     'S10': ('All formulas', 'Nothing above the class attention: no particle blocks, no embeddings.',
             'Block 1’s selection (per head one score formula of a particle’s physics; per jet, softmax over the class token’s fixed score and the particles’ scores) and every head’s value are formulas; block 2 is a plain average.')}
 INFO['S10b'] = INFO['S10']
+INFO['S5rp'] = ('Per-head formulas, pruned — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Pruned: each head keeps only the inputs it needs (17–29 of 38), re-tuned.')
+INFO['S5r'] = INFO['S5']
 DOWN = 'Kept in every model: ParT’s fixed arithmetic after the heads — out-projection, per-head scale, LayerNorms, the 128→512→128 MLP with residuals in both class blocks, the final LayerNorm and the last layer. Not fitted, no physics content: a smooth map from the 256 head outputs to the 10 class scores.'
 TYPES = ['ch. hadron', 'n. hadron', 'photon', 'electron', 'muon']
 

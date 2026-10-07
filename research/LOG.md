@@ -264,3 +264,7 @@ explorer does not apply to these models.
   kernel-weighted sums of more properties at several scales, the particle's prong / neighbourhood composition.
   Cheap formula-based test: do they bring S11's weights closer to ParT's (total variation) and raise formula values +
   ParT α above 93.2 %?
+
+### S5rp — the pruned readable S5 on the 2M test jets (clock ~03:50)
+- **93.30 %** same class as ParT, accuracy **0.8435**, AUC 0.9847 (ParT 0.8603 / 0.9877) — with 380 (head, input)
+  pairs (17–29 inputs per head) instead of 608: smaller and slightly better than S5 (93.16 %). The headline model.
