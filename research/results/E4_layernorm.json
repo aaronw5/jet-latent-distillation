@@ -1,0 +1,30 @@
+{
+ "experiment": "E4",
+ "n": 100000,
+ "K": 60,
+ "steps": 400,
+ "lam": 0.01,
+ "results": {
+  "linear/post": {
+   "least_squares": 0.69716,
+   "tuned": 0.75877,
+   "n_coef": 73344
+  },
+  "linear/pre": {
+   "least_squares": 0.69261,
+   "tuned": 0.7585,
+   "n_coef": 73344
+  },
+  "hinge/post": {
+   "least_squares": 0.09643,
+   "tuned": 0.09643,
+   "n_coef": 180864
+  },
+  "hinge/pre": {
+   "least_squares": 0.09643,
+   "tuned": 0.09643,
+   "n_coef": 180864
+  }
+ },
+ "seconds": 171.51186203956604
+}

@@ -1,0 +1,12 @@
+{
+ "n_fit": 20000,
+ "n_dev": 10000,
+ "exact": 1.0,
+ "block1_uniform": 0.784,
+ "block1_uniform_particles": 0.8887,
+ "block2_uniform": 0.964,
+ "block2_uniform_particles": 0.9642,
+ "block1_formula": 0.9604,
+ "block2_formula": 0.982,
+ "seconds": 55.03108811378479
+}

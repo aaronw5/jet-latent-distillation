@@ -1,0 +1,10 @@
+{
+ "model": "mlp",
+ "n_fit": 300000,
+ "n_quantities": 572,
+ "width": 512,
+ "epochs": 40,
+ "agreement": 0.81215,
+ "accuracy": 0.76082,
+ "seconds": 78.07199931144714
+}
