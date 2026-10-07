@@ -71,7 +71,17 @@ def summary():
     if s10: rows.append(('<b>all formulas</b>: block-1 weights and head values from per-particle physics, block 2 a plain average, tuned jointly', 'ParT’s downstream (fixed operations)', s10['best'], f'balanced dev 20k; least squares {pct(s10["least_squares"])}'))
     if pr: rows.append((f'the same, pruned to {len(pr["kept"])} of 126 per-particle features', 'ParT’s downstream', pr['final'], 'balanced dev 20k'))
     if te: rows.append(('the pruned all-formula model on the 2M test jets', 'ParT’s downstream', te['agreement'], f'accuracy {te["accuracy"]:.4f}, AUC {te["auc"]:.4f} (ParT {te["part"]["accuracy"]:.4f} / {te["part"]["auc"]:.4f})'))
-    best = max(r[2] for r in rows)
+    s15, s15o, s15p = J('S15_post.json'), J('S15o_one_term.json'), J('S15p_pruned.json'); t15 = J('S15p_metrics_full_test.json')
+    if s15: rows.append(('<b>the 128 class-token neurons directly</b>: per-particle formulas summed with ParT’s weights → ParT’s last layer; no head values, no MLP, no LayerNorms (S15)', 'ParT’s class-attention weights, last layer', s15['best'], f'balanced dev 20k; least squares {pct(s15["least_squares"])}'))
+    if s15o: rows.append((f'the same, at most one term per input per neuron and head ({s15o["terms"]} terms) (S15o)', 'ParT’s class-attention weights, last layer', s15o['best'], 'balanced dev 20k'))
+    if s15p: rows.append((f'the same, pruned to {s15p["path"][-1]["pairs"]} neuron–input pairs (S15p)', 'ParT’s class-attention weights, last layer', s15p['final'], 'balanced dev 20k'))
+    if t15: rows.append(('<b>S15p on the 2M test jets</b> — <a href="../heads_S15p/full/index.html">page</a>', 'ParT’s class-attention weights, last layer', t15['agreement'], f'accuracy {t15["accuracy"]:.4f}, AUC {t15["auc"]:.4f} (ParT {t15["part"]["accuracy"]:.4f} / {t15["part"]["auc"]:.4f})'))
+    a2h, a10 = J('A2h_alpha_e2e.json'), J('A10_fulltune.json'); w1o, w1p = J('W1o_one_term.json'), J('W1p_pruned.json')
+    if a2h: rows.append(('ParT’s head values; both blocks’ weights from per-particle score formulas tuned end to end (A2h)', 'ParT’s values, downstream', a2h.get('part_values_both', a2h.get('best')), 'balanced dev 20k'))
+    if w1o: rows.append((f'the same, at most one term per input per head ({w1o["terms"]} terms), re-tuned (W1o)', 'ParT’s values, downstream', w1o['best'], 'balanced dev 20k'))
+    if w1p: rows.append((f'the same, pruned to {w1p["path"][-1]["pairs"]} head–input pairs (W1p)', 'ParT’s values, downstream', w1p['final'], 'balanced dev 20k'))
+    if a10: rows.append(('all formulas, per head: coefficients and thresholds tuned together (A10)', 'ParT’s downstream', a10['best'], f'balanced dev 20k; start {pct(a10["start"])}'))
+    rows = [r for r in rows if r[2] is not None]; best = max(r[2] for r in rows)
     t = '<table><tr><th>model</th><th>kept of ParT</th><th class="num">same class as ParT</th><th>where measured</th></tr>'
     for name, kept, ag, where in rows: t += f'<tr><td>{name}</td><td>{kept}</td><td class="num{" best" if ag == best else ""}">{pct(ag)}</td><td class="cnt">{where}</td></tr>'
     return t + '</table>'
