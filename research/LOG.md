@@ -198,3 +198,10 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   S9 lacked (its self score was fixed at 0 with a least-squares intercept) — S10 tunes it.
 - S8b-bal (formula values, ParT's block-1 weights, block 2 uniform): 80.6 % → **91.6 %** (300 epochs). A plain
   average in block 2 costs ~1.6 pt against ParT's block-2 weights (93.2 %).
+
+### S10 — all formulas, tuned jointly (clock 02:10–02:25)
+- Block-1 weights from per-particle score formulas (757 terms: own + neighbourhood + pair-kernel context; self score
+  0), block 2 a plain average, per-head values from own + neighbourhood terms (228); joint Adam (whitened), 100k fit,
+  balanced 20k dev: least squares 69.4 % → 81.1 (10) / 82.2 (30) / 82.6 (50) / **83.0 % (100)**, still creeping.
+- The first stand-alone formula model above the jet-level formulas (80.2 %). Against S8b (91.6 % with ParT's block-1
+  weights) the formula weights cost ~8.6 pt. S10b: values on all 126 features, 150k jets.
