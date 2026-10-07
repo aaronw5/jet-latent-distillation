@@ -104,18 +104,19 @@ def python_export(tag, m):
     return HEADS_PY.format(tag=tag, nv=nv, nv6=6 * nv, nterms=m['W'].shape[1], uniform_note=note, feats=feats)
 
 
-def neuron_snippet(tag, block, head, o, terms, share=.99):
-    """Python-like text of one value neuron: the terms covering `share` of its total importance, largest first"""
-    tot = sum(t['importance'] for t in terms); acc, lines = 0.0, []
-    for t in terms:
+def neuron_snippet(tag, block, head, o, inputs, share=.99):
+    """one value neuron, an input per line: its piece as slopes per segment (a hinge coefficient is a change of slope, so
+    the piece is shown as the slope on each interval between its kinks) and its net typical contribution"""
+    tot = sum(d['importance'] for d in inputs) or 1.0; acc, lines = 0.0, []
+    for d in inputs:
         if acc >= share * tot and len(lines) >= 3: break
-        acc += t['importance']; x = f'x["{t["feature"]}"]'
-        thr = t['term'].split('− ')[1].rstrip(')') if t['term'] != 'linear' else None
-        term = f'      {t["coef"]:+.4g} * ' + (x if thr is None else f'max(0, {x} - {thr})')
-        lines.append(f'{term:<70s} # typical contribution ±{t["importance"]:.3g}')
+        acc += d['importance']; k, s = d['knots'], d['slopes']
+        if not k: seg = f'slope {s[0]:+.3g}'
+        else: seg = ', '.join([f'slope {s[0]:+.3g} below {k[0]:.3g}'] + [f'{s[i + 1]:+.3g} from {k[i]:.3g}' for i in range(len(k))])
+        lines.append(f'  {d["feature"]:<24s} {seg:<70s} # typical contribution ±{d["importance"]:.3g}')
     return (f'# value neuron {o + 1} of block {block}, head {head}:  sum over the particles i of alpha_i * f(x_i)   (+ c * alpha_cls + bias)\n'
-            f'# (typical contribution = |coefficient| × the spread of the term summed over a jet’s particles: how much the term moves this neuron)\n'
-            f'def f(x):   # x: the inputs of one particle\n    return (\n' + '\n'.join(lines) + f'\n      # ... {max(0, len(terms) - len(lines))} smaller terms; exact: {tag}_formulas.py\n    )')
+            f'# f(x) = sum of one piecewise-linear piece per input (the slope on each interval between kinks); typical contribution = how much that input moves the neuron across jets\n'
+            f'f(x) =\n' + '\n'.join(lines) + f'\n  # ... {max(0, len(inputs) - len(lines))} smaller inputs; exact: {tag}_formulas.py')
 
 
 NOTATION = [

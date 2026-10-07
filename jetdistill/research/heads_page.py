@@ -90,7 +90,21 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             x = np.linspace(kn[0, f] - (kn[-1, f] - kn[0, f]) * .3, kn[-1, f] + (kn[-1, f] - kn[0, f]) * .3, 40); xs = (x - mu[f]) / sd[f]
             basis = np.stack([xs] + [np.maximum(0, x - kn[k, f]) / sd[f] for k in range(len(kn))], 1); cols = [f] + [nv + k * nv + f for k in range(len(kn))]
             y = basis @ Wv[h][cols]; y -= y.mean(0); curves[vnames[f]] = dict(x=x.round(4).tolist(), y=y.round(4).T.tolist())
-        neurons = [[dict(feature=vnames[j % nv], term='linear' if j < nv else f'max(0, x − {kn[(j - nv) // nv, j % nv]:.4g})', coef=float(Wv[h][j, o_]), importance=float(imp_t[j, o_])) for j in np.argsort(-imp_t[:, o_])[:40]] for o_ in range(16)]
+        neurons = []
+        for o_ in range(16):                                                    # per input: a piecewise-linear piece, slopes per segment, its net typical contribution
+            w = Wv[h][:, o_]; ins = []
+            for f in range(nv):
+                cols = [f] + [nv + k * nv + f for k in range(len(kn))]
+                if not np.any(w[cols]): continue
+                net_sd = float((Pv[:, h, cols] @ w[cols]).std())
+                kk = {}
+                for k in range(len(kn)):
+                    if w[nv + k * nv + f]: kk[round(float(kn[k, f]), 6)] = kk.get(round(float(kn[k, f]), 6), 0.0) + float(w[nv + k * nv + f])
+                th = sorted(kk); sl = [float(w[f])]
+                for t in th: sl.append(sl[-1] + kk[t])
+                scale = 1.0 / sd[f] if m['kind'] != 'heads' else 1.0
+                ins.append(dict(feature=vnames[f], importance=net_sd, knots=th, slopes=[v * scale for v in sl]))
+            ins.sort(key=lambda d: -d['importance']); neurons.append(ins)
         b = h // 8; al = A[b, :, h % 8, 1:]; rel = al * npart[:, None]; sel = {}
         for name, v, bins in (('ln pT/pT_jet', F0[..., 2], np.linspace(-7, -0.5, 9)), ('ΔR', F0[..., 4], np.linspace(0, 0.8, 9)), ('|d0|/σ', d0s, np.array([0, .5, 1, 2, 3, 5, 10, 1e9]))):
             idx = np.clip(np.searchsorted(bins, v) - 1, 0, len(bins) - 2); sel[name] = dict(edges=[float(e) if e < 1e8 else None for e in bins], weight=[float(rel[ok & (idx == i)].mean()) if (ok & (idx == i)).any() else None for i in range(len(bins) - 1)])
