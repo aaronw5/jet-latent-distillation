@@ -40,14 +40,14 @@ def tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, lr=1e-4, lam=0.01, device
     Wof = lambda: V * Mk / Sd
     def agree(W):
         with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], W)).argmax(1) for a in range(0, len(Ed), 5000)]).cpu().numpy() == ref).mean())
-    a0 = agree(T(W1)); best = (a0, W1.copy(), 0); opt = torch.optim.Adam([V], lr)
+    a0 = agree(T(W1)); best = (-1.0 if l1 else a0, W1.copy(), 0); opt = torch.optim.Adam([V], lr)        # with an L1 penalty: keep the penalized weights (agreement is expected to fall)
     for ep in range(epochs):
         for a in np.random.default_rng(ep).permutation(np.arange(0, n, 5000)):
             y = torch.einsum('nhk,hko->no', Eft[a:a + 5000], Wof()); loss = -(pf[a:a + 5000] * torch.log_softmax(model.fc(y), 1)).sum(1).mean() + lam * ((y - Hft[a:a + 5000]) ** 2 / vh).mean() + (l1 * (V * Mk)[:, :K - 2].abs().sum() if l1 else 0.0)
             opt.zero_grad(); loss.backward(); opt.step()
         if ep % 10 == 9 or ep == epochs - 1:
             Wn = Wof().detach(); ag = agree(Wn)
-            if ag > best[0]: best = (ag, Wn.cpu().numpy(), ep + 1)
+            if ag > best[0] or (l1 and ep >= epochs - 10): best = (ag, Wn.cpu().numpy(), ep + 1)
             if ep % 50 == 49: log(f'  {label} epoch {ep + 1}: {100 * ag:.2f}% (best {100 * best[0]:.2f}%)')
     return best
 
