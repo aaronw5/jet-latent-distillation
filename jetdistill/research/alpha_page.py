@@ -141,8 +141,13 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                 for p in ps:
                     byf = {}
                     for d in heads[h]['inputs']:
-                        f = d['f']; v = sum(piece(Fd[i, p, f], c_, k_, t_, f) for c_, k_, t_ in terms_of(h, f)); byf[d['feature']] = float(v)
-                    tj = sorted(byf, key=lambda n_: -abs(byf[n_]))[:5]; tops.append([[n_, round(byf[n_], 2)] for n_ in tj])
+                        f = d['f']; v = sum(piece(Fd[i, p, f], c_, k_, t_, f) for c_, k_, t_ in terms_of(h, f)); byf[d['feature']] = (float(v), f)
+                    tj = sorted(byf, key=lambda n_: -abs(byf[n_][0]))[:5]
+                    def why(n_):                                                # the statement in words with this particle's value
+                        v, f = byf[n_]; x = float(Fd[i, p, f]); c_, k_, t_ = terms_of(h, f)[0]
+                        cond = 'a linear term' if k_ == 'lin' else (f'above {t_:.3g}' if k_ == 'gt' else f'below {t_:.3g}')
+                        return f'{x:.3g} ({cond})'
+                    tops.append([[n_, round(byf[n_][0], 2), why(n_)] for n_ in tj])
                 hs.append(dict(s=np.round(SC[sl, h], 3).tolist(), w=np.round(AF[h, sl], 4).tolist(), wp=np.round(AP[h, sl], 4).tolist(), self=round(float(acls[i, h]), 4), selfp=round(float(selfP[i, h]), 4), top=tops))
             sm = np.exp(Lm[i] - Lm[i].max()); sm /= sm.sum(); sp = np.exp(L[i] - L[i].max()); sp /= sp.sum()
             ex.append(dict(part=int(ref[i]), truth=int(ytrue[i]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs, X=np.round(Fd[i, ps][:, :38], 4).tolist()))
