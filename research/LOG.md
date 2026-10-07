@@ -212,3 +212,13 @@ selection (score formula / weight profile; ParT's where kept, labelled), the 16 
 importance and response curves, the head's importance (ablation) and classes; a card stating exactly what is kept of
 ParT; the paper metrics vs ParT and the jet-level formulas; per class; pruning path; files. The old 128-neuron
 explorer does not apply to these models.
+
+### Readability of the all-formula model (clock ~02:50)
+- S10b (values on all 126 features, 150k jets): least squares 75.5 % → 82.1 (5) / 82.8 (10) / **83.1 % (30)**, then
+  flat/slightly down (82.6 % at 55). Context in the values helps the start (+6 pt) but the ceiling stays ≈ 83 %.
+- A worked example (block-1 head 3 of S10 on a t→bqq jet) reads well: the muon with |d0|/σ = 3.1 gets weight 0.145,
+  the leading photon 0.119, the class token 0.117, soft hadrons 0.01–0.02. But the score formula itself is not
+  readable: its ten largest additive pieces (the kernel-context type fractions, nearly collinear) each span ±20 and
+  cancel to a total spread of 0.7 — unpenalized least squares + whitened tuning on near-duplicate inputs.
+- Fixes (S10c): degenerate hinge columns masked (duplicate thresholds, thresholds at a clip value), ridge 1e-3 in the
+  starts, L1 = 0.01 on the raw coefficients during tuning, whitening eigenvalue floor 1e-3; then pruning by input.
