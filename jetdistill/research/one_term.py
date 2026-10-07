@@ -58,7 +58,7 @@ def run(tag='S5rpc', epochs=150, n_fit=100000, n_dev=20000, lr=1e-4, lam=0.01, d
                 W1[h, best[1], o] = best[2]; W1[h, K - 1, o] += best[3]; choice[h, o, f] = best[1]
     a1 = agree(W1); nterm = int((W1[:, :K - 2] != 0).sum()); log(f'  one term per input (least squares): {100 * a1:.2f}% ({nterm} terms), {time.time() - t0:.0f} s')
     # re-tune the kept coefficients (and the class-token / bias columns), coefficients scaled by their column's spread
-    mask = (W1 != 0).astype(np.float32); mask[:, K - 2:] = 1; sdc = Ef[:20000].std(0) + 1e-6                     # (16, K)
+    mask = (W1 != 0).astype(np.float32); mask[:, K - 2:] = 1; sdc = Ef[:20000].std(0); sdc = np.where(sdc < 1e-6, 1.0, sdc)        # constant columns (the bias): scale 1, not 1e-6 (which made every step explode)                     # (16, K)
     V = torch.nn.Parameter(T(W1 * sdc[..., None])); Mk = T(mask); Sd = T(sdc)[..., None]; opt = torch.optim.Adam([V], lr)
     Eft = T(Ef); pf = torch.softmax(T(Lf), 1); Oft = T(Of.transpose(1, 0, 2, 3).reshape(n_fit, 16, 16)); vo = Oft.var(0) + 1e-6
     Wof = lambda: V * Mk / Sd; best = (a1, W1.copy(), 0); path = [(0, a1)]
