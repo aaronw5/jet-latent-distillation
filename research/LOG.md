@@ -445,3 +445,8 @@ that is where the all-formula models lose (A10 84 %, A11 79 %). The two > 90 % l
 formula model needs formula VALUES with context — the per-particle embedding — which 3 hops of physics do not supply.
 - **W1q** (W1p pruned further, 0.25 pt per round, 8 rounds): 3,664 → **2,165 (head, input) pairs** (8–244 inputs per head),
   **96.74 %** (from 96.85 %). Some heads become very compact (8–20 inputs), others keep ~250; test after W1p's.
+- Asymmetry in W1q: block-1 heads keep 8–94 inputs, block-2 heads 177–244 (each input contributes little; τ vs ParT
+  ≈ 0.17). Ablation on dev: block-2 score formulas replaced by a plain average → **94.70 %** (class-token share still from
+  the jet-level formula; constant share instead 94.60 %); block-1 formulas replaced by a plain average → 92.12 %. Block 2's
+  query comes from block 1's output (jet-dependent), so a per-particle formula is the wrong shape for it — and it hardly
+  matters with ParT's values. → **W2**: block-1 selection formulas only (block 2 a plain average), re-tuned from W1q (running).
