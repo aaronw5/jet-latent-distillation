@@ -311,3 +311,15 @@ explorer does not apply to these models.
   tuning running, then the one-term step.
 - JEDI-linear n64 (step 1 12 min, tuning 13 min; main formula 641 terms, 94.14 % on the test file — the published run
   had 690 at 94.18 %): one term per observable → **427 terms, 93.30 %** (accuracy 81.03 %).
+
+## Research loop A — the best fit for the attention weights α (user: "find the best fit"; clock ~08:00)
+All-formula end-to-end is stuck at ~83 % (S10, S12) while formula α with ParT's values reaches 95.7 % (S11) and formula
+values with ParT's α 93 %: the losses compound — ParT's α carries each particle's context, our inputs one hop of it
+(E3: a flexible per-particle model on them through ParT's class attention reaches 84 %). Steps (each measured as
+(1) total-variation distance of the weights from ParT's, (2) formula α + ParT's values, (3) formula α + formula values
+re-tuned, end to end):
+- A1 richer context: 2nd hop of ParT's pair kernels and pT-weighted kernels (302 inputs per particle).
+- A2 decision-focused α: score formulas (and α_cls) tuned end to end through ParT's downstream with ParT's values fixed.
+- A3 learnable pair-interaction formula: s_i = g(x_i) + Σ_j K(ΔR_ij, kT_ij, z_ij, m²_ij)·h(x_j), K, g, h small formulas.
+- A4 jet-conditioned scores: Σ_k a_k(jet)·b_k(particle) (products with a few jet quantities).
+- A5 selection by rank under a formula score.
