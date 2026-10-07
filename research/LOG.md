@@ -288,3 +288,5 @@ explorer does not apply to these models.
 - A per-neuron explorer in the style of the JEDI-linear page (per head → per value neuron): drop-downs and the useful
   views of that page (the formula as if-statements, the inputs by importance, response curves, which jets / classes
   move it, worked examples), adapted to the per-head structure (weights α, sum over particles).
+- Per neuron, a qualitative description of what it looks at (as the JEDI-linear explorer's explanations): in words,
+  which particles (the head's selection) and which of their properties raise / lower it, and which classes it serves.
