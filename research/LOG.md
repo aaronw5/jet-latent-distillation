@@ -522,3 +522,5 @@ functionally right for ParT's values but different in detail; formula neurons ar
   the combined structure plateaus at ≈ 82 % on dev however the neurons are targeted.
 - C3o one term 68.97 %; C3p pairs pruned (summed single costs) 4,864 → 361 in one round, 66.55 % — overshoot → C6's
   pair pruning switched to bisection on the measured agreement (prune_pairs).
+- **W1q on the 2M test jets: 96.65 %** (accuracy 0.8557, AUC 0.9870) with 2,165 head–input pairs; **W2: 95.77 %** (accuracy
+  0.8524, AUC 0.9863) with only the 8 block-1 selection formulas (434 pairs), block 2 a plain average.
