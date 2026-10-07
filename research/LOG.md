@@ -491,3 +491,5 @@ that drive it; neurons sorted by importance everywhere.
   64.95 %; statements 8,400 → 5,355, **70.06 %** (re-tuning recovered some). 2M test running (slow: formula selection).
 - Published batch 3 (14:45): S17, S15q, S5rpc1 (merged type/charge statements, firing-pattern groups, importance order),
   W2, and the **Try-a-jet** page (jet/).
+- **S18q** (the 10 class scores directly, statements pruned: 3,856 → 3,477, dev 92.69 %): **92.37 % on the 2M test jets**
+  (accuracy 0.8397, AUC 0.9835). Ten formulas — one per class, one f per head — replace the 128 neurons and ParT's last layer.
