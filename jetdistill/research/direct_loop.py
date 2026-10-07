@@ -12,7 +12,7 @@ from .heads import extract, phi_pooled, rows_of_split, OUT
 from .one_term import extend, cols_of
 
 NV = 38
-PRE = os.environ.get('DPRE', 'S15'); LOGITS = bool(os.environ.get('LOGITS')); AF = os.environ.get('ALPHA_FROM', ''); XA = dict(alpha_from=AF) if AF else {}
+PRE = os.environ.get('DPRE', 'S15'); KTERM = int(os.environ.get('KTERM', '1')); LOGITS = bool(os.environ.get('LOGITS')); AF = os.environ.get('ALPHA_FROM', ''); XA = dict(alpha_from=AF) if AF else {}
 
 
 def load(n_fit, n_dev, device, log):
@@ -64,16 +64,21 @@ def one_term(n_fit=100000, n_dev=20000, epochs=150, device='mps', log=print):
             for f in range(NV):
                 c6 = [f] + [NV + k * NV + f for k in range(5)]; w = We[h, c6, o]
                 if not np.any(w): continue
-                y = S[:, h, c6] @ w; ym = y.mean(); best = (np.inf, None, 0.0, 0.0)
-                for j in cols_of(f, NV):
-                    x = S[:, h, j]; xc = x - x.mean(); den = xc @ xc
-                    if den < 1e-12: continue
-                    a = float(xc @ (y - ym) / den); r = (y - ym) - a * xc; err = float(r @ r)
-                    if err < best[0]: best = (err, j, a, float(ym - a * x.mean()))
-                if best[1] is None: continue
-                W1[h, best[1], o] = best[2]; W1[h, K - 1, o] += best[3]
+                y = S[:, h, c6] @ w; ym = y.mean(); chosen = []                       # greedy: the best term, then (KTERM ≥ 2) the best next term given the chosen ones
+                for _ in range(KTERM):
+                    best = (np.inf, None, None)
+                    for j in cols_of(f, NV):
+                        if j in chosen: continue
+                        X_ = S[:, h, chosen + [j]]; Xc = X_ - X_.mean(0); G_ = Xc.T @ Xc
+                        if np.linalg.cond(G_) > 1e10: continue
+                        a = np.linalg.solve(G_, Xc.T @ (y - ym)); r = (y - ym) - Xc @ a; err = float(r @ r)
+                        if err < best[0]: best = (err, j, a)
+                    if best[1] is None: break
+                    chosen.append(best[1]); coefs = best[2]
+                if not chosen: continue
+                X_ = S[:, h, chosen]; W1[h, chosen, o] = coefs; W1[h, K - 1, o] += float(ym - X_.mean(0) @ coefs)
     with torch.no_grad(): a1 = float((torch.cat([model.fc(torch.einsum('nhk,hko->no', T(Ed[a:a + 5000]), T(W1))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
-    nterm = int((W1[:, :K - 2] != 0).sum()); log(f'  one term per input per (neuron, head): least squares {100 * a1:.2f}% ({nterm} terms), {time.time() - t0:.0f} s')
+    nterm = int((W1[:, :K - 2] != 0).sum()); log(f'  at most {KTERM} term(s) per input per (neuron, head): least squares {100 * a1:.2f}% ({nterm} terms), {time.time() - t0:.0f} s')
     mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1
     best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S15 one-term')
     np.savez(OUT / f'{PRE}o_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS, **XA)
