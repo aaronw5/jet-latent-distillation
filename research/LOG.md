@@ -277,3 +277,14 @@ explorer does not apply to these models.
   correlated inputs offset each other.
 - S13: S5rp re-tuned with an anti-cancellation penalty Σ_f sd(C_f) − sd(Σ_f C_f) (relative), keeping the least
   cancelling model within 0.2 pt of S5rp.
+
+### S13 — anti-cancellation re-tune of S5rp (clock ~03:35)
+- 93.27 % (balanced dev), cancellation ratios inside 0.08 / between 0.68 (S5rp: 0.20 / 0.13): the inputs of a neuron
+  now mostly reinforce each other. ≥ 93 %: 2M-jet test and page (S5rpc) queued.
+
+## To do next (user, 03:40)
+- Write each value neuron's formula as if-statements (the piecewise-linear pieces are exactly that: one branch per
+  interval between kinks), as in JEDI-linear.
+- A per-neuron explorer in the style of the JEDI-linear page (per head → per value neuron): drop-downs and the useful
+  views of that page (the formula as if-statements, the inputs by importance, response curves, which jets / classes
+  move it, worked examples), adapted to the per-head structure (weights α, sum over particles).
