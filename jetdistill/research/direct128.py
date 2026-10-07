@@ -1,0 +1,57 @@
+"""S15 — the 128 class-token neurons predicted directly as per-particle formulas with ParT's attention weights (no
+head structure, no downstream MLP): neuron_n = Σ_h Σ_i α_hi φ(x_i)·W_hn + α_h,cls c_hn + b_n over the 16 heads' pooled
+terms (the same pooled basis as S5), then ParT's last layer (variant 'post': the targets are the neurons after the
+final LayerNorm; variant 'pre': the class token before the final LN, ParT's LN applied). Least squares, then tuned
+toward ParT's probabilities (+ λ·R on the neurons), whitened, 100k fitting jets, balanced 20k dev.
+
+  python -m jetdistill.research.direct128 [post|pre] [n_fit n_dev epochs]"""
+import json, sys, time
+import numpy as np
+from ..pipeline import jets
+from ..part.network import ParTNetwork
+from ..config import RESULTS
+from .heads import extract, phi_pooled, rows_of_split, OUT
+
+
+def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01, device='mps', log=print):
+    import torch
+    t0 = time.time(); model = ParTNetwork('full').model; model.eval()
+    for p in model.parameters(): p.requires_grad_(False)
+    Of, Af, Mf, Lf, _ = extract(model, 'fit', n_fit, device); Od, Ad, Md, Ld, _ = extract(model, 'dev', n_dev, device); ref = Ld.argmax(1)
+    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rf, rd = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
+    Pf, kn = phi_pooled(Jf, rf, Af); Pd, _ = phi_pooled(Jd, rd, Ad, kn); n, K = Pf.shape[0], Pf.shape[2]
+    Bf, Bd = Pf.reshape(n, 16 * K), Pd.reshape(n_dev, 16 * K)                                               # all heads' pooled terms side by side
+    # targets: the 128 neurons (after the final LN) or the class token before it
+    D = RESULTS / '_cls' / 'full'; T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
+    Hf = np.asarray(Jf['H'][rf], np.float32); Hd = np.asarray(Jd['H'][rd], np.float32)
+    if variant == 'pre':
+        from .e4_layernorm import pre_ln
+        Cf, _, _ = pre_ln('fit', n_fit, device); Cd_all, _, _ = pre_ln('dev', 100000, device); Yf, Yd = Cf, Cd_all[rd]; head = lambda y: model.fc(model.norm(y))
+    else:
+        Yf, Yd = Hf, Hd; head = lambda y: model.fc(y)
+    with torch.no_grad(): chk = float((head(T(Yd)).argmax(1).cpu().numpy() == ref).mean())
+    log(f'  {variant}: {16 * K} pooled terms per jet; ParT\'s own targets through the last layer: {100 * chk:.2f}% (must be ≈ 100), {time.time() - t0:.0f} s')
+    G = Bf.T.astype(np.float64) @ Bf / n; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); ok_ = d > 1e-9
+    W0 = np.zeros((16 * K, 128)); Gs = G[np.ix_(ok_, ok_)] / d[ok_][:, None] / d[ok_][None]
+    W0[ok_] = np.linalg.solve(Gs + 1e-4 * np.eye(ok_.sum()), (Bf[:, ok_].T.astype(np.float64) @ Yf / n) / d[ok_][:, None]) / d[ok_][:, None]
+    ev, Q = np.linalg.eigh(Gs); ev = np.maximum(ev, 1e-3 * ev.max()); Mw = np.zeros((16 * K, ok_.sum())); Mw[ok_] = Q / np.sqrt(ev)[None] / d[ok_][:, None]
+    U = torch.nn.Parameter(T(np.sqrt(ev)[:, None] * (Q.T @ (d[ok_][:, None] * W0[ok_])))); Mt = T(Mw)
+    Bft, Bdt = T(Bf), T(Bd); Yft = T(Yf); vy = Yft.var(0) + 1e-6; pf = torch.softmax(T(Lf), 1)
+    def agree():
+        with torch.no_grad(): return float((torch.cat([head(Bdt[a:a + 5000] @ (Mt @ U)).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
+    a0 = agree(); best = (a0, U.detach().clone(), 0); log(f'  least squares: {100 * a0:.2f}%, {time.time() - t0:.0f} s'); opt = torch.optim.Adam([U], lr)
+    for ep in range(epochs):
+        for a in np.random.default_rng(ep).permutation(np.arange(0, n, 5000)):
+            y = Bft[a:a + 5000] @ (Mt @ U); loss = -(pf[a:a + 5000] * torch.log_softmax(head(y), 1)).sum(1).mean() + lam * ((y - Yft[a:a + 5000]) ** 2 / vy).mean()
+            opt.zero_grad(); loss.backward(); opt.step()
+        if ep % 10 == 9 or ep == epochs - 1:
+            ag = agree()
+            if ag > best[0]: best = (ag, U.detach().clone(), ep + 1)
+            if ep % 50 == 49: log(f'  S15 {variant} epoch {ep + 1}: {100 * ag:.2f}% (best {100 * best[0]:.2f}%), {time.time() - t0:.0f} s')
+    W = (Mt @ best[1]).cpu().numpy(); np.savez(OUT / f'S15_{variant}_model.npz', W=W, kn=kn)
+    r = dict(experiment=f'S15_{variant}', terms=int(16 * K), least_squares=a0, best=best[0], best_epoch=best[2], check=chk, seconds=time.time() - t0)
+    (OUT / f'S15_{variant}.json').write_text(json.dumps(r, indent=1)); log(f'S15 {variant}: the 128 neurons directly as per-particle formulas with ParT weights (no head structure / MLP): {100 * best[0]:.2f}% (least squares {100 * a0:.2f}%)'); return r
+
+
+if __name__ == '__main__':
+    a = sys.argv[1:]; run(a[0] if a else 'post', *(int(v) for v in a[1:]))
