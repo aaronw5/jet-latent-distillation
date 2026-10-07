@@ -406,3 +406,11 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   the same fit with the particle weights renormalized to sum to 1 and no α_cls terms at all.
 - S16 (S15 without the class-token share: particle weights renormalized to 1, no α_cls terms): least squares 87.96 %,
   tuned **91.03 %** (S15: 91.22 / 93.29 %). The 16 class-token shares are worth ≈ 2.3 pt; the model stands without them.
+- S15q (statement-level pruning of S15p, 6 rounds, bisection within 0.1 pt): 5,872 → **5,020 statements, 92.86 %** (2M test running).
+- A11 check: S15p's neuron formulas fed with the A2h formula α **as they are: 23 %** — the per-particle weights are close
+  (mean |Δα| 0.018) but the class-token shares are not (corr 0.39 with ParT's) and S15p leans on them. → A11 refits the
+  neuron formulas on the formula-α pooled terms (stage 1), then tunes scores, α_cls formula and neurons together (stage 2).
+- P1 (bypass: the 12 hardest + 6 most displaced particles in fixed order, hinge terms + jet-level inputs → 128 neurons,
+  no attention) started.
+- User (12:05): the model meant is the 97 % formula α **with formula values**, full loop; the ParT-values variant (W1) may be
+  done too but its page must be about what goes into each weight (the score formulas), not values.
