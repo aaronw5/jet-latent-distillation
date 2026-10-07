@@ -501,3 +501,10 @@ that drive it; neurons sorted by importance everywhere.
   give 96.75 %: ParT's values are redundant enough that many different weightings pool to the same answer; the formula
   neurons are not. So the halves must be fitted to each other (C1 78 %, C2 running), and the share term is worth ~55 pt
   of the mismatch.
+
+### Combined model is now the priority (user, ~17:40)
+Why 96 % + 93 % → 78 %: each half was fitted against ParT's other half; the halves are not independent (W1q's weights are
+functionally right for ParT's values but different in detail; formula neurons are not robust to that). Plan:
+- C2: from C1q (5,355 statements), selection + neuron formulas tuned together (30k jets): 70.1 → 74.6 % after 10 epochs, running.
+- C3: the combined fit with 100k jets (C1 had 30k for ~860k coefficients) and 60 joint epochs, dense — the ceiling of the
+  combined structure; then the loop (one term, prune, statements) with joint re-tuning at each step; then the 2M test.
