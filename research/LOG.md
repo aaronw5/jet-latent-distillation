@@ -232,3 +232,7 @@ explorer does not apply to these models.
   over the other particles j with q_j ≠ 0 and |d0_j|/σ(d0_j) > 3, 1.5 if none).
 - Compute rule from the user: only lines that can reach > 90 % agreement run (S5, S8b and their refinements);
   the all-formula line (≈ 83 %) is parked.
+
+### S5 and S8b on the 2M test jets (clock ~03:25)
+- S5 (per-head formula values, ParT's attention weights): **93.16 %** same class as ParT, accuracy 0.8427, AUC 0.9845
+  (ParT 0.8603 / 0.9877). S8b (block 2 a plain average): 91.50 %, 0.8344, 0.9831. Validation and test agree.
