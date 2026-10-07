@@ -297,12 +297,14 @@ def page(tag, outdir, device='mps', log=print):
         bars = ''.join(f'<rect x="{10 + i * bw:.1f}" y="{h - 14 - (h - 22) * v / mx:.1f}" width="{bw - 1:.1f}" height="{(h - 22) * v / mx:.1f}" fill="#c9d4e3"/>' for i, v in enumerate(c))
         mark = '' if thr is None else f'<line x1="{X(thr):.1f}" x2="{X(thr):.1f}" y1="4" y2="{h - 12}" stroke="#c05621" stroke-width="2"/><text x="{X(thr) + 3:.1f}" y="12" font-size="10" fill="#c05621">{thr:.3g}</text>'
         return f'<svg viewBox="0 0 {w} {h}" style="width:100%;max-width:{w}px">{bars}{mark}<text x="10" y="{h - 2}" font-size="9" fill="#667">{e[0]:.3g}</text><text x="{w - 10}" y="{h - 2}" font-size="9" text-anchor="end" fill="#667">{e[-1]:.3g}</text></svg>'
-    def terms_html(inputs, share=.99):
-        tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, []
+    def terms_html(inputs, share=.99, max_details=12):
+        tot = sum(d['importance'] for d in inputs) or 1.0; acc, out, plain = 0.0, [], []
         for d in inputs:
             if acc >= share * tot and len(out) >= 3: break
             acc += d['importance']
             for (c, k, t), st in zip(d['terms'], d['stats'] if d.get('stats') else [None] * len(d['terms'])):
+                if len(out) >= max_details:
+                    v = f'particle["{d["feature"]}"]'; plain.append(f'add {c:+.4g} · {v}' if k == 'lin' else f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})' if k == 'gt' else f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})'); continue
                 v = f'particle["{d["feature"]}"]'
                 line = f'add {c:+.4g} · {v}' if k == 'lin' else f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})' if k == 'gt' else f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})'
                 if st is None: out.append(f'<details class="xterm"><summary><code>{html.escape(line)}</code> <span class="cnt">±{d["importance"]:.3g}</span></summary></details>'); continue
@@ -315,7 +317,8 @@ def page(tag, outdir, device='mps', log=print):
 <div style="margin-top:4px">Fires {when}{"" if k == "lin" else f"; those are {kinds}; hard (pT share > 5 %) {100 * st['hard']:.0f} %"}. The amount added grows with the distance from the threshold.</div></div>
 <div><div class="cnt">distribution of this input over the particles (threshold in orange)</div><div class="hh" data-f="{html.escape(d["feature"])}" data-thr="{'' if st['thr'] is None else st['thr']}"></div></div>
 <div><div class="cnt">what this statement adds to the neuron, per jet, by true class (α-weighted)</div><table class="bars">{cls}</table></div></div></details>''')
-        rest = max(0, sum(len(d['terms']) for d in inputs) - sum(1 for _ in out)); out.append(f'<div class="cnt" style="margin-left:10px">… {rest} smaller statements (exact: the Python code below)</div>' if rest else '')
+        if plain: out.append('<details class="xterm"><summary><span class="cnt">' + str(len(plain)) + ' further statements (smaller)</span></summary><pre>' + html.escape(chr(10).join(plain)) + '</pre></details>')
+        rest = max(0, sum(len(d['terms']) for d in inputs) - sum(len(d['terms']) for d in inputs if acc >= 0) + 0); out.append('')
         return ''.join(out)
     def groups_html(gs):
         if not gs: return '<p class="cnt">no groups</p>'
