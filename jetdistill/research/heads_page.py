@@ -41,6 +41,7 @@ INFO = {
 INFO['S10b'] = INFO['S10']
 INFO['S5rp'] = ('Per-head formulas, pruned — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Pruned: each head keeps only the inputs it needs (17–29 of 38), re-tuned.')
 INFO['S5r'] = INFO['S5']
+INFO['S5rpc'] = ('Per-head formulas, pruned, low cancellation — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Pruned and re-tuned so that inputs do not offset each other.')
 DOWN = 'Kept in every model: ParT’s fixed arithmetic after the heads — out-projection, per-head scale, LayerNorms, the 128→512→128 MLP with residuals in both class blocks, the final LayerNorm and the last layer. Not fitted, no physics content: a smooth map from the 256 head outputs to the 10 class scores.'
 TYPES = ['ch. hadron', 'n. hadron', 'photon', 'electron', 'muon']
 
