@@ -92,3 +92,10 @@ research/results/S1_cls_attention.json (6k fitting jets for the score formulas, 
   embedding) + (a few selected particles: hardest charged, widest, most displaced). The quantities to give MARS:
   means over particles of per-particle physics functions (own + neighbourhood + ParT-kernel context, as hinges) and
   the features of the selected particles. Next: ceiling check of these quantities (step 3).
+
+### E4 — the final LayerNorm (2026-10-07 02:30)
+- Same 572 jet quantities, linear model tuned toward ParT: fitting the neurons after the final LN 75.88 % vs fitting the
+  class token before it and applying ParT's LN 75.85 %. The hinge variant failed numerically (least-squares start
+  broke, 9.64 %); not rerun: E1's MLP ceiling (81.2 %) already bounds any output-side operation on these quantities.
+- Conclusion: the final LN is not the limit. LN matters inside the attention (on the particle embeddings); the class
+  fit already uses ParT's own LNs there.
