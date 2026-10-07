@@ -19,7 +19,8 @@ from .nbr import nbr_features, pk_features
 from .heads import extract, downstream, formula_weights, rows_of_split
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / 'research' / 'results'
-NV = 38                                                                      # the value basis uses the first 38 features (own + neighbourhood)
+import os
+NV = int(os.environ.get('JOINT_NV', 38))                                    # features in the value basis: 38 (own + neighbourhood) or 126 (+ pair-kernel context)
 
 
 def feats_rows(J, r, model):
@@ -59,7 +60,7 @@ class Model:
         return t.einsum('nhk,hko->nho', pooled, Wv) + selfw[..., None] * cself + bias
 
 
-def run(n_fit=100000, n_dev=20000, epochs=100, lr=3e-4, lam=0.01, chunk=2000, device='mps', log=print):
+def run(n_fit=100000, n_dev=20000, epochs=100, lr=3e-4, lam=0.01, chunk=2000, device='mps', log=print, tag=os.environ.get('JOINT_TAG', '')):
     import torch
     t0 = time.time(); model = ParTNetwork('full').model; model.eval()
     for p in model.parameters(): p.requires_grad_(False)
@@ -101,7 +102,7 @@ def run(n_fit=100000, n_dev=20000, epochs=100, lr=3e-4, lam=0.01, chunk=2000, de
         return float((pred == ref).mean())
     a0 = agree(); best = (a0, 0); path = [(0, a0)]; log(f'  least squares (formula block-1 weights, uniform block 2, formula values): {100 * a0:.2f}%, {time.time() - t0:.0f} s')
     def save():
-        np.savez(OUT / 'S10_model.npz', Ws=(Mss @ Us_p).detach().cpu().numpy(), Wv=torch.einsum('hkj,hjo->hko', Mvt, Uv).detach().cpu().numpy(), cself=cself.detach().cpu().numpy(), bias=bias.detach().cpu().numpy(),
+        np.savez(OUT / f'S10{tag}_model.npz', Ws=(Mss @ Us_p).detach().cpu().numpy(), Wv=torch.einsum('hkj,hjo->hko', Mvt, Uv).detach().cpu().numpy(), cself=cself.detach().cpu().numpy(), bias=bias.detach().cpu().numpy(),
                  kns=prm['kn'], mus=prm['mu'], sds=prm['sd'], knv=knv, muv=muv, sdv=sdv)
     OUT.mkdir(parents=True, exist_ok=True); save()
     for ep in range(epochs):
@@ -114,8 +115,8 @@ def run(n_fit=100000, n_dev=20000, epochs=100, lr=3e-4, lam=0.01, chunk=2000, de
             ag = agree(); path.append((ep + 1, ag))
             if ag > best[0]: best = (ag, ep + 1); save()
             log(f'  S10 epoch {ep + 1}: same class as ParT {100 * ag:.2f}%, {time.time() - t0:.0f} s')
-    return dict(experiment='S10', n_fit=n_fit, n_dev=n_dev, epochs=epochs, lr=lr, lam=lam, least_squares=a0, best=best[0], best_epoch=best[1], path=path, score_r2=[float(v) for v in prm['r2']], seconds=time.time() - t0)
+    return dict(experiment='S10' + tag, nv=NV, n_fit=n_fit, n_dev=n_dev, epochs=epochs, lr=lr, lam=lam, least_squares=a0, best=best[0], best_epoch=best[1], path=path, score_r2=[float(v) for v in prm['r2']], seconds=time.time() - t0)
 
 
 if __name__ == '__main__':
-    a = [int(v) for v in sys.argv[1:]]; r = run(*a); (OUT / 'S10_joint.json').write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps(r))
+    a = [int(v) for v in sys.argv[1:]]; r = run(*a); (OUT / f'S10{os.environ.get("JOINT_TAG", "")}_joint.json').write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps(r))
