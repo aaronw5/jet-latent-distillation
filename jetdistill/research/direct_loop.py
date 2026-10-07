@@ -32,7 +32,7 @@ def load(n_fit, n_dev, device, log):
     return model, Ef, Ed, Hf, Lf, Ld.argmax(1), kn, We
 
 
-def tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, lr=1e-4, lam=0.01, device='mps', log=print, label=''):
+def tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, lr=1e-4, lam=0.01, device='mps', log=print, label='', l1=0.0):
     import torch
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); n = len(Ef); K = Ef.shape[2]
     sdc = Ef[:20000].std(0); sdc = np.where(sdc < 1e-6, 1.0, sdc)
@@ -43,7 +43,7 @@ def tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, lr=1e-4, lam=0.01, device
     a0 = agree(T(W1)); best = (a0, W1.copy(), 0); opt = torch.optim.Adam([V], lr)
     for ep in range(epochs):
         for a in np.random.default_rng(ep).permutation(np.arange(0, n, 5000)):
-            y = torch.einsum('nhk,hko->no', Eft[a:a + 5000], Wof()); loss = -(pf[a:a + 5000] * torch.log_softmax(model.fc(y), 1)).sum(1).mean() + lam * ((y - Hft[a:a + 5000]) ** 2 / vh).mean()
+            y = torch.einsum('nhk,hko->no', Eft[a:a + 5000], Wof()); loss = -(pf[a:a + 5000] * torch.log_softmax(model.fc(y), 1)).sum(1).mean() + lam * ((y - Hft[a:a + 5000]) ** 2 / vh).mean() + (l1 * (V * Mk)[:, :K - 2].abs().sum() if l1 else 0.0)
             opt.zero_grad(); loss.backward(); opt.step()
         if ep % 10 == 9 or ep == epochs - 1:
             Wn = Wof().detach(); ag = agree(Wn)
@@ -208,10 +208,35 @@ def prune_pairs(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, src=Non
     (OUT / f'{out}_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned {out}: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%'); return r
 
 
+def sparsify(src=None, out=None, target=0.81, epochs=20, n_fit=100000, n_dev=20000, device='mps', log=print, lams=(3e-6, 1e-5, 3e-5, 1e-4, 3e-4)):
+    """L1 path: re-tune with a penalty on the size of every statement (coefficient × spread of its pooled term) at increasing
+    strengths; statements whose size falls below 1 % of the largest are dropped and the rest re-tuned without the penalty;
+    the sparsest model with agreement ≥ target is kept"""
+    src, out = src or f'{PRE}q', out or f'{PRE}s'
+    t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
+    W = np.load(OUT / f'{src}_model.npz')['W'].reshape(16, K, -1).astype(np.float32); sdc = Ef[:20000].std(0); sdc = np.where(sdc < 1e-6, 1.0, sdc)
+    n0 = int((W[:, :K - 2] != 0).sum()); path = []; best = None; log(f'  start {src}: {n0} statements')
+    for lam_ in lams:
+        m0 = (W != 0).astype(np.float32); m0[:, -2:] = 1
+        b1 = tune(model, Ef, Ed, Hf, Lf, ref, W, m0, epochs, device=device, log=log, label=f'L1 {lam_:g}', l1=lam_)
+        Wl = b1[1]; size = np.abs(Wl * sdc[..., None]); size[:, K - 2:] = np.inf; keep = size > 0.01 * size[:, :K - 2].max()
+        Wk = Wl * keep; mk = keep.astype(np.float32); mk[:, -2:] = 1
+        b2 = tune(model, Ef, Ed, Hf, Lf, ref, Wk, mk, epochs, device=device, log=log, label=f'after L1 {lam_:g}')
+        ns = int((b2[1][:, :K - 2] != 0).sum()); path.append(dict(lam=lam_, statements=ns, agreement=b2[0]))
+        log(f'  L1 {lam_:g}: {ns} statements (from {n0}), {100 * b2[0]:.2f}%, {time.time() - t0:.0f} s')
+        if b2[0] >= target and (best is None or ns < best[1]): best = (b2[1], ns, b2[0], lam_)
+        if b2[0] < target - 0.01: break
+    if best is None: log('  no setting reached the target'); best = (W, n0, None, None)
+    np.savez(OUT / f'{out}_model.npz', W=best[0].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS, **XA)
+    r = dict(src=src, target=target, statements_start=n0, statements=best[1], agreement=best[2], lam=best[3], path=path, seconds=time.time() - t0)
+    (OUT / f'{out}_sparsify.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {best[1]} statements (from {n0}), {100 * (best[2] or 0):.2f}% (L1 {best[3]})'); return r
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
     elif cmd == 'prune_pairs': prune_pairs(*(float(v) if i_ == 0 else int(v) if v.lstrip('-').isdigit() else v for i_, v in enumerate(a)))
+    elif cmd == 'sparsify': sparsify(*(a[:2] if a else []), *(float(v) for v in a[2:3]))
     elif cmd == 'share': share(*a[:2], *(int(v) for v in a[2:]))
     elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) if v.lstrip('-').isdigit() else v for i, v in enumerate(a)))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
