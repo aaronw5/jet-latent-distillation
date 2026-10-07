@@ -96,6 +96,12 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
         return float((pred == va['net']).mean()), float((pred == va['y']).mean())
     s0 = score(params); best = (s0[0], [p.detach().clone() for p in params], 0); path = [(0, *s0)]
     log(f'  least squares: validation same class as ParT {100 * s0[0]:.2f}%, accuracy {100 * s0[1]:.2f}%, {time.time() - t0:.0f} s')
+    out = out or RESULTS / 'attn_fit' / str(net); out.mkdir(parents=True, exist_ok=True)
+    names = ['A', 'b_cls', 'W', 'c', 'A2', 'b2_cls', 'W1', 'c1']
+    def save(best, path):
+        np.savez(out / 'attn_fit.npz', M=Mt.cpu().numpy(), **{k: v.cpu().numpy() for k, v in zip(names, best[1])})    # A, A2 in whitened terms (plain: M @ A)
+        (out / 'attn_fit.json').write_text(json.dumps(dict(heads=HEADS, layers=layers, R=R, terms=K, n_fit=tr['n'], lam=lam, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
+                                                           knots=[k.tolist() for k in knots])))
     m_ = [torch.zeros_like(p) for p in params]; v_ = [torch.zeros_like(p) for p in params]
     for i in range(steps):
         gs = [torch.zeros_like(p) for p in params]
@@ -106,15 +112,12 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
         with torch.no_grad():
             for p, g, m, v in zip(params, gs, m_, v_):
                 m.mul_(.9).add_(.1 * g); v.mul_(.999).add_(.001 * g * g); p.sub_(lr * (m / (1 - .9 ** (i + 1))) / (torch.sqrt(v / (1 - .999 ** (i + 1))) + 1e-8))
+        if device == 'mps': torch.mps.empty_cache()
         if i % 50 == 49 or i == steps - 1:
             s = score(params); path.append((i + 1, *s))
-            if s[0] > best[0]: best = (s[0], [p.detach().clone() for p in params], i + 1)
+            if s[0] > best[0]: best = (s[0], [p.detach().clone() for p in params], i + 1); save(best, path)     # the best so far on disk
             log(f'  step {i + 1}: validation same class as ParT {100 * s[0]:.2f}%, accuracy {100 * s[1]:.2f}%, {time.time() - t0:.0f} s')
-    out = out or RESULTS / 'attn_fit' / str(net); out.mkdir(parents=True, exist_ok=True)
-    names = ['A', 'b_cls', 'W', 'c', 'A2', 'b2_cls', 'W1', 'c1']
-    np.savez(out / 'attn_fit.npz', M=Mt.cpu().numpy(), **{k: v.cpu().numpy() for k, v in zip(names, best[1])})    # A, A2 in whitened terms (plain: M @ A)
-    (out / 'attn_fit.json').write_text(json.dumps(dict(heads=HEADS, layers=layers, R=R, terms=K, n_fit=tr['n'], lam=lam, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
-                                                       knots=[k.tolist() for k in knots])))
+    save(best, path)
     log(f'attention fit: best validation same class as ParT {100 * best[0]:.2f}% (step {best[2]}), {time.time() - t0:.0f} s')
     return best
 

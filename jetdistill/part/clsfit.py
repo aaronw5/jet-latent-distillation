@@ -141,6 +141,11 @@ def tune(net='full', dim=32, n_fit=100000, steps=800, lr=1e-4, lam=0.01, lam_e=1
         return float((pred == va['net']).mean()), float((pred == va['y']).mean())
     m_, v_ = torch.zeros_like(W), torch.zeros_like(W); s0 = score(); best = (s0[0], W.detach().clone(), 0); path = [(0, *s0)]
     log(f'  least squares: validation same class as ParT {100 * s0[0]:.2f}%, accuracy {100 * s0[1]:.2f}%, {time.time() - t0:.0f} s')
+    out = out or RESULTS / 'cls_fit' / str(net); out.mkdir(parents=True, exist_ok=True)
+    def save(best, path):
+        np.savez(out / 'cls_fit.npz', W=(Mt @ best[1]).cpu().numpy(), V=V, mu=mu)        # the coefficients of the plain terms
+        (out / 'cls_fit.json').write_text(json.dumps(dict(dim=dim, terms=K, n_fit=tr['n'], lam=lam, lam_e=lam_e, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
+                                                         knots=[k.tolist() for k in knots])))
     for i in range(steps):
         g = torch.zeros_like(W)
         for a in range(0, tr['n'], chunk):
@@ -151,13 +156,11 @@ def tune(net='full', dim=32, n_fit=100000, steps=800, lr=1e-4, lam=0.01, lam_e=1
         with torch.no_grad():
             m_.mul_(.9).add_(.1 * g); v_.mul_(.999).add_(.001 * g * g)
             W.sub_(lr * (m_ / (1 - .9 ** (i + 1))) / (torch.sqrt(v_ / (1 - .999 ** (i + 1))) + 1e-8))
+        if device == 'mps': torch.mps.empty_cache()
         if i % 50 == 49 or i == steps - 1:
             s = score(); path.append((i + 1, *s))
-            if s[0] > best[0]: best = (s[0], W.detach().clone(), i + 1)
+            if s[0] > best[0]: best = (s[0], W.detach().clone(), i + 1); save(best, path)     # the best so far on disk (a crash loses nothing)
             log(f'  step {i + 1}: validation same class as ParT {100 * s[0]:.2f}%, accuracy {100 * s[1]:.2f}%, {time.time() - t0:.0f} s')
-    out = out or RESULTS / 'cls_fit' / str(net); out.mkdir(parents=True, exist_ok=True)
-    np.savez(out / 'cls_fit.npz', W=(Mt @ best[1]).cpu().numpy(), V=V, mu=mu)        # the coefficients of the plain terms
-    (out / 'cls_fit.json').write_text(json.dumps(dict(dim=dim, terms=K, n_fit=tr['n'], lam=lam, lam_e=lam_e, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
-                                                     knots=[k.tolist() for k in knots])))
+    save(best, path)
     log(f'class fit: best validation same class as ParT {100 * best[0]:.2f}% (step {best[2]}), {time.time() - t0:.0f} s')
     return best
