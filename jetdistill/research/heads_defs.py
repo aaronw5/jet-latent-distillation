@@ -106,7 +106,8 @@ def python_export(tag, m):
 
 def term_math(coef, kind, th, name):
     v = name if ' ' not in name else f'[{name}]'
-    body = v if kind == 'lin' else (f'max(0, {v} − {th:.4g})' if kind == 'gt' else f'max(0, {th:.4g} − {v})')
+    sh = (lambda t: f'− {t:.4g}' if t >= 0 else f'+ {-t:.4g}')                 # x − θ, written x + |θ| for θ < 0
+    body = v if kind == 'lin' else (f'max(0, {v} {sh(th)})' if kind == 'gt' else f'max(0, {th:.4g} − {v})')
     return f'{"−" if coef < 0 else "+"} {abs(coef):.4g}·{body}'
 
 
