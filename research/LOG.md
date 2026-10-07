@@ -290,3 +290,7 @@ explorer does not apply to these models.
   move it, worked examples), adapted to the per-head structure (weights α, sum over particles).
 - Per neuron, a qualitative description of what it looks at (as the JEDI-linear explorer's explanations): in words,
   which particles (the head's selection) and which of their properties raise / lower it, and which classes it serves.
+- Combine like terms (user): merge adjacent segments of an input's piece whose slopes barely differ (e.g. ΔR with
+  slopes 24.4 / 26.8 / 22.4 / 27.3 / 20.9 / 19.8 → one slope), merge repeated thresholds in the stored model, combine
+  inputs that carry the same information where the physics allows; re-tune; keep only within 0.1 pt (as JEDI's
+  simplification step).
