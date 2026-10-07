@@ -294,3 +294,10 @@ explorer does not apply to these models.
   slopes 24.4 / 26.8 / 22.4 / 27.3 / 20.9 / 19.8 → one slope), merge repeated thresholds in the stored model, combine
   inputs that carry the same information where the physics allows; re-tune; keep only within 0.1 pt (as JEDI's
   simplification step).
+
+### S14 — at most one term per input per value neuron (user's goal; clock ~05:00)
+- From S5rpc: per (head, neuron, input) the single best term (x, max(0, x − θ) or max(0, θ − x) at one of 5
+  thresholds; the "below" hinges pooled exactly from the existing sums), least squares 89.28 %, re-tuned **93.06 %**
+  (balanced dev) with 6080 terms instead of 36480 nonzero coefficients. (Two re-tuning runs blew up: the constant
+  bias column's zero spread made its coefficient scale 1e6 — fixed.) Formulas shown as symbolic math, one term per
+  input. 2M-jet test and page queued.
