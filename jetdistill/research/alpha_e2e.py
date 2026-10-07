@@ -20,13 +20,13 @@ from ..config import RESULTS
 def zfeat(Jf, Jd, rows_fit_jets, rd, Mf, Md):
     """the jet-level inputs of α_cls, exactly as alpha_fit builds them"""
     from sklearn.preprocessing import QuantileTransformer
-    keys = [k for k in Jf['Q']]; Qf, Qd = matrix(Jf, keys)[:rows_fit_jets], matrix(Jd, keys)[rd]; okq = np.isfinite(Qf).all(0) & (Qf.std(0) > 0)
-    qt = QuantileTransformer(n_quantiles=500, output_distribution='normal', subsample=50000, random_state=0).fit(Qf[:, okq])
+    keys = [k for k in Jf['Q']]; Q100 = matrix(Jf, keys)[:100000]; okq = np.isfinite(Q100).all(0) & (Q100.std(0) > 0)        # the transform of S11: always its 100k jets
+    qt = QuantileTransformer(n_quantiles=500, output_distribution='normal', subsample=50000, random_state=0).fit(Q100[:, okq]); Qf, Qd = Q100[:rows_fit_jets], matrix(Jd, keys)[rd]
     Z = lambda Q, M: np.concatenate([np.clip(qt.transform(Q[:, okq]), -5, 5), np.log(M.sum(1, keepdims=True)), np.ones((len(M), 1))], 1).astype(np.float32)
     return Z(Qf, Mf), Z(Qd, Md)
 
 
-def run(n_fit=20000, n_dev=20000, epochs=30, n_jet=100000, lr=3e-3, bs=500, device='mps', log=print):
+def run(n_fit=20000, n_dev=20000, epochs=30, n_jet=100000, lr=3e-4, bs=500, device='mps', log=print):
     import torch
     t0 = time.time(); src, tag = os.environ.get('ALPHA_TAG', 'S11'), os.environ.get('OUT_TAG', 'A2')
     model = ParTNetwork('full').model; model.eval()
@@ -55,7 +55,7 @@ def run(n_fit=20000, n_dev=20000, epochs=30, n_jet=100000, lr=3e-3, bs=500, devi
             cls = after(blk, torch.einsum('nhp,nphd->nhd', a, V[:, b].float()), cls)
         return model.fc(model.norm(cls))
     Fft, Fdt, okft, okdt = T(Ff, torch.float16), T(Fd, torch.float16), T(okf, torch.bool), T(okd, torch.bool)
-    Zft, Zdt = T(Zf), T(Zd); Vft, Vdt = T(Vf, torch.float16), T(Vd, torch.float16); pf = torch.softmax(T(Lfa[:n_fit]), 1)
+    Zft, Zdt = T(Zf), T(Zd); Vft, Vdt = T(Vf.transpose(1, 0, 2, 3, 4), torch.float16), T(Vd.transpose(1, 0, 2, 3, 4), torch.float16); pf = torch.softmax(T(Lfa[:n_fit]), 1)        # values: (jets, block, 1+P, head, 16)
     def agree():
         with torch.no_grad():
             return float((np.concatenate([logits(Fdt[a:a + bs], okdt[a:a + bs], Zdt[a:a + bs], Vdt[a:a + bs]).argmax(1).cpu().numpy() for a in range(0, n_dev, bs)]) == ref).mean())
