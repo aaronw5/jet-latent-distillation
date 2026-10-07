@@ -86,8 +86,10 @@ def neuron_snippet(tag, block, head, o, terms, share=.99):
         if acc >= share * tot and len(lines) >= 3: break
         acc += t['importance']; x = f'x["{t["feature"]}"]'
         thr = t['term'].split('− ')[1].rstrip(')') if t['term'] != 'linear' else None
-        lines.append(f'      {t["coef"]:+.4g} * ' + (x if thr is None else f'max(0, {x} - {thr})'))
+        term = f'      {t["coef"]:+.4g} * ' + (x if thr is None else f'max(0, {x} - {thr})')
+        lines.append(f'{term:<70s} # typical contribution ±{t["importance"]:.3g}')
     return (f'# value neuron {o + 1} of block {block}, head {head}:  sum over the particles i of alpha_i * f(x_i)   (+ c * alpha_cls + bias)\n'
+            f'# (typical contribution = |coefficient| × the spread of the term summed over a jet’s particles: how much the term moves this neuron)\n'
             f'def f(x):   # x: the inputs of one particle\n    return (\n' + '\n'.join(lines) + f'\n      # ... {max(0, len(terms) - len(lines))} smaller terms; exact: {tag}_formulas.py\n    )')
 
 
