@@ -172,9 +172,46 @@ def share(src='S15q', out='S17', epochs=60, n_fit=100000, n_dev=20000, device='m
     (OUT / f'{out}_shared.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {nst} statements (one per neuron and input, shared by the heads; {r["coefficients"]} per-head coefficients): {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
 
 
+def prune_pairs(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, src=None, out=None, device='mps', log=print):
+    """(neuron, input) pairs removed smallest first (size = spread of the pair's contribution over the jets); how many per round by
+    bisection on the measured agreement (≤ tol points), then re-tuned — no overshoot from adding up single-pair costs"""
+    import torch
+    src, out = src or f'{PRE}o', out or f'{PRE}p'
+    t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
+    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, -1).astype(np.float32); NO = W.shape[2]; T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    def agree(Wx):
+        with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
+    group = lambda f: [f] + [NV + k * NV + f for k in range(5)] + [6 * NV + k * NV + f for k in range(5)]
+    keep = np.array([[np.any(W[:, group(f), o]) for f in range(NV)] for o in range(NO)])
+    a_ref = a_now = agree(W); path = [dict(pairs=int(keep.sum()), agreement=a_now)]; log(f'  start: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%')
+    Es = Ed[:5000]
+    for rnd in range(rounds):
+        prs = [(o, f) for o in range(NO) for f in np.flatnonzero(keep[o])]
+        size = np.array([float(np.einsum('nhk,hk->n', Es[:, :, group(f)], W[:, group(f), o]).std()) for o, f in prs]); order = np.argsort(size)
+        def after(m):
+            Wt = W.copy()
+            for j in order[:m]: o, f = prs[j]; Wt[:, group(f), o] = 0
+            return Wt
+        lo, hi = 0, len(order)
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if a_now - agree(after(mid)) <= tol / 100: lo = mid
+            else: hi = mid
+        if lo == 0: log('  nothing removable within the tolerance: stop'); break
+        for j in order[:lo]: o, f = prs[j]; keep[o, f] = False
+        W = after(lo); mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
+        best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W)
+        path.append(dict(round=rnd + 1, removed=int(lo), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, keep=keep, logits=LOGITS, **XA)
+        log(f'  round {rnd + 1}: removed {lo} (neuron, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per neuron), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
+        if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
+    r = dict(tol=tol, start=a_ref, final=a_now, inputs_per_neuron=keep.sum(1).tolist(), path=path, seconds=time.time() - t0)
+    (OUT / f'{out}_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned {out}: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%'); return r
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
+    elif cmd == 'prune_pairs': prune_pairs(*(float(v) if i_ == 0 else int(v) if v.lstrip('-').isdigit() else v for i_, v in enumerate(a)))
     elif cmd == 'share': share(*a[:2], *(int(v) for v in a[2:]))
     elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) if v.lstrip('-').isdigit() else v for i, v in enumerate(a)))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
