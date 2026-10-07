@@ -356,3 +356,12 @@ after re-tuning the values on them). → 32 pt of the 93 % come from ParT's weig
 weighting works (the 97 % was the easy test); with per-particle formula values the weights must carry the context,
 and formula weights (per-particle too) cannot.
 - A7 (3 learned hops): tracking A6 (≈ 83 %) — learned context from scratch does not recover the selection either.
+- A7 (3 stacked learned hops, 40 epochs): best 83.16 % — no better than one hop.
+
+### Is the class-token selection a cut? (user's question; clock ~11:00)
+Formula values (S5rpc1), same downstream, only the weights changed: ParT's own 93.06 %; **ordering only** (ParT's rank
+of each particle → the average weight at that rank) **90.39 %**; weights flattened (√) 89.49 %, sharpened (²) 87.28 %;
+hard cut uniform over ParT's top 10 / 5 / 3 per head 79.19 / 76.68 / 73.41 %. → Not a hard cut but a graded
+ranking: the per-jet ORDER of the particles carries 90 of the 93 points, the magnitudes < 3. New target (A9): a
+per-head formula RANKER (pairwise ranking loss against ParT's order within each jet) + a fixed per-rank weight
+profile — a far easier formula target than the softmax scores.
