@@ -5,7 +5,7 @@ final LayerNorm; variant 'pre': the class token before the final LN, ParT's LN a
 toward ParT's probabilities (+ λ·R on the neurons), whitened, 100k fitting jets, balanced 20k dev.
 
   python -m jetdistill.research.direct128 [post|pre] [n_fit n_dev epochs]"""
-import json, sys, time
+import json, os, sys, time
 import numpy as np
 from ..pipeline import jets
 from ..part.network import ParTNetwork
@@ -19,6 +19,9 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
     for p in model.parameters(): p.requires_grad_(False)
     Of, Af, Mf, Lf, _ = extract(model, 'fit', n_fit, device); Od, Ad, Md, Ld, _ = extract(model, 'dev', n_dev, device); ref = Ld.argmax(1)
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rf, rd = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
+    if os.environ.get('NOCLS'):                                                   # S16: no class-token share — the particles' weights renormalized to sum to 1, no α_cls terms
+        for A_ in (Af, Ad): A_[..., 1:] /= np.maximum(1 - A_[..., :1], 1e-9); A_[..., 0] = 0
+        log('  NOCLS: particle weights renormalized per head, the class token\'s share dropped')
     Pf, kn = phi_pooled(Jf, rf, Af); Pd, _ = phi_pooled(Jd, rd, Ad, kn); n, K = Pf.shape[0], Pf.shape[2]
     Bf, Bd = Pf.reshape(n, 16 * K), Pd.reshape(n_dev, 16 * K)                                               # all heads' pooled terms side by side
     # targets: the 128 neurons (after the final LN) or the class token before it
@@ -48,9 +51,9 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
             ag = agree()
             if ag > best[0]: best = (ag, U.detach().clone(), ep + 1)
             if ep % 50 == 49: log(f'  S15 {variant} epoch {ep + 1}: {100 * ag:.2f}% (best {100 * best[0]:.2f}%), {time.time() - t0:.0f} s')
-    W = (Mt @ best[1]).cpu().numpy(); np.savez(OUT / f'S15_{variant}_model.npz', W=W, kn=kn)
-    r = dict(experiment=f'S15_{variant}', terms=int(16 * K), least_squares=a0, best=best[0], best_epoch=best[2], check=chk, seconds=time.time() - t0)
-    (OUT / f'S15_{variant}.json').write_text(json.dumps(r, indent=1)); log(f'S15 {variant}: the 128 neurons directly as per-particle formulas with ParT weights (no head structure / MLP): {100 * best[0]:.2f}% (least squares {100 * a0:.2f}%)'); return r
+    W = (Mt @ best[1]).cpu().numpy(); tag = os.environ.get('OUT_TAG', 'S15'); np.savez(OUT / f'{tag}_{variant}_model.npz', W=W, kn=kn)
+    r = dict(experiment=f'{tag}_{variant}', terms=int(16 * K), least_squares=a0, best=best[0], best_epoch=best[2], check=chk, seconds=time.time() - t0)
+    (OUT / f'{tag}_{variant}.json').write_text(json.dumps(r, indent=1)); log(f'{tag} {variant}: the 128 neurons directly as per-particle formulas with ParT weights (no head structure / MLP): {100 * best[0]:.2f}% (least squares {100 * a0:.2f}%)'); return r
 
 
 if __name__ == '__main__':
