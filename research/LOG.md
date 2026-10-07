@@ -461,3 +461,5 @@ formula model needs formula VALUES with context â€” the per-particle embedding â
   (**367 statements**, 5,020 coefficients; S15q 92.86 % with 5,020 statements). Longer tune running. Pages: the one-hot
   particle-type inputs and the charge are combined into one lookup statement each (exact), neurons listed most important
   first, particle groups = the firing patterns of the most discriminating statements (top 10, with descriptions).
+- S17 tuned 200 epochs: **92.27 %** (367 shared statements; S15q 92.86 % with 5,020). 2M test and page queued (batch 3 with
+  S15q, S5rpc1 rebuilt, W2).
