@@ -89,7 +89,9 @@ def train_torch(formula, Qf, Qd, target, fit, dev, last, lam=0.0, steps=None, lr
             h = hidden(Bf[a:a + chunk], wq, cq); L = h @ K7 + b7
             loss = -(Tt[a:a + chunk] * torch.log_softmax(L, 1)).sum() / Nf
             if lam > 0: loss = loss + lam * ((h - Hn[a:a + chunk]) ** 2 / vn).sum() / (Nf * nn_)
-            g1, g2 = torch.autograd.grad(loss, (wq, cq)); gw += g1; gc += g2
+            g1, g2 = torch.autograd.grad(loss, (wq, cq), allow_unused=True)     # no terms left (every neuron constant): no gradient for them
+            if g1 is not None: gw += g1
+            if g2 is not None: gc += g2
         for p_, g_, m, v in ((w, gw, m_w, v_w), (c0, gc, m_c, v_c)):
             m.mul_(.9).add_(.1 * g_); v.mul_(.999).add_(.001 * g_ * g_)
             p_.sub_(lr * (m / (1 - .9 ** (i + 1))) / (torch.sqrt(v / (1 - .999 ** (i + 1))) + 1e-8))
