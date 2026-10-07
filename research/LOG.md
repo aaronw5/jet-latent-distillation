@@ -371,3 +371,10 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
 - A9: formula ranker (ordering carries 90 of the 93 points) → then S5 values re-tuned on it.
 - A10: the all-formula per-head model with coefficients AND thresholds learnable, long cosine schedule, 100k jets,
   started from the best weights (A2h / A9) and values (S12A2h).
+- A8 probe (keys and values of ParT's class attention from k-hop physics, ridge on hinge terms; agreement with the
+  predicted keys+values in the class attention): own 60.9 %, +1 kernel hop 71.6 %, +2nd hop/pT-weighted 74.3 %,
+  +3 plain hops 75.1 %; median R² of block-1 keys/values 0.37/0.44 → 0.51/0.61. Context helps but saturates.
+- A9 (formula ranker, pairwise loss vs ParT's order, 30k jets, 20 epochs): Kendall τ block 1 0.48–0.81, block 2
+  0.08–0.45. Rank-profile α: ParT values 95.4 %; S5rpc1 formula values block 1 82.6 %, both 69.9 % — no better than
+  the score formulas: the ordering is as hard to get from per-particle inputs as the weights.
+- A10 (coefficients + thresholds learnable, from A2h / S12A2h, 100k jets, 60 epochs): start 82.51 %, running.
