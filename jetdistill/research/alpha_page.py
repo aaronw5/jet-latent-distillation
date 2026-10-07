@@ -23,6 +23,9 @@ INFO = {'W1o': ('Formula selection, ParT’s values — one term per input per h
                 'Which particles each head looks at: per head a score formula of each particle’s physics (own, neighbourhood, pair-kernel context, within-jet relative), softmax over the jet; the class token’s own share from a formula of jet-level quantities. At most one term per input per head. Tuned toward ParT’s probabilities.'),
         'W1p': ('Formula selection, ParT’s values — pruned', None, None)}
 INFO['W1p'] = (INFO['W1p'][0], INFO['W1o'][1], INFO['W1o'][2] + ' Pruned to the inputs each head needs, re-tuned.')
+INFO['W1q'] = ('Formula selection, ParT’s values — pruned further', INFO['W1o'][1], INFO['W1o'][2] + ' Pruned further (0.25 pt per round), re-tuned.')
+INFO['W2'] = ('Formula selection for block 1 only, ParT’s values', INFO['W1o'][1] + ' Block 2’s heads take a plain average over the particles (no formula).',
+              'Which particles each block-1 head looks at: a score formula of each particle’s physics, softmax over the jet; the class token’s share in every head from a formula of jet-level quantities. Block 2 needs no selection formula: its heads average the particles. Re-tuned toward ParT’s probabilities.')
 HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
 
