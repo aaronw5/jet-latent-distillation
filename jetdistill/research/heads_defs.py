@@ -105,7 +105,7 @@ def python_export(tag, m):
 
 
 def term_math(coef, kind, th, name):
-    v = name if ' ' not in name else f'[{name}]'
+    v = f'particle["{name}"]'
     sh = (lambda t: f'− {t:.4g}' if t >= 0 else f'+ {-t:.4g}')                 # x − θ, written x + |θ| for θ < 0
     body = v if kind == 'lin' else (f'max(0, {v} {sh(th)})' if kind == 'gt' else f'max(0, {th:.4g} − {v})')
     return f'{"−" if coef < 0 else "+"} {abs(coef):.4g}·{body}'
@@ -119,9 +119,9 @@ def neuron_snippet(tag, block, head, o, inputs, share=.99):
         if acc >= share * tot and len(lines) >= 3: break
         acc += d['importance']; expr = ' '.join(term_math(c, k, t, d['feature']) for c, k, t in d['terms'])
         lines.append(f'      {expr:<62s}  # ±{d["importance"]:.3g}')
-    return (f'# neuron {o + 1} of block {block}, head {head} = Σ_i α_i · f(x_i) + c·α_cls + b,   x_i = the inputs of particle i\n'
-            f'# notation: [name] / x["name"] = the input called “name” of the particle being scored (defined in the table at the bottom of the page)\n'
-            f'f(x) =\n' + '\n'.join(lines) + f'\n      # … {max(0, len(inputs) - len(lines))} smaller inputs (exact: {tag}_formulas.py);  # ±: how much the input moves the neuron across jets')
+    return (f'# neuron {o + 1} of block {block}, head {head} = Σ over the jet’s particles i of α_i · f(particle i) + c·α_cls + b\n'
+            f'# particle["name"] = that particle’s input called “name” (defined in the table of inputs at the bottom of the page)\n'
+            f'f(particle) =\n' + '\n'.join(lines) + f'\n      # … {max(0, len(inputs) - len(lines))} smaller inputs (exact: {tag}_formulas.py);  # ±: how much the input moves the neuron across jets')
 
 
 NOTATION = [
@@ -164,12 +164,12 @@ PHRASE = {
 
 def if_lines(inputs, share=.99):
     """one value neuron as if-statements, one per input (its single term), largest first"""
-    tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, ['# x["name"] = the input called “name” of the particle being scored (table of inputs at the bottom); each line adds to f for this particle']
+    tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, ['# for each particle of the jet in turn: particle["name"] = that particle’s input called “name” (table of inputs at the bottom); each line adds to f(particle)']
     for d in inputs:
         if acc >= share * tot and len(out) >= 3: break
         acc += d['importance']
         for c, k, t in d['terms']:
-            v = f'x["{d["feature"]}"]'
+            v = f'particle["{d["feature"]}"]'
             if k == 'lin': out.append(f'add {c:+.4g} · {v}')
             elif k == 'gt': out.append(f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})')
             else: out.append(f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})')
@@ -178,13 +178,13 @@ def if_lines(inputs, share=.99):
 
 def neuron_python(block, head, o, inputs, c, b):
     """the complete Python function of one value neuron (every term)"""
-    L = [f'# x["name"] = the input called “name” of the particle being scored (see the table of inputs at the bottom of the page)', f'def neuron_b{block}_h{head}_n{o + 1}(particles, alpha, alpha_cls):',
+    L = [f'# particle["name"] = that particle’s input called “name” (see the table of inputs at the bottom of the page)', f'def neuron_b{block}_h{head}_n{o + 1}(particles, alpha, alpha_cls):',
          f'    """block {block}, head {head}, value neuron {o + 1}: sum over the particles of alpha_i * f(x_i), plus c * alpha_cls + b.',
          f'    particles: list of dicts of the per-particle inputs; alpha: this head\'s weights of those particles; alpha_cls: its weight on the class token"""',
-         '    total = 0.0', '    for x, a in zip(particles, alpha):', '        f = 0.0']
+         '    total = 0.0', '    for particle, a in zip(particles, alpha):', '        f = 0.0']
     for d in inputs:
         for cf, k, t in d['terms']:
-            v = f'x["{d["feature"]}"]'
+            v = f'particle["{d["feature"]}"]'
             if k == 'lin': L.append(f'        f += {cf:.6g} * {v}')
             elif k == 'gt': L.append(f'        if {v} > {t:.6g}: f += {cf:.6g} * ({v} - {t:.6g})')
             else: L.append(f'        if {v} < {t:.6g}: f += {cf:.6g} * ({t:.6g} - {v})')

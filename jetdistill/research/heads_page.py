@@ -310,7 +310,7 @@ def page(tag, outdir, device='mps', log=print):
 <div><b>Effect on the class scores</b>{bars(fa["effect"], "average change of each class score caused by this neuron (vs its mean)", lambda v: f"{v:+.2f}")}</div></div></div>''' for j, fa in enumerate(hd['facts']))
         dd = ''.join(f'''<details class="nd"><summary><b>Neuron {j + 1}</b> — {html.escape(fa["title"])} <span class="pill" style="background:{imp_col[fa["importance"]]};color:{"#fff" if fa["importance"] == "major" else "#1d2433"}">{fa["importance"]}</span></summary>
 <p style="margin:6px 0"><b>What it measures.</b> {html.escape(fa["measures"])}</p><p style="margin:4px 0"><b>Role.</b> {html.escape(fa["role"])} <span class="cnt">Scale: {html.escape(fa["scale"])}.</span></p>
-<details open><summary><b>If-statements</b> <span class="cnt">(per particle; the neuron = Σ_i α_i · (sum of these) + c·α_cls + b)</span></summary><pre>{html.escape(chr(10).join(fa["ifs"]))}</pre></details>
+<details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn; the neuron = Σ over the particles of α<sub>i</sub> · f(particle i) + c·α<sub>cls</sub> + b)</span></summary><pre>{html.escape(chr(10).join(fa["ifs"]))}</pre></details>
 <details><summary><b>Formula</b></summary><pre>{html.escape(neuron_snippet(tag, hd["block"], hd["head"], j, hd["neurons"][j]))}</pre></details>
 <details><summary><b>Python code</b> <span class="cnt">(complete, every term)</span></summary><pre>{html.escape(neuron_python(hd["block"], hd["head"], j, hd["neurons"][j], *hd["cb"][j]))}</pre></details>
 <details><summary><b>Particle groups</b> <span class="cnt">(this neuron as a particle tagger: its top inputs cut at their thresholds)</span></summary>{groups_html(fa["groups"])}</details>
