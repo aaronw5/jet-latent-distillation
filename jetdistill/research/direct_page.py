@@ -24,6 +24,7 @@ INFO = {'S15p': ('The 128 neurons directly — per-particle formulas, ParT’s s
         'S15o': ('The 128 neurons directly — per-particle formulas, ParT’s selection, one term per input', None, None)}
 INFO['S15o'] = (INFO['S15o'][0], INFO['S15p'][1], INFO['S15p'][2].replace(' Pruned to the inputs each neuron needs and re-tuned toward ParT’s probabilities;', ' Re-tuned toward ParT’s probabilities;'))
 INFO['S15q'] = ('The 128 neurons directly — per-particle formulas, ParT’s selection, statements pruned', INFO['S15p'][1], INFO['S15p'][2] + ' Then single statements removed, smallest first, within 0.1 pt, re-tuned.')
+TYPE5 = ['charged hadron', 'neutral hadron', 'photon', 'electron', 'muon']
 HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
 
@@ -89,6 +90,26 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             stat = dict(kind=h0['kind'], thr=h0['thr'], fires=h0['fires'], kinds=h0['kinds'], hard=h0['hard'], size=float(sum(hd['size'] for hd in heads_f)),
                         by_class=[float(sum(hd['by_class'][c] for hd in heads_f)) for c in range(10)], coefs=[(hd['head'], hd['coef']) for hd in heads_f])
             ins.append(dict(feature=names[f], f=f, importance=imp, heads=heads_f, shared=shared, stat=stat, direction=direction([(d['coef'], d['kind'], d['thr']) for d in heads_f], f)))
+        # like terms on categorical inputs: the one-hot particle type (5 inputs) and the charge (−1, 0, +1) → one lookup statement each (exact)
+        piece_at = lambda x, c, k, t: c * (x if k == 'lin' else max(0.0, x - t) if k == 'gt' else max(0.0, t - x))
+        for cat, members, levels, colidx in (('particle type', TYPE5, TYPE5, {nm: 8 + i for i, nm in enumerate(TYPE5)}), ('charge', ['charge'], [-1, 0, 1], {'charge': 7})):
+            mem = [d for d in ins if d['feature'] in members]
+            if len(mem) < (2 if cat == 'particle type' else 1): continue
+            table = {}                                                                                   # head → {level: value}
+            for d in mem:
+                for hd in d['heads']:
+                    for lv in levels:
+                        x = (1.0 if lv == d['feature'] else 0.0) if cat == 'particle type' else float(lv)
+                        table.setdefault(hd['head'], {}).setdefault(lv, 0.0); table[hd['head']][lv] += piece_at(x, hd['coef'], hd['kind'], hd['thr'])
+            lvl_of = np.argmax(tp, 1) if cat == 'particle type' else np.rint(XR[:, 7]).astype(int)       # the level of every real particle
+            con = np.zeros(len(XR), np.float32)
+            for h, tb in table.items():
+                vals = np.array([tb[lv] for lv in levels], np.float32); con += AR[h] * vals[lvl_of if cat == 'particle type' else lvl_of + 1]
+            byc = byclass(con); imp = float(sum(d['importance'] for d in mem))
+            share = {str(lv): float((lvl_of == (i if cat == 'particle type' else lv)).mean()) for i, lv in enumerate(levels)}
+            ins = [d for d in ins if d not in mem] + [dict(feature=cat, f=-1, importance=imp, heads=[], shared=True, categorical=True, levels=[str(lv) for lv in levels], level_share=share,
+                                                            table={HN(h): {str(lv): float(tb[lv]) for lv in levels} for h, tb in sorted(table.items())}, by_class=byc, direction=1,
+                                                            stat=dict(kind='cat', thr=None, fires=1.0, kinds={}, hard=0.0, size=float(np.abs(con).sum() / n_dev), by_class=byc, coefs=[]))]
         ins.sort(key=lambda d: -d['importance']); v = V[:, n]
         Va = Lm - np.outer(v - v.mean(), FW[:, n]); drop = a0 - float((Va.argmax(1) == ref).mean())
         means = [float(v[ytrue == c].mean()) for c in range(10)]; auc = [float(roc_auc_score(ytrue == c, v)) if 0 < (ytrue == c).sum() < len(v) else .5 for c in range(10)]
@@ -97,12 +118,12 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         role = '; '.join(f'{"raises" if eff[c] > 0 else "lowers"} the {CLASSES[c]} score ({eff[c]:+.2f} per standard deviation of the neuron)' for c in order if abs(eff[c]) > .02) or 'hardly enters any class score'
         tot = sum(d['importance'] for d in ins) or 1.0; parts = []
         for d in ins[:3]:
-            hi_p, lo_p = PHRASE.get(d['feature'], (f'high {d["feature"]}', f'low {d["feature"]}')); parts.append(f'{"rises" if d["direction"] > 0 else "falls"} with {d["feature"]} — up for {hi_p if d["direction"] > 0 else lo_p} ({100 * d["importance"] / tot:.0f} %)')
-        ph = lambda d: PHRASE.get(d['feature'], ('high ' + d['feature'], 'low ' + d['feature']))[0 if d['direction'] > 0 else 1]
+            hi_p, lo_p = ('particles by type', 'particles by type') if d.get('categorical') else PHRASE.get(d['feature'], (f'high {d["feature"]}', f'low {d["feature"]}')); parts.append(f'{"rises" if d["direction"] > 0 else "falls"} with {d["feature"]} — up for {hi_p if d["direction"] > 0 else lo_p} ({100 * d["importance"] / tot:.0f} %)')
+        ph = lambda d: ('particles by type' if d['feature'] == 'particle type' else 'particles by charge') if d.get('categorical') else PHRASE.get(d['feature'], ('high ' + d['feature'], 'low ' + d['feature']))[0 if d['direction'] > 0 else 1]
         title = (ph(ins[0]) if ins else 'constant') + (f', {ph(ins[1])}' if len(ins) > 1 else '')
         big = int(np.argmax(means)); sep = int(np.argmax(np.abs(np.array(auc) - .5)))
         hs = np.array([float(np.abs(E[:, h, :] @ W[h, :, n] - (E[:, h, :] @ W[h, :, n]).mean()).mean()) for h in range(16)]); hs = hs / (hs.sum() or 1)
-        groups = []; hinges = sorted([d for d in ins if d['stat']['kind'] != 'lin'], key=lambda d: -d['importance'] * min(d['stat']['fires'], 1 - d['stat']['fires']))[:8]   # the 8 most discriminating if-statements (importance × balance of firing) → ≤ 256 patterns
+        groups = []; hinges = sorted([d for d in ins if d['stat']['kind'] not in ('lin', 'cat')], key=lambda d: -d['importance'] * min(d['stat']['fires'], 1 - d['stat']['fires']))[:8]   # the 8 most discriminating if-statements (importance × balance of firing) → ≤ 256 patterns
         if hinges:
             awt = AR.mean(0); contrib = G[:, n]; tot_c = np.abs(contrib).sum() or 1.0; fbar = (AR * FH[:, :, n]).sum(0) / np.maximum(AR.sum(0), 1e-12)
             Mk = np.stack([FIRE[d['f']] for d in hinges], 1); code = (Mk * (1 << np.arange(len(hinges)))).sum(1); short = lambda d: f"{d['feature']} {'>' if d['stat']['kind'] == 'gt' else '<'} {d['stat']['thr']:.3g}"
@@ -169,11 +190,14 @@ def neuron_python(d):
          f'    particles of alpha[h][i] * f_h(particle i), plus c_h * alpha_cls[h]; then the bias. alpha[h]: head h\'s weights of the particles (ParT\'s)."""',
          f'    total = {d["bias"]:.6g}']
     for h in range(16):
-        lines = [(hd, din['feature']) for din in d['inputs'] for hd in din['heads'] if hd['head'] == h]
-        if not lines and abs(d['cls'][h]) < 1e-12: continue
+        lines = [(hd, din['feature']) for din in d['inputs'] for hd in din['heads'] if hd['head'] == h]; cats = [din for din in d['inputs'] if din.get('categorical') and HN(h) in din['table']]
+        if not lines and not cats and abs(d['cls'][h]) < 1e-12: continue
         L.append(f'    # head {HN(h)}')
-        if lines:
+        if lines or cats:
             L += [f'    for particle, a in zip(particles, alpha[{h}]):', '        f = 0.0']
+            for din in cats:
+                key = 'particle["type"]' if din['feature'] == 'particle type' else 'int(particle["charge"])'; tb = din['table'][HN(h)]
+                L.append(f'        f += {{{", ".join((repr(lv) if din["feature"] == "particle type" else lv) + f": {val:.6g}" for lv, val in tb.items())}}}[{key}]')
             for hd, feat in lines:
                 v = f'particle["{feat}"]'; c, k, t = hd['coef'], hd['kind'], hd['thr']
                 L.append(f'        f += {c:.6g} * {v}' if k == 'lin' else f'        if {v} > {t:.6g}: f += {c:.6g} * ({v} - {t:.6g})' if k == 'gt' else f'        if {v} < {t:.6g}: f += {c:.6g} * ({t:.6g} - {v})')
@@ -186,9 +210,10 @@ def neuron_formula(d):
     out = [f'# neuron {d["n"] + 1} = b + Σ_h [ Σ_i α_hi · f_h(particle i) + c_h · α_h,cls ],  h over the 16 heads, i over the jet’s particles',
            f'# particle["name"] = that particle’s input called “name” (table of inputs at the bottom); ±: how much the input moves the neuron across jets', f'b = {d["bias"]:+.4g}']
     for h in range(16):
-        terms = [(hd, din) for din in d['inputs'] for hd in din['heads'] if hd['head'] == h]
-        if not terms: continue
-        out.append(f'f_{HN(h)}(particle) = ' + ' '.join(term_math(hd['coef'], hd['kind'], hd['thr'], din['feature']) for hd, din in terms) + f'      # c = {d["cls"][h]:+.3g}')
+        terms = [(hd, din) for din in d['inputs'] for hd in din['heads'] if hd['head'] == h]; cats = [din for din in d['inputs'] if din.get('categorical') and HN(h) in din['table']]
+        if not terms and not cats: continue
+        catx = ' '.join('+ value[' + ('particle["type"]' if din['feature'] == 'particle type' else 'particle["charge"]') + ']{' + ', '.join(f'{lv}: {val:+.3g}' for lv, val in din['table'][HN(h)].items()) + '}' for din in cats)
+        out.append(f'f_{HN(h)}(particle) = ' + ' '.join(term_math(hd['coef'], hd['kind'], hd['thr'], din['feature']) for hd, din in terms) + (' ' + catx if catx else '') + f'      # c = {d["cls"][h]:+.3g}')
     return '\n'.join(out)
 
 
@@ -243,6 +268,18 @@ def page(tag, outdir, device='mps', log=print):
         out = []
         for din in d['inputs']:
             feat = din['feature']
+            if din.get('categorical'):
+                st = din['stat']; byc = sorted(enumerate(st['by_class']), key=lambda q: -abs(q[1]))[:4]; mxc = max(abs(v2) for _, v2 in byc) or 1
+                cls = ''.join(f'<tr><td>{CLASSES[ci]}</td><td style="width:120px"><div class="bar" style="width:{100 * abs(v2) / mxc:.0f}px;background:{"#2f855a" if v2 >= 0 else "#c05621"}"></div></td><td class="num">{v2:+.3g}</td></tr>' for ci, v2 in byc)
+                tot_h = {lv: sum(tb[lv] for tb in din['table'].values()) for lv in din['levels']}; key = 'particle["type"]' if feat == 'particle type' else 'particle["charge"]'
+                line = f'add value by {feat}:  ' + ', '.join(f'{lv} {tot_h[lv]:+.3g}' for lv in din['levels']) + '   (summed over the heads; per head below)'
+                rows = ''.join(f'<tr><td>{hn}</td>' + ''.join(f'<td class="num">{tb[lv]:+.3g}</td>' for lv in din['levels']) + '</tr>' for hn, tb in din['table'].items())
+                out.append(f'''<details class="xterm"><summary><code>{html.escape(line)}</code> <span class="cnt">typical contribution ±{din["importance"]:.3g}; {len(din["table"])} head{"s" if len(din["table"]) != 1 else ""}</span></summary>
+<div class="grid" style="margin:6px 0 4px 10px"><div><div><b>{html.escape(feat)}</b>: {"what kind of particle i is (exactly one of the five)" if feat == "particle type" else "its electric charge, −1, 0 or +1"}. The inputs {html.escape(", ".join(TYPE5) if feat == "particle type" else "charge")} are {"one-hot" if feat == "particle type" else "three-valued"}, so every if-statement on them is a fixed amount per kind: combined here into one lookup (exact).</div>
+<div style="margin-top:4px">Applied to every particle i, weighted by each head’s attention for it: Σ<sub>h</sub> α<sub>hi</sub> · value<sub>h</sub>[{key}]. Share of particles: {html.escape(", ".join(f"{lv} {100 * sh:.0f} %" for lv, sh in din["level_share"].items()))}.</div></div>
+<div><div class="cnt">value per head and kind</div><table><tr><th>head</th>{"".join(f"<th class=num>{html.escape(lv)}</th>" for lv in din["levels"])}</tr>{rows}</table></div>
+<div><div class="cnt">what this statement adds to the neuron, per jet, by true class (all heads, α-weighted)</div><table class="bars">{cls}</table></div></div></details>''')
+                continue
             if din.get('shared'):
                 st = din['stat']; k = st['kind']; line = stmt(dict(coef=1.0, kind=k, thr=st['thr']), feat).replace('add +1 · ', 'add c_h · ')
                 kinds = ', '.join(f'{k2} {100 * v2:.0f} %' for k2, v2 in sorted(st['kinds'].items(), key=lambda q: -q[1]) if v2 > .05)

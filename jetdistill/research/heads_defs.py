@@ -117,7 +117,7 @@ def neuron_snippet(tag, block, head, o, inputs, share=.99):
     tot = sum(d['importance'] for d in inputs) or 1.0; acc, lines = 0.0, []
     for d in inputs:
         if acc >= share * tot and len(lines) >= 3: break
-        acc += d['importance']; expr = ' '.join(term_math(c, k, t, d['feature']) for c, k, t in d['terms'])
+        acc += d['importance']; expr = ('+ value[' + ('particle["type"]' if d['feature'] == 'particle type' else 'particle["charge"]') + ']{' + ', '.join(f'{lv}: {val:+.3g}' for lv, val in d['table'].items()) + '}') if d.get('categorical') else ' '.join(term_math(c, k, t, d['feature']) for c, k, t in d['terms'])
         lines.append(f'      {expr:<62s}  # ±{d["importance"]:.3g}')
     return (f'# neuron {o + 1} of block {block}, head {head} = Σ over the jet’s particles i of α_i · f(particle i) + c·α_cls + b\n'
             f'# particle["name"] = that particle’s input called “name” (defined in the table of inputs at the bottom of the page)\n'
@@ -168,6 +168,7 @@ def if_lines(inputs, share=.99):
     for d in inputs:
         if acc >= share * tot and len(out) >= 3: break
         acc += d['importance']
+        if d.get('categorical'): out.append(f'add value by {d["feature"]}:  ' + ', '.join(f'{lv} {val:+.3g}' for lv, val in d['table'].items())); continue
         for c, k, t in d['terms']:
             v = f'particle["{d["feature"]}"]'
             if k == 'lin': out.append(f'add {c:+.4g} · {v}')
@@ -183,6 +184,8 @@ def neuron_python(block, head, o, inputs, c, b):
          f'    particles: list of dicts of the per-particle inputs; alpha: this head\'s weights of those particles; alpha_cls: its weight on the class token"""',
          '    total = 0.0', '    for particle, a in zip(particles, alpha):', '        f = 0.0']
     for d in inputs:
+        if d.get('categorical'):
+            key = 'particle["type"]' if d['feature'] == 'particle type' else 'int(particle["charge"])'; L.append(f'        f += {{{", ".join((repr(lv) if d["feature"] == "particle type" else lv) + f": {val:.6g}" for lv, val in d["table"].items())}}}[{key}]'); continue
         for cf, k, t in d['terms']:
             v = f'particle["{d["feature"]}"]'
             if k == 'lin': L.append(f'        f += {cf:.6g} * {v}')
