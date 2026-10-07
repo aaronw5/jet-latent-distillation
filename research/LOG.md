@@ -268,3 +268,12 @@ explorer does not apply to these models.
 ### S5rp — the pruned readable S5 on the 2M test jets (clock ~03:50)
 - **93.30 %** same class as ParT, accuracy **0.8435**, AUC 0.9847 (ParT 0.8603 / 0.9877) — with 380 (head, input)
   pairs (17–29 inputs per head) instead of 608: smaller and slightly better than S5 (93.16 %). The headline model.
+
+### Cancellation in the value neurons (user's question, clock ~04:00)
+- Measured on the balanced dev jets, median over (head, neuron): inside one input, net / Σ|terms| = 0.08 (S5) →
+  0.20 (S5rp); between inputs, neuron / Σ|inputs| = 0.07 → 0.13. The ridge, L1, duplicate removal and pruning helped
+  but most magnitude still cancels. Inside an input this is largely the hinge parametrization (a hinge coefficient
+  is a change of slope) — fixed by displaying each input as slopes per segment. Between inputs it is real:
+  correlated inputs offset each other.
+- S13: S5rp re-tuned with an anti-cancellation penalty Σ_f sd(C_f) − sd(Σ_f C_f) (relative), keeping the least
+  cancelling model within 0.2 pt of S5rp.
