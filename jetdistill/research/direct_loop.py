@@ -137,8 +137,34 @@ def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S1
     (OUT / f'{out}_pruned_terms.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {r["terms"]} statements (from {n0}), {100 * a_now:.2f}%'); return r
 
 
+def share(src='S15q', out='S17', epochs=60, n_fit=100000, n_dev=20000, device='mps', log=print):
+    """one STATEMENT per (neuron, input): a single column (kind + threshold) shared by all 16 heads, chosen as the column that best
+    reproduces the heads' current pieces jointly (least squares over a particle sample); per-head coefficients kept; re-tuned"""
+    import torch
+    t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
+    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, 128).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    def agree(Wx):
+        with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
+    a_src = agree(W); S = Ef[:20000]; W1 = np.zeros_like(W); W1[:, -2:] = W[:, -2:]; nst = 0
+    for o in range(128):
+        for f in range(NV):
+            cf = cols_of(f, NV); Wf = W[:, cf, o]                                                   # (16, 11) the heads' terms of this input
+            if not np.any(Wf): continue
+            Y = np.einsum('nhk,hk->nh', S[:, :, cf], Wf); best = (np.inf, None)
+            for j in cf:                                                                            # one column for all heads: per-head least squares on the pooled term
+                x = S[:, :, j]; den = (x * x).sum(0); c = np.where(den > 1e-12, (x * Y).sum(0) / np.maximum(den, 1e-12), 0.0); err = ((Y - x * c) ** 2).sum()
+                if err < best[0]: best = (err, j, c)
+            W1[:, best[1], o] = best[2]; nst += 1
+    a1 = agree(W1); log(f'  {src}: {100 * a_src:.2f}%; one shared statement per (neuron, input), per-head coefficients: {100 * a1:.2f}% before tuning ({nst} statements), {time.time() - t0:.0f} s')
+    mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1; best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S17')
+    np.savez(OUT / f'{out}_model.npz', W=best[1].reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, shared=True)
+    r = dict(experiment=out, src=src, start_src=a_src, start=a1, best=best[0], best_epoch=best[2], statements=nst, coefficients=int((best[1][:, :K - 2] != 0).sum()), seconds=time.time() - t0)
+    (OUT / f'{out}_shared.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {nst} statements (one per neuron and input, shared by the heads; {r["coefficients"]} per-head coefficients): {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
+    elif cmd == 'share': share(*a[:2], *(int(v) for v in a[2:]))
     elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
