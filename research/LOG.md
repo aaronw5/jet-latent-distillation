@@ -309,3 +309,5 @@ explorer does not apply to these models.
 - n8, test file: 805 terms 90.57 % → 589 terms 89.75 % (accuracy 65.45 %); the smaller 399 → 328 terms, 90.06 % →
   89.28 %. n64: data found in ~/Documents/jedi-distill/data (splits identical to the existing n64 caches); step 1 +
   tuning running, then the one-term step.
+- JEDI-linear n64 (step 1 12 min, tuning 13 min; main formula 641 terms, 94.14 % on the test file — the published run
+  had 690 at 94.18 %): one term per observable → **427 terms, 93.30 %** (accuracy 81.03 %).
