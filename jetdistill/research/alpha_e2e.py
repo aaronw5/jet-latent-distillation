@@ -59,6 +59,8 @@ def run(n_fit=20000, n_dev=20000, epochs=30, n_jet=100000, lr=3e-4, bs=500, devi
     def agree():
         with torch.no_grad():
             return float((np.concatenate([logits(Fdt[a:a + bs], okdt[a:a + bs], Zdt[a:a + bs], Vdt[a:a + bs]).argmax(1).cpu().numpy() for a in range(0, n_dev, bs)]) == ref).mean())
+    if os.environ.get('RESUME') == '1':                                      # the tuned formulas already saved: only write the weights
+        Ps = np.load(OUT / f'{tag}_alpha.npz'); Wc.data.copy_(T(Ps['coef'].T)); Wz.data.copy_(T(Ps['cz'].T)); epochs = 0
     a0 = agree(); best = (a0, Wc.detach().clone(), Wz.detach().clone(), 0); path = [(0, a0)]
     log(f'  start ({src} weight formulas, ParT values): {100 * a0:.2f}%, {time.time() - t0:.0f} s')
     opt = torch.optim.Adam([Wc, Wz], lr)
@@ -73,17 +75,21 @@ def run(n_fit=20000, n_dev=20000, epochs=30, n_jet=100000, lr=3e-4, bs=500, devi
     COEF2, CZ2 = best[1].cpu().numpy().T, best[2].cpu().numpy().T
     np.savez(OUT / f'{tag}_alpha.npz', kn=kn, mu=mu, sd=sd, coef=COEF2, cz=CZ2)
     # the tuned formula α of the 100k fit jets and the dev jets, for S12 on top
-    def alpha_of(J, rows, Z, chunk=4000):
+    def alpha_of(J, rows, Z, chunk=2000):                                   # in batches of bs jets on the GPU (the full term matrix of 2000 jets does not fit)
         A = np.zeros((2, len(rows), 8, 129), np.float16)
         with torch.no_grad():
             for a in range(0, len(rows), chunk):
-                r = rows[a:a + chunk]; F, ok = feats(J, r, model); F = np.concatenate([F, rel_feats(F, ok)], -1); Ft, okt = T(F), T(ok, torch.bool)
-                s = (phi(Ft) @ best[1]).masked_fill(~okt[..., None], -1e9); rel = torch.softmax(s, 1).cpu().numpy(); acls = torch.sigmoid(-(T(Z[a:a + chunk]) @ best[2])).cpu().numpy()
-                for hh in range(16):
-                    A[hh // 8, a:a + len(r), hh % 8, 0] = acls[:, hh]; A[hh // 8, a:a + len(r), hh % 8, 1:] = (1 - acls[:, hh:hh + 1]) * rel[:, :, hh]
+                r = rows[a:a + chunk]; F, ok = feats(J, r, model); F = np.concatenate([F, rel_feats(F, ok)], -1)
+                for c0 in range(0, len(r), bs):
+                    sl = slice(c0, c0 + bs); okc = ok[sl]; P = int(okc.sum(1).max()); Ft, okt = T(F[sl, :P]), T(okc[:, :P], torch.bool)
+                    rel = torch.softmax((phi(Ft) @ best[1]).masked_fill(~okt[..., None], -1e9), 1).cpu().numpy(); acls = torch.sigmoid(-(T(Z[a + c0:a + c0 + len(okc)]) @ best[2])).cpu().numpy()
+                    for hh in range(16):
+                        A[hh // 8, a + c0:a + c0 + len(okc), hh % 8, 0] = acls[:, hh]; A[hh // 8, a + c0:a + c0 + len(okc), hh % 8, 1:1 + P] = (1 - acls[:, hh:hh + 1]) * rel[:, :, hh]
+        if device == 'mps': torch.mps.empty_cache()
         return A
     np.save(OUT / f'{tag}_alpha_fit.npy', alpha_of(Jf, rows_of_split('fit', n_jet), Zf_all)); np.save(OUT / f'{tag}_alpha_dev.npy', alpha_of(Jd, rd, Zd))
     r = dict(experiment=tag, source=src, n_fit=n_fit, epochs=epochs, lr=lr, start=a0, best=best[0], best_epoch=best[3], path=path, seconds=time.time() - t0)
+    if os.environ.get('RESUME') == '1': r['best'] = max(r['best'], json.loads((OUT / f'{tag}_alpha_e2e.json').read_text())['best']) if (OUT / f'{tag}_alpha_e2e.json').exists() else r['best']
     (OUT / f'{tag}_alpha_e2e.json').write_text(json.dumps(r, indent=1)); log(f'{tag}: formula weights tuned for the decision, with ParT values {100 * best[0]:.2f}% (start {100 * a0:.2f}%)'); return r
 
 
