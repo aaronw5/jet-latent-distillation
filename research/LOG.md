@@ -341,3 +341,8 @@ re-tuned, end to end):
   at 40. One learned hop ≈ the hand-made neighbourhood (E3 84 %): the same information limit.
 - A7 queued: L = 3 stacked learned hops (formula message passing: kernel formula per hop + linear maps), in weights
   and values.
+- Rule applied (user): no more runs that cannot reach 90 %. A1's end-to-end cancelled (≤ A2h). A4 (jet-conditioned
+  scores) and A5 (rank selection) dropped: they change the weights, and the weights are not the limit — formula
+  weights already serve ParT's values at 97 % (A2h); every all-formula variant with one hop of context stops at
+  83 %. The only remaining candidate is multi-hop context (A7); if it fails too, the stand-alone-formula line ends
+  here and the > 90 % models are the S5 family (ParT's selection kept): S5rpc1 93.0 % on the 2M test jets.
