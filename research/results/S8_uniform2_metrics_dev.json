@@ -1,0 +1,64 @@
+{
+ "model": "S8_uniform2",
+ "which": "dev",
+ "n": 20000,
+ "agreement": 0.9157,
+ "accuracy": 0.83485,
+ "auc": 0.9832803127768844,
+ "rej": {
+  "Hbb": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hcc": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hgg": {
+   "eff": 0.5,
+   "rej": 71.35714285714286,
+   "n_bkg_pass": 28,
+   "n_bkg": 1998
+  },
+  "H4q": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hqql": {
+   "eff": 0.99,
+   "rej": 999.0,
+   "n_bkg_pass": 2,
+   "n_bkg": 1998
+  },
+  "Tbqq": {
+   "eff": 0.5,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Tbl": {
+   "eff": 0.995,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Wqq": {
+   "eff": 0.5,
+   "rej": 199.8,
+   "n_bkg_pass": 10,
+   "n_bkg": 1998
+  },
+  "Zqq": {
+   "eff": 0.5,
+   "rej": 199.8,
+   "n_bkg_pass": 10,
+   "n_bkg": 1998
+  }
+ }
+}
