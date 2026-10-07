@@ -62,3 +62,12 @@ blocks (context from other particles); block-1 attention is mostly the pair-phys
 Steps: (1) block 1 as formulas (attention = softmax(formula pair kernel + content), values/MLP as per-particle
 formulas, ParT's LayerNorms as fixed operations), blocks 2–8 kept; (2) blocks 1–2, 1–3, … each checked; (3) all of ParT.
 E3/E5 (context from hand-made neighbourhoods / from ParT's kernels) and E4 (final LayerNorm) are quick side checks.
+
+## Plan corrected by the user (01:45): the JEDI-linear spirit
+Not component-by-component reproduction. As for JEDI-linear: formulas of physics quantities fitted to the network's
+last hidden neurons (MARS), tuned toward its probabilities, pruned — it recovered the network because the quantities
+matched what the network computes (sums over particles). For ParT the neurons come from class attention: the
+ParT-shaped quantities are attention-pooled sums Σᵢ αᵢ f(particleᵢ), with αᵢ selecting particles as ParT's heads do.
+Steps: (1) ParT's class-attention weights per head → formulas of particle physics (its selection rule);
+(2) pooled quantities with those weights (+ the class token's self-weight); (3) ceiling check (MLP on old + new
+quantities); (4) JEDI pipeline. The component-swap code (replace.py) is kept but not pursued.
