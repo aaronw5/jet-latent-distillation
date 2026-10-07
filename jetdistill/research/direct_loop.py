@@ -171,5 +171,5 @@ if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
     elif cmd == 'share': share(*a[:2], *(int(v) for v in a[2:]))
-    elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
+    elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) if v.lstrip('-').isdigit() else v for i, v in enumerate(a)))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
