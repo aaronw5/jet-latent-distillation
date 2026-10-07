@@ -48,18 +48,25 @@ def build(outdir, s_tag='S17', w_tag='W1q', c_tag='C1q', device='mps', log=print
                   FF=dict(name=f'{c_tag}: formula weights, formula neurons', desc='both halves as formulas: the selection formulas pick the particles, the neuron formulas read them; only ParT’s last layer is kept', m=metric(c_tag) if an_c else None, page=f'../heads_{c_tag}/full/index.html', missing=an_c is None))
     meta = dict(PF=neuron_meta(an_s), FF=neuron_meta(an_c) if an_c else {})
     D = dict(jets=jets_, models=models, meta=meta, fc=an_s['fc'], classes=CLASSES, heads=[HN(h) for h in range(16)])
-    js = r"""const D=__D__, CL=D.classes; let S={j:0, w:'P', c:'F', oh:new Set(), on:new Set()};
+    render(outdir, D, log)
+
+
+def render(outdir, D, log=print):
+    """the page from its data (re-render without re-analysing: `python -m ... render OUT_DIR`, data read back from the page)"""
+    outdir = pathlib.Path(outdir)
+    js = r"""const D=__D__, CL=D.classes; let S={j:0, w:'P', c:'F', oh:new Set(), on:new Set(), p:null, why:true};
+function selP(k){S.p=(S.p===k?null:k);draw();}
 function tg(set,k,el){if(el.open)set.add(k);else set.delete(k);}
 function key(){return S.w+S.c}
 const COLS=['#1f4e79','#2f855a','#c05621','#6b46c1','#b7791f','#2c7a7b','#c53030','#4a5568','#d53f8c','#3182ce'];
 function mini(e,a,self,h,big){const W=big?320:112,Hh=big?280:100,R=0.8,X=v=>W/2+v/R*(W/2-6),Y=v=>Hh/2-v/R*(Hh/2-6),mx=Math.max(...a,1e-9);
  let g='<svg viewBox="0 0 '+W+' '+Hh+'" style="width:'+W+'px;background:#fbfcfe;border:1px solid #e4e7ec;border-radius:6px">';
- const ord=a.map((v,k)=>k).sort((x,y)=>a[x]-a[y]);
- ord.forEach(k=>{const p=e.particles[k],f=a[k]/mx,r=(big?3:1.5)+(big?10:5)*Math.sqrt(p.z);g+='<circle cx="'+X(p.eta).toFixed(1)+'" cy="'+Y(p.phi).toFixed(1)+'" r="'+r.toFixed(1)+'" fill="rgb('+Math.round(31+(220-31)*(1-f))+','+Math.round(78+(225-78)*(1-f))+','+Math.round(121+(235-121)*(1-f))+')"><title>particle '+(k+1)+': weight '+a[k].toFixed(3)+'</title></circle>';});
+ const ord=a.map((v,k)=>k).sort((x,y)=>a[x]-a[y]); if(S.p!==null&&S.p<a.length){ord.splice(ord.indexOf(S.p),1);ord.push(S.p);}
+ ord.forEach(k=>{const p=e.particles[k],f=a[k]/mx,r=(big?3:1.5)+(big?10:5)*Math.sqrt(p.z),on=S.p===k;g+='<circle cx="'+X(p.eta).toFixed(1)+'" cy="'+Y(p.phi).toFixed(1)+'" r="'+(on?r+(big?3:2):r).toFixed(1)+'" fill="rgb('+Math.round(31+(220-31)*(1-f))+','+Math.round(78+(225-78)*(1-f))+','+Math.round(121+(235-121)*(1-f))+')"'+(on?' stroke="#c53030" stroke-width="'+(big?3:2)+'"':'')+(big?' style="cursor:pointer" onclick="event.stopPropagation();selP('+k+')"':'')+'><title>particle '+(k+1)+': weight '+a[k].toFixed(3)+(big?' — click to highlight it in every head':'')+'</title></circle>';});
  return g+'</svg>';}
 function bars(p){const mx=Math.max(...p);return CL.map((c,i)=>'<div style="display:flex;align-items:center;gap:6px"><b style="width:44px">'+c+'</b><svg width="180" height="12"><rect x="0" y="1" width="'+(180*p[i]/mx).toFixed(1)+'" height="10" rx="2" fill="'+COLS[i]+'"/></svg><span class="cnt">'+(100*p[i]).toFixed(1)+' %</span></div>').join('');}
 function draw(){const e=D.jets[S.j],k=key(),M=D.models[k];
- let h='<div class="card"><b>Try a jet</b> <span class="cnt">— pick a jet, then choose where the weights and the content come from.</span><div style="margin-top:6px">jet: <select onchange="S.j=+this.value;draw()">'+CL.map((c,ci)=>'<optgroup label="ParT says '+c+'">'+D.jets.map((x,i)=>[x,i]).filter(q=>q[0].part===ci).map(([x,i])=>'<option value="'+i+'"'+(i==S.j?' selected':'')+'>'+c+' jet, '+x.particles.length+' particles (truth '+CL[x.truth]+')</option>').join('')+'</optgroup>').join('')+'</select></div>';
+ let h='<div class="card"><b>Try a jet</b> <span class="cnt">— pick a jet, then choose where the weights and the content come from.</span><div style="margin-top:6px">jet: <select onchange="S.j=+this.value;S.p=null;draw()">'+CL.map((c,ci)=>'<optgroup label="ParT says '+c+'">'+D.jets.map((x,i)=>[x,i]).filter(q=>q[0].part===ci).map(([x,i])=>'<option value="'+i+'"'+(i==S.j?' selected':'')+'>'+c+' jet, '+x.particles.length+' particles (truth '+CL[x.truth]+')</option>').join('')+'</optgroup>').join('')+'</select></div>';
  h+='<div style="margin-top:6px">weights (which particles each head looks at): '+[['P','ParT’s'],['F','formulas (W)']].map(([v,l])=>'<span class="btn'+(S.w==v?' on':'')+'" onclick="S.w=\''+v+'\';draw()">'+l+'</span>').join('')+' &nbsp; content (what is read off the particles): '+[['P','ParT’s'],['F','formulas']].map(([v,l])=>'<span class="btn'+(S.c==v?' on':'')+'" onclick="S.c=\''+v+'\';draw()">'+l+'</span>').join('')+'</div></div>';
  if(M.missing||!e.p[k]){document.getElementById('app').innerHTML=h+'<div class="card">This combination ('+M.name+') is still being fitted; it appears here when its loop finishes.</div>';return;}
  const p=e.p[k],win=e.cls[k],ord=p.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]),run=ord[1][1];
@@ -67,12 +74,22 @@ function draw(){const e=D.jets[S.j],k=key(),M=D.models[k];
  h+='<div style="font-size:28px;font-weight:700;color:'+COLS[win]+'">'+CL[win]+' <span style="font-size:14px;color:'+(win==e.part?'#2f855a':'#c53030')+'">'+(win==e.part?'✓ same as ParT':'✗ ParT says '+CL[e.part])+'</span></div><div class="cnt">true class '+CL[e.truth]+' · runner-up '+CL[run]+'</div></div><div>'+bars(p)+'</div></div>';
  // which particles each head weights
  const A=S.w=='P'?e.aP:e.aF, self=S.w=='P'?e.selfP:e.selfF;
- h+='<div class="card"><b>Which particles each head weights</b> <span class="cnt">('+(S.w=='P'?'ParT’s weights':'the selection formulas’ weights')+'; dark = high weight, size = pT share; click a picture to open that head below)</span><div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
+ h+='<div class="card"><b>Which particles each head weights</b> <span class="cnt">('+(S.w=='P'?'ParT’s weights':'the selection formulas’ weights')+'; dark = high weight, size = pT share; click a picture to open that head below; click a particle in a head’s table or big picture to highlight it everywhere)</span>';
+ if(S.p!==null&&S.p<e.particles.length){const k=S.p,pp=e.particles[k],rk=a=>1+a.filter(v=>v>a[k]).length;
+  h+='<div style="margin:6px 0;padding:6px 8px;border:1px solid #f5c2c2;background:#fff7f7;border-radius:8px"><b style="color:#c53030">Particle '+(k+1)+'</b> <span class="cnt">— '+pp.type+', pT share '+pp.z.toFixed(3)+', ΔR '+pp.dr.toFixed(2)+', charge '+(pp.q>0?'+':'')+pp.q+', |d0|/σ '+pp.d0s.toFixed(1)+'</span> <span class="btn" onclick="selP('+k+')">clear</span>';
+  h+='<div style="overflow-x:auto"><table><tr><th>head</th>'+D.heads.map(x=>'<th class="num">'+x+'</th>').join('')+'</tr><tr><td>ParT’s weight</td>'+e.aP.map(a=>'<td class="num">'+a[k].toFixed(3)+'</td>').join('')+'</tr><tr><td class="cnt">its rank in the jet</td>'+e.aP.map(a=>'<td class="num cnt">'+rk(a)+'</td>').join('')+'</tr><tr><td>formula weight</td>'+e.aF.map(a=>'<td class="num">'+a[k].toFixed(3)+'</td>').join('')+'</tr><tr><td class="cnt">its rank in the jet</td>'+e.aF.map(a=>'<td class="num cnt">'+rk(a)+'</td>').join('')+'</tr></table></div>';
+  // why it was chosen: in every head, the selection formula's score for this particle, term by term, against the jet's best
+  const top=q=>{const sc=e.sF[q];let b=0;sc.forEach((v,i)=>{if(v>sc[b])b=i;});return b;};
+  h+='<details'+(S.why?' open':'')+' ontoggle="S.why=this.open" style="margin-top:6px"><summary><b>Why it was chosen</b> <span class="cnt">— in every head, the selection formula gives each particle a score; the weights are (1 − class-token share) × e<sup>score</sup> / Σ<sub>jet</sub> e<sup>score</sup>, so what matters is its score against the other particles’ scores. The largest terms of its score:</span></summary><div style="overflow-x:auto"><table><tr><th>head</th><th class="num">its score</th><th class="num">rank</th><th class="num">best score in the jet</th><th class="num">its weight (formula / ParT)</th><th>largest terms of its score (input: amount)</th></tr>';
+  for(let q=0;q<16;q++){const b=top(q),sc=e.sF[q],w=e.aF[q][k];
+   h+='<tr><td>'+D.heads[q]+'</td><td class="num"><b>'+sc[k].toFixed(2)+'</b></td><td class="num">'+rk(sc)+' of '+sc.length+'</td><td class="num">'+sc[b].toFixed(2)+(b===k?' (this one)':' (particle '+(b+1)+')')+'</td><td class="num">'+w.toFixed(3)+' / '+e.aP[q][k].toFixed(3)+'</td><td class="cnt">'+e.topF[q][k].map(t=>'<span style="color:'+(t[1]>=0?'#2f855a':'#c05621')+'">'+t[0]+' '+(t[1]>=0?'+':'')+t[1].toFixed(2)+'</span>').join(', ')+'</td></tr>';}
+  h+='</table></div><div class="cnt">Green terms raise the particle’s score (more weight), orange terms lower it. Each term is one of the formula’s if-statements on one input (the statements are listed per head on the <a href="'+D.models.FP.page+'">selection-formula page</a>). The score differences matter, not the absolute values: a score 1 above another particle’s means e ≈ 2.7 times its weight.</div></details></div>';}
+ h+='<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px">';
  for(let q=0;q<16;q++)h+='<div style="cursor:pointer;text-align:center" onclick="S.oh.add('+q+');draw();(function(x){if(x&&x.scrollIntoView)x.scrollIntoView();})(document.getElementById(\'hd'+q+'\'))">'+mini(e,A[q],self[q],q,false)+'<div class="cnt">'+D.heads[q]+' · cls '+(100*self[q]).toFixed(0)+' %</div></div>';
  h+='</div>';
  for(let q=0;q<16;q++){const aP=e.aP[q],aF=e.aF[q],o=aP.map((v,i)=>i).sort((x,y)=>A[q][y]-A[q][x]);let acc=0,tot=A[q].reduce((a,b)=>a+b,0),core=0;for(const i of o){if(acc>=0.9*tot)break;acc+=A[q][i];core++;}
   h+='<details class="nd" id="hd'+q+'"'+(S.oh.has(q)?' open':'')+' ontoggle="tg(S.oh,'+q+',this)"><summary><b>Head '+D.heads[q]+'</b> <span class="cnt">— '+core+' of '+e.particles.length+' particles carry 90 % of its weight; class token keeps '+(100*self[q]).toFixed(1)+' % (ParT '+(100*e.selfP[q]).toFixed(1)+' %, formula '+(100*e.selfF[q]).toFixed(1)+' %)</span></summary>';
-  h+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px"><div>'+mini(e,A[q],self[q],q,true)+'</div><div style="max-height:320px;overflow:auto"><table><tr><th>#</th><th>type</th><th class="num">pT share</th><th class="num">ParT’s weight</th><th class="num">formula weight</th><th class="num">formula score</th><th>why the formula scores it so (largest terms)</th></tr>'+o.map(i=>'<tr><td>'+(i+1)+'</td><td>'+e.particles[i].type+'</td><td class="num">'+e.particles[i].z.toFixed(3)+'</td><td class="num">'+aP[i].toFixed(3)+'</td><td class="num">'+aF[i].toFixed(3)+'</td><td class="num">'+e.sF[q][i].toFixed(2)+'</td><td class="cnt">'+e.topF[q][i].slice(0,3).map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+' '+t[0]).join(', ')+'</td></tr>').join('')+'</table></div></div></details>';}
+  h+='<div style="display:flex;gap:14px;flex-wrap:wrap;margin-top:6px"><div>'+mini(e,A[q],self[q],q,true)+'</div><div style="max-height:320px;overflow:auto"><table><tr><th>#</th><th>type</th><th class="num">pT share</th><th class="num">ParT’s weight</th><th class="num">formula weight</th><th class="num">formula score</th><th>why the formula scores it so (largest terms)</th></tr>'+o.map(i=>'<tr style="cursor:pointer'+(S.p===i?';background:#fde8e8;font-weight:600':'')+'" onclick="selP('+i+')"><td>'+(i+1)+'</td><td>'+e.particles[i].type+'</td><td class="num">'+e.particles[i].z.toFixed(3)+'</td><td class="num">'+aP[i].toFixed(3)+'</td><td class="num">'+aF[i].toFixed(3)+'</td><td class="num">'+e.sF[q][i].toFixed(2)+'</td><td class="cnt">'+e.topF[q][i].slice(0,3).map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+' '+t[0]).join(', ')+'</td></tr>').join('')+'</table></div></div></details>';}
  h+='</div>';
  // content
  if(S.c=='F'){const V=e.V[k],ST=e.ST[k],meta=D.meta[k],FW=D.fc.W;const act=Object.keys(meta).map(Number);
@@ -94,5 +111,11 @@ draw();""".replace('__D__', json.dumps(D))
     (outdir / 'index.html').write_text(doc); log(f'page: {outdir / "index.html"} {len(doc) // 1024} kB')
 
 
+def data_of(page):
+    t = pathlib.Path(page).read_text(); i = t.index('const D=') + len('const D='); j = t.index(', CL=D.classes', i); return json.loads(t[i:j])
+
+
 if __name__ == '__main__':
-    a = sys.argv[1:]; build(a[0], *a[1:])
+    a = sys.argv[1:]
+    if a[0] == 'render': render(a[1], data_of(pathlib.Path(a[1]) / 'index.html'))
+    else: build(a[0], *a[1:])
