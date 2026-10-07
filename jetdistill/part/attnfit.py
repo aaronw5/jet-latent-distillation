@@ -8,6 +8,9 @@ particles). Then ParT's own last layer.
                to the class token itself, with a learned constant score bₕ: αₕ = softmax over [bₕ, sₕ₁, …, sₕₙ], so the
                weight α_cls,h = 1 − Σᵢ αₕᵢ is jet-dependent (how much the particles count at all)
   neurons      Σₕ [Σᵢ αₕᵢ φᵢ, α_cls,h]·Wₕ + c (α_cls,h·Wₕ,last: the class token's own value), then ParT's last layer
+  2nd layer    as ParT's second class block: the class token is now jet-dependent (block 1's output), the particles the same.
+               z₁ = layer 1's summary (R numbers, its pooled terms·W₁); scores sₕᵢ = φᵢ·Aₕ·[z₁, 1], the class token's own
+               score bₕ·[z₁, 1]; the neurons take both layers' pooled terms and self-weights
 Fit: least squares of ParT's neurons on the pooled terms (the start weightings), then everything tuned toward ParT's
 probabilities + λ·R on its neurons, full batch, terms whitened (Adam on correlated hinge terms is unstable).
 
@@ -27,7 +30,7 @@ def start_scores(F):
     return torch.stack([lnpt, torch.zeros_like(lnpt), -5 * dr, 2 * (q != 0).float(), 3 * td0.abs(), 3 * lep, 2 * pho, lne], -1)
 
 
-def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_ls=40000, device='mps', log=log, out=None):
+def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_ls=40000, layers=2, R=16, device='mps', log=log, out=None):
     import torch
     from ..pipeline import jets
     from .network import ParTNetwork
@@ -47,6 +50,7 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
     tr, va = prep(Jf, n_fit), prep(Jd, len(Jd['y'])); vn = tr['H'].var(0) + 1e-6
     A = torch.zeros((K, H8), device=device)                                  # learned part of the head scores (whitened terms)
     bc = torch.zeros(H8, device=device)                                      # each head's score for the class token itself
+    A2 = torch.zeros((K, H8, R + 1), device=device); b2 = torch.zeros((H8, R + 1), device=device)    # layer 2: scores bilinear in the particle terms and z₁
     def pooled(S, a, b_, A_, bc_):
         ok = S['ok'][a:b_]; P = int(ok.sum(1).max()); F = S['F'][a:b_, :P].float(); m = ok[:, :P]
         Phi = basis(F, knots) @ Mt                                           # (n, P, K) whitened terms
@@ -54,16 +58,35 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
         sc = torch.cat([bc_.expand(len(m), 1, -1), sc], 1); al = torch.softmax(sc, 1)    # (n, 1 + P, 8): the class token itself, then the particles
         pp = torch.einsum('nph,npk->nhk', al[:, 1:], Phi)                    # (n, 8, K) the particles' pooled terms
         return torch.cat([pp, al[:, 0, :, None]], 2).reshape(len(m), -1)    # (n, 8 (K + 1)): + each head's self-weight
-    # least-squares start of the neuron weights on the pooled terms (start weightings)
+    def pooled2(S, a, b_, z, A2_, b2_):                                     # layer 2: the class token's query and own key depend on z₁
+        ok = S['ok'][a:b_]; P = int(ok.sum(1).max()); F = S['F'][a:b_, :P].float(); m = ok[:, :P]
+        Phi = basis(F, knots) @ Mt; z1 = torch.cat([z, torch.ones_like(z[:, :1])], 1)            # (n, R + 1)
+        Q2 = torch.einsum('khr,nr->nkh', A2_, z1)                            # (n, K, 8) each jet's score direction
+        sc = (start_scores(F) + torch.einsum('npk,nkh->nph', Phi, Q2)).masked_fill(~m[..., None], -1e9)
+        sc = torch.cat([(z1 @ b2_.T)[:, None], sc], 1); al = torch.softmax(sc, 1)
+        pp = torch.einsum('nph,npk->nhk', al[:, 1:], Phi)
+        return torch.cat([pp, al[:, 0, :, None]], 2).reshape(len(m), -1)
+    def lsq(X, Y):
+        X = torch.cat([X, torch.ones_like(X[:, :1])], 1); Gx = (X.T @ X).cpu().numpy().astype(np.float64); bx = (X.T @ Y).cpu().numpy().astype(np.float64)
+        dx = np.sqrt(np.maximum(np.diag(Gx), 1e-12)); return np.linalg.lstsq(Gx / dx[:, None] / dx[None] + 1e-6 * np.eye(len(dx)), bx / dx[:, None], rcond=None)[0] / dx[:, None]
+    nl = min(n_ls, tr['n']); rng = [(a, min(a + chunk, nl)) for a in range(0, nl, chunk)]; Yl = tr['H'][:nl]
+    # least-squares start: layer 1 (start weightings) → ParT's neurons; z₁ = the top R directions of that prediction
     with torch.no_grad():
-        Xl = torch.cat([pooled(tr, a, min(a + chunk, n_ls), A, bc) for a in range(0, min(n_ls, tr['n']), chunk)])
-        Xl = torch.cat([Xl, torch.ones_like(Xl[:, :1])], 1); Gx = (Xl.T @ Xl).cpu().numpy().astype(np.float64); bx = (Xl.T @ tr['H'][:len(Xl)]).cpu().numpy().astype(np.float64)
-    dx = np.sqrt(np.maximum(np.diag(Gx), 1e-12)); W0 = np.linalg.lstsq(Gx / dx[:, None] / dx[None] + 1e-6 * np.eye(len(dx)), bx / dx[:, None], rcond=None)[0] / dx[:, None]
-    W = torch.from_numpy(W0[:-1].astype(np.float32)).to(device); c = torch.from_numpy(W0[-1].astype(np.float32)).to(device); del Xl
-    log(f'attention fit: {len(PFEAT)} particle inputs + {len(CTX)} jet quantities, {K} terms per particle, {H8} heads (+ class-token self-weights), {W.numel() + A.numel() + bc.numel()} coefficients; start {time.time() - t0:.0f} s')
-    params = [A.requires_grad_(True), bc.requires_grad_(True), W.requires_grad_(True), c.requires_grad_(True)]
+        X1 = torch.cat([pooled(tr, a, b_, A, bc) for a, b_ in rng]); Wl = lsq(X1, Yl)
+        Hp = (X1 @ torch.from_numpy(Wl[:-1].astype(np.float32)).to(device) + torch.from_numpy(Wl[-1].astype(np.float32)).to(device)).cpu().numpy().astype(np.float64)
+        hm = Hp.mean(0); _, _, Vt = np.linalg.svd(Hp - hm, full_matrices=False); hs = (Hp - hm) @ Vt[:R].T; zs = hs.std(0) + 1e-6
+        W1m = Wl[:-1] @ Vt[:R].T / zs; c1 = (Wl[-1] - hm) @ Vt[:R].T / zs           # z₁ = pooled1 @ W1 + c1 (standardized)
+        W1 = torch.from_numpy(W1m.astype(np.float32)).to(device); c1 = torch.from_numpy(c1.astype(np.float32)).to(device)
+        if layers == 2:
+            X2 = torch.cat([pooled2(tr, a, b_, X1[a:b_] @ W1 + c1, A2, b2) for a, b_ in rng]); X1 = torch.cat([X1, X2], 1); del X2
+        W0 = lsq(X1, Yl); del X1
+    W = torch.from_numpy(W0[:-1].astype(np.float32)).to(device); c = torch.from_numpy(W0[-1].astype(np.float32)).to(device)
+    log(f'attention fit: {len(PFEAT)} particle inputs + {len(CTX)} jet quantities, {K} terms per particle, {layers} layer(s) of {H8} heads (+ class-token self-weights), {W.numel() + A.numel() + bc.numel() + (layers == 2) * (A2.numel() + b2.numel() + W1.numel() + R)} coefficients; start {time.time() - t0:.0f} s')
+    params = [A, bc, W, c] + ([A2, b2, W1, c1] if layers == 2 else []); [p.requires_grad_(True) for p in params]
     def run(S, a, b_, ps):
-        h = pooled(S, a, b_, ps[0], ps[1]) @ ps[2] + ps[3]; return h, h @ Kw + bw
+        X = pooled(S, a, b_, ps[0], ps[1])
+        if layers == 2: X = torch.cat([X, pooled2(S, a, b_, X @ ps[6] + ps[7], ps[4], ps[5])], 1)
+        h = X @ ps[2] + ps[3]; return h, h @ Kw + bw
     def score(ps):
         with torch.no_grad():
             pred = np.concatenate([run(va, a, a + chunk, ps)[1].argmax(1).cpu().numpy() for a in range(0, va['n'], chunk)])
@@ -85,9 +108,9 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
             if s[0] > best[0]: best = (s[0], [p.detach().clone() for p in params], i + 1)
             log(f'  step {i + 1}: validation same class as ParT {100 * s[0]:.2f}%, accuracy {100 * s[1]:.2f}%, {time.time() - t0:.0f} s')
     out = out or RESULTS / 'attn_fit' / str(net); out.mkdir(parents=True, exist_ok=True)
-    Ab, bb, Wb, cb = best[1]
-    np.savez(out / 'attn_fit.npz', A=(Mt @ Ab).cpu().numpy(), b_cls=bb.cpu().numpy(), W=Wb.cpu().numpy(), c=cb.cpu().numpy(), M=Mt.cpu().numpy())
-    (out / 'attn_fit.json').write_text(json.dumps(dict(heads=HEADS, terms=K, n_fit=tr['n'], lam=lam, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
+    names = ['A', 'b_cls', 'W', 'c', 'A2', 'b2_cls', 'W1', 'c1']
+    np.savez(out / 'attn_fit.npz', M=Mt.cpu().numpy(), **{k: v.cpu().numpy() for k, v in zip(names, best[1])})    # A, A2 in whitened terms (plain: M @ A)
+    (out / 'attn_fit.json').write_text(json.dumps(dict(heads=HEADS, layers=layers, R=R, terms=K, n_fit=tr['n'], lam=lam, lr=lr, steps=steps, best_step=best[2], path=path, ctx=CTX, pfeat=PFEAT,
                                                        knots=[k.tolist() for k in knots])))
     log(f'attention fit: best validation same class as ParT {100 * best[0]:.2f}% (step {best[2]}), {time.time() - t0:.0f} s')
     return best
