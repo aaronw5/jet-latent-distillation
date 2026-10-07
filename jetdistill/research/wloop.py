@@ -195,8 +195,24 @@ def test(tag='W1p', chunk=5000, device='mps', log=print):
     log(f'{tag} on full_test ({len(pred)} jets): same class as ParT {100 * r["agreement"]:.2f}%, accuracy {100 * r["accuracy"]:.2f}%, AUC {r["auc"]:.4f}, {time.time() - t0:.0f} s'); return r
 
 
+def uniform2(src='W1q', out='W2', epochs=10, n_fit=30000, n_dev=20000, device='mps', log=print):
+    """W2: block-2 heads without a score formula (a plain average over the particles; their class-token share still from the
+    jet-level formula), block-1 formulas and all class-token shares re-tuned from `src`"""
+    import torch
+    t0 = time.time(); S = setup(n_fit, n_dev, device, log, src=src); net = Net(S, device); P = np.load(OUT / f'{src}_alpha.npz'); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device)
+    W = P['W'].copy(); W[1:, 8:] = 0; mask = (W != 0).astype(np.float32); mask[0] = 1; mask[1:, 8:] = 0; Wz = T(P['cz'].T)
+    a_src = net.agree(T(P['W']), Wz); a0 = net.agree(T(W), Wz); log(f'  {src}: {100 * a_src:.2f}%; block-2 selection a plain average: {100 * a0:.2f}%, {time.time() - t0:.0f} s')
+    best = net.tune(T(W), Wz, T(mask), epochs, log=log, label='W2'); W2, cz2 = best[1].cpu().numpy(), best[2].cpu().numpy().T
+    nf = len(P['mu']); K = P['kn'].shape[0]; cols = lambda f: [1 + f] + [1 + nf + k * nf + f for k in range(K)] + [1 + nf + K * nf + k * nf + f for k in range(K)]
+    keep = np.array([[np.any(W2[cols(f), h]) for f in range(nf)] for h in range(16)])
+    np.savez(OUT / f'{out}_alpha.npz', W=W2, cz=cz2, kn=P['kn'], mu=P['mu'], sd=P['sd'], basis='extended', keep=keep, uniform2=True)
+    r = dict(experiment=out, src=src, start_src=a_src, start=a0, best=best[0], best_epoch=best[3], inputs_per_head=keep.sum(1).tolist(), pairs=int(keep.sum()), seconds=time.time() - t0)
+    (OUT / f'{out}_uniform2.json').write_text(json.dumps(r, indent=1)); log(f'{out}: block-1 selection formulas ({int(keep[:8].sum())} head–input pairs), block 2 a plain average, ParT values: {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
     elif cmd == 'test': test(*a)
+    elif cmd == 'uniform2': uniform2(*a[:2], *(int(v) for v in a[2:]))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a[:5])), **dict(zip(('src', 'out'), a[5:])))
