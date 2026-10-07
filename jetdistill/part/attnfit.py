@@ -38,8 +38,9 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
     Kw = torch.from_numpy(np.asarray(ParTNetwork(net).last[0], np.float32)).to(device); bw = torch.from_numpy(np.asarray(ParTNetwork(net).last[1], np.float32)).to(device)
     # thresholds and whitening of the per-particle terms (20k jets)
     F0, ok0 = particle_features(Jf, np.arange(20000)); knots = knots_of(F0, ok0)
-    B0 = basis(torch.from_numpy(F0[ok0]).to(device), knots); K = B0.shape[1]; Np = B0.shape[0]
-    G = (B0.T @ B0).cpu().numpy().astype(np.float64); del B0
+    Fr = F0[ok0]; Np = len(Fr); G = 0                                      # in float64 on the CPU (float32 GPU sums over ~1M particles are not enough)
+    for i in range(0, Np, 100000): Bc = basis(torch.from_numpy(Fr[i:i + 100000]), knots).numpy().astype(np.float64); G = G + Bc.T @ Bc
+    K = G.shape[0]; del Fr
     d = np.sqrt(np.maximum(np.diag(G), 1e-12)); ev, Qe = np.linalg.eigh(G / d[:, None] / d[None]); ev = np.maximum(ev, 1e-6 * ev.max())
     Mt = torch.from_numpy(((Qe / np.sqrt(ev)[None] / d[:, None]) * np.sqrt(Np)).astype(np.float32)).to(device)     # whitened terms: basis @ Mt
     def prep(J, n):
@@ -67,7 +68,9 @@ def tune(net='full', n_fit=100000, steps=800, lr=1e-3, lam=0.01, chunk=4000, n_l
         pp = torch.einsum('nph,npk->nhk', al[:, 1:], Phi)
         return torch.cat([pp, al[:, 0, :, None]], 2).reshape(len(m), -1)
     def lsq(X, Y):
-        X = torch.cat([X, torch.ones_like(X[:, :1])], 1); Gx = (X.T @ X).cpu().numpy().astype(np.float64); bx = (X.T @ Y).cpu().numpy().astype(np.float64)
+        Gx, bx = 0, 0                                                         # float64 on the CPU
+        for i in range(0, len(X), 5000):
+            Xc = torch.cat([X[i:i + 5000], torch.ones_like(X[i:i + 5000, :1])], 1).cpu().numpy().astype(np.float64); Gx = Gx + Xc.T @ Xc; bx = bx + Xc.T @ Y[i:i + 5000].cpu().numpy().astype(np.float64)
         dx = np.sqrt(np.maximum(np.diag(Gx), 1e-12)); return np.linalg.lstsq(Gx / dx[:, None] / dx[None] + 1e-6 * np.eye(len(dx)), bx / dx[:, None], rcond=None)[0] / dx[:, None]
     nl = min(n_ls, tr['n']); rng = [(a, min(a + chunk, nl)) for a in range(0, nl, chunk)]; Yl = tr['H'][:nl]
     # least-squares start: layer 1 (start weightings) → ParT's neurons; z₁ = the top R directions of that prediction

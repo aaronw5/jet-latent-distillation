@@ -101,10 +101,12 @@ def tune(net='full', dim=32, n_fit=100000, steps=800, lr=1e-4, lam=0.01, lam_e=1
     Xe, Me = Xe[:ne], Me[:ne]
     Fe, oke = particle_features(Jf, np.arange(ne)); assert (oke == Me).all()
     Y = nz(np.asarray(Xe, np.float32))[oke]; mu = Y.mean(0); V = np.linalg.svd(Y[::5] - mu, full_matrices=False)[2][:dim]
-    knots = knots_of(Fe, oke); Bt = basis(torch.from_numpy(Fe[oke]).to(device), knots); St = torch.from_numpy(((Y - mu) @ V.T).astype(np.float32)).to(device)
-    G = (Bt.T @ Bt).cpu().numpy().astype(np.float64); b = (Bt.T @ St).cpu().numpy().astype(np.float64); dsc = np.sqrt(np.maximum(np.diag(G), 1e-12))
+    knots = knots_of(Fe, oke); Fr = Fe[oke]; Sr = (Y - mu) @ V.T; G = 0; b = 0
+    for i in range(0, len(Fr), 100000):     # the normal equations in float64 on the CPU (on the GPU, float32 sums over ~1M particles make the solution blow up)
+        Bc = basis(torch.from_numpy(Fr[i:i + 100000]), knots).numpy().astype(np.float64); G = G + Bc.T @ Bc; b = b + Bc.T @ Sr[i:i + 100000]
+    dsc = np.sqrt(np.maximum(np.diag(G), 1e-12)); Bt = St = None
     W0 = np.linalg.lstsq(G / dsc[:, None] / dsc[None] + 1e-8 * np.eye(len(dsc)), b / dsc[:, None], rcond=None)[0] / dsc[:, None]
-    K = Bt.shape[1]; Np = Bt.shape[0]; del Bt, St, Xe, Y
+    K = G.shape[0]; Np = len(Fr); del Xe, Y, Fr, Sr
     # whitening: tuned in a basis where the terms are uncorrelated with unit spread (an invertible change of coefficients);
     # the hinge terms of one feature are strongly correlated, and Adam steps each coefficient on its own
     ev, Qe = np.linalg.eigh(G / dsc[:, None] / dsc[None]); ev = np.maximum(ev, 1e-6 * ev.max())     # near-duplicate terms: a floor
