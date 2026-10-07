@@ -15,7 +15,7 @@ from .joint import Model, feats_rows, OUT
 def logits(which, path, device='mps', chunk=2000, log=print):
     import torch
     t0 = time.time(); Pz = np.load(path); model = ParTNetwork('full').model; model.eval()
-    mdl = Model(dict(kn=Pz['kns'], mu=Pz['mus'], sd=Pz['sds']), Pz['knv'], Pz['muv'], Pz['sdv'], device)
+    mdl = Model(dict(kn=Pz['kns'], mu=Pz['mus'], sd=Pz['sds']), Pz['knv'], Pz['muv'], Pz['sdv'], device, Pz.get('ms'), Pz.get('mv'))
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Ws, Wv, cs, b = T(Pz['Ws']), T(Pz['Wv']), T(Pz['cself']), T(Pz['bias'])
     J = jets('full', which); rows = rows_of_split('dev', 20000) if which == 'dev' else np.arange(len(J['y'])); n = len(rows); L = np.empty((n, 10), np.float32)
     with torch.no_grad():

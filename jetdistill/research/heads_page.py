@@ -62,7 +62,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         O = np.einsum('nhk,hko->nho', P, W); Pv = P[:, :, :6 * nv]; Wv = W[:, :6 * nv]; kn = m['kn'][:, :nv]; mu = np.zeros(nv); sd = np.ones(nv); S = None
     else:
         from .joint import Model
-        mdl = Model(dict(kn=m['kns'], mu=m['mus'], sd=m['sds']), m['knv'], m['muv'], m['sdv'], device); Ws, Wv_t, cs, b = T(m['Ws']), T(m['Wv']), T(m['cself']), T(m['bias'])
+        mdl = Model(dict(kn=m['kns'], mu=m['mus'], sd=m['sds']), m['knv'], m['muv'], m['sdv'], device, m.get('ms'), m.get('mv')); Ws, Wv_t, cs, b = T(m['Ws']), T(m['Wv']), T(m['cself']), T(m['bias'])
         Os, Pvs, Ss = [], [], []
         with torch.no_grad():
             for a in range(0, n_dev, 2000):

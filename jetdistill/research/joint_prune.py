@@ -30,7 +30,7 @@ def run(tol=0.1, epochs=30, n_fit=100000, n_dev=20000, lr=3e-4, lam=0.01, chunk=
     Of, _, Mf, Lf, _ = extract(model, 'fit', n_fit, device); _, _, Md, Ld, _ = extract(model, 'dev', n_dev, device); ref = Ld.argmax(1)
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rows_f, rows_d = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
     Ff, _ = all_feats(Jf, rows_f, model); Fd, _ = all_feats(Jd, rows_d, model); log(f'  features, {time.time() - t0:.0f} s')
-    mdl = Model(dict(kn=Pz['kns'], mu=Pz['mus'], sd=Pz['sds']), Pz['knv'], Pz['muv'], Pz['sdv'], device)
+    mdl = Model(dict(kn=Pz['kns'], mu=Pz['mus'], sd=Pz['sds']), Pz['knv'], Pz['muv'], Pz['sdv'], device, Pz.get('ms'), Pz.get('mv'))
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device)
     Fft, Fdt, Mft, Mdt = torch.from_numpy(Ff).to(device), torch.from_numpy(Fd).to(device), torch.from_numpy(Mf).to(device), torch.from_numpy(Md).to(device); del Ff, Fd
     Ws, Wv, cs, b = (torch.nn.Parameter(T(Pz[k])) for k in ('Ws', 'Wv', 'cself', 'bias')); nf = len(NAMES); sc, vl = term_index(nf, len(Pz['kns']))

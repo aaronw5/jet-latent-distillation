@@ -97,7 +97,8 @@ def formula_weights(model, J, rows, A_true, M, params=None, n_score_fit=20000, c
         phi = lambda F: np.concatenate([np.ones(F.shape[:-1] + (1,), np.float32), (F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
         B = phi(F[ok]).astype(np.float64); al = A_true[:n_score_fit]
         Y = (np.log(np.maximum(al[..., 1:], 1e-12)) - np.log(np.maximum(al[..., :1], 1e-12))).transpose(0, 2, 1)[ok]       # (particles, 8)
-        G = B.T @ B; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); W = np.linalg.solve(G / d[:, None] / d[None] + 1e-6 * np.eye(len(d)), (B.T @ Y) / d[:, None]) / d[:, None]
+        import os; rdg = float(os.environ.get('JOINT_RIDGE', 1e-6))
+        G = B.T @ B; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); W = np.linalg.solve(G / d[:, None] / d[None] + rdg * np.eye(len(d)), (B.T @ Y) / d[:, None]) / d[:, None]
         params['W'] = W.astype(np.float32); params['r2'] = 1 - ((B @ W - Y) ** 2).mean(0) / Y.var(0)
         log(f'  block-1 score formulas: {B.shape[1]} terms per particle, R² per head ' + ' '.join(f'{v:.2f}' for v in params['r2']))
     kn, mu, sd, W = params['kn'], params['mu'], params['sd'], params['W']
