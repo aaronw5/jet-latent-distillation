@@ -205,3 +205,10 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   balanced 20k dev: least squares 69.4 % → 81.1 (10) / 82.2 (30) / 82.6 (50) / **83.0 % (100)**, still creeping.
 - The first stand-alone formula model above the jet-level formulas (80.2 %). Against S8b (91.6 % with ParT's block-1
   weights) the formula weights cost ~8.6 pt. S10b: values on all 126 features, 150k jets.
+
+## Pages for the per-head models (requirements, from the user)
+Each model gets its own page reflecting the per-head structure: an explorer by head (block × head) showing the
+selection (score formula / weight profile; ParT's where kept, labelled), the 16 value neurons as formulas with terms by
+importance and response curves, the head's importance (ablation) and classes; a card stating exactly what is kept of
+ParT; the paper metrics vs ParT and the jet-level formulas; per class; pruning path; files. The old 128-neuron
+explorer does not apply to these models.
