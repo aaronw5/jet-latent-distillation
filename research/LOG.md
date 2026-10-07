@@ -540,3 +540,7 @@ functionally right for ParT's values but different in detail; formula neurons ar
   weights were discarded for the best-agreement checkpoint, i.e. the start) → only the size threshold acted (57,010 → 46,959
   statements, 82.55 %); fixed and rerunning. The 2M tests of the unpruned C3 and of the buggy C6s were stopped (superseded,
   machine load); running: C6j and C3j tests.
+- **C6s, L1 path** (from C6j, 57,010 statements, 82.53 %; each strength: penalized re-tune, statements < 1 % of the largest
+  dropped, re-tuned): 1e-3 35,739 / 82.75 % · 3e-3 20,404 / 82.52 % · **1e-2 8,267 / 81.49 %** · 3e-2 5,886 / 80.31 % ·
+  1e-1 5,474 / 79.74 %. Kept for the 2M test: 8,267 statements, 81.49 % (target ≥ 81 %). At equal size the no-limit route
+  beats one term per input: 5,886 statements → 80.3 % vs C3j 4,504 → 78.8 %.
