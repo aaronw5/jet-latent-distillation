@@ -1,0 +1,64 @@
+{
+ "model": "S5rpc1",
+ "which": "dev",
+ "n": 20000,
+ "agreement": 0.9306,
+ "accuracy": 0.8429,
+ "auc": 0.9847327853987843,
+ "rej": {
+  "Hbb": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hcc": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hgg": {
+   "eff": 0.5,
+   "rej": 111.0,
+   "n_bkg_pass": 18,
+   "n_bkg": 1998
+  },
+  "H4q": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Hqql": {
+   "eff": 0.99,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Tbqq": {
+   "eff": 0.5,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Tbl": {
+   "eff": 0.995,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Wqq": {
+   "eff": 0.5,
+   "rej": 285.42857142857144,
+   "n_bkg_pass": 7,
+   "n_bkg": 1998
+  },
+  "Zqq": {
+   "eff": 0.5,
+   "rej": 333.0,
+   "n_bkg_pass": 6,
+   "n_bkg": 1998
+  }
+ }
+}
