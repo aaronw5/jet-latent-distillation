@@ -25,7 +25,7 @@ def cols_of(f, nv):
     return [f] + [nv + k * nv + f for k in range(5)] + [6 * nv + k * nv + f for k in range(5)]
 
 
-def run(tag='S5rpc', epochs=150, n_fit=100000, n_dev=20000, lr=1e-3, lam=0.01, device='mps', log=print):
+def run(tag='S5rpc', epochs=150, n_fit=100000, n_dev=20000, lr=1e-4, lam=0.01, device='mps', log=print):
     import torch
     t0 = time.time(); Pz = dict(np.load(OUT / f'{tag}_model.npz')); W0, kn, uni = Pz['W'], Pz['kn'], str(Pz['uniform']); blocks = [int(c) - 1 for c in uni]
     model = ParTNetwork('full').model; model.eval()
