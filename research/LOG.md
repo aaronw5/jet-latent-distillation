@@ -378,3 +378,6 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   0.08–0.45. Rank-profile α: ParT values 95.4 %; S5rpc1 formula values block 1 82.6 %, both 69.9 % — no better than
   the score formulas: the ordering is as hard to get from per-particle inputs as the weights.
 - A10 (coefficients + thresholds learnable, from A2h / S12A2h, 100k jets, 60 epochs): start 82.51 %, running.
+- A10 (A2h start, coefficients + thresholds learnable, 100k jets, 60 epochs, one-cycle): 82.51 → **84.05 %** (epoch 32);
+  thresholds moved 0.15 σ (scores), 0.02 (values). The best all-formula number, still ≈ 11 pt under the ParT-α models.
+- A9 end to end (ranker α, values re-tuned): 82.15 %.
