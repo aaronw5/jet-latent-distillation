@@ -450,3 +450,9 @@ formula model needs formula VALUES with context — the per-particle embedding �
   the jet-level formula; constant share instead 94.60 %); block-1 formulas replaced by a plain average → 92.12 %. Block 2's
   query comes from block 1's output (jet-dependent), so a per-particle formula is the wrong shape for it — and it hardly
   matters with ParT's values. → **W2**: block-1 selection formulas only (block 2 a plain average), re-tuned from W1q (running).
+- **W2** (block-1 selection formulas only, block 2 a plain average; re-tuned from W1q, 10 epochs): 94.70 → **95.95 %** with
+  **434 head–input pairs** (block-1 heads 8–94 inputs; block 2 none). The simplest ≥ 95 % model so far: 8 score formulas
+  + 16 jet-level class-token formulas, ParT's values. Test queued with W1q.
+- User (12:50): S15p's statements look repeated (one per head on the same input) → S17: one statement per (neuron, input)
+  shared by the heads, per-head coefficients (running); more particle groups (firing patterns of the statements, JEDI-linear
+  style) with qualitative descriptions; neurons sorted by importance.
