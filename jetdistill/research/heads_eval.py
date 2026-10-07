@@ -41,6 +41,7 @@ def evaluate(tags='S5', which='full_test', device='mps', chunk=5000, log=print):
     import torch
     t0 = time.time(); tags = tags.split(','); Ms = {t: np.load(OUT / f'{t}_model.npz') for t in tags}
     net = ParTNetwork('full'); model = net.model; model.eval(); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device)
+    for p_ in model.parameters(): p_.requires_grad_(False)
     Wt = {t: T(Ms[t]['W']) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] for t in tags}
     J = jets('full', which)
     def logits_of(A, M, r):
