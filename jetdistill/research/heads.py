@@ -45,14 +45,21 @@ def downstream(model, o1, o2):
     return model.fc(model.norm(c2))
 
 
+def rows_of_split(which, n):
+    """the extracted jets used: the first n of the (shuffled) fit split; for dev a random n of the 100k (the dev split is
+    stored sorted by file, so its first jets are mostly H→bb / H→cc)"""
+    total = len(np.load(RESULTS / '_cls' / 'full' / which / 'mask.npy'))
+    return np.arange(min(n, total)) if which == 'fit' else np.sort(np.random.default_rng(0).choice(total, min(n, total), replace=False))
+
+
 def extract(model, which, n, device='mps'):
-    """ParT's head outputs and weights of both class blocks for the first n extracted jets of a split"""
+    """ParT's head outputs and weights of both class blocks for the jets rows_of_split(which, n)"""
     import torch
-    d = RESULTS / '_cls' / 'full' / which; X = np.load(d / 'x_f16.npy', mmap_mode='r'); M = np.load(d / 'mask.npy')[:n]; L = np.load(d / 'L.npy')[:n]
+    d = RESULTS / '_cls' / 'full' / which; X = np.load(d / 'x_f16.npy', mmap_mode='r'); rows = rows_of_split(which, n); n = len(rows); M = np.load(d / 'mask.npy')[rows]; L = np.load(d / 'L.npy')[rows]
     O = np.zeros((2, n, 8, 16), np.float32); A = np.zeros((2, n, 8, 129), np.float32); Ld = np.zeros((n, 10), np.float32)
     with torch.no_grad():
         for a in range(0, n, 1000):
-            x = torch.from_numpy(np.asarray(X[a:a + 1000], np.float32)).to(device).permute(1, 0, 2); m = torch.from_numpy(M[a:a + 1000]).to(device)
+            x = torch.from_numpy(np.asarray(X[rows[a:a + 1000]], np.float32)).to(device).permute(1, 0, 2); m = torch.from_numpy(M[a:a + 1000]).to(device)
             cls = model.cls_token.expand(1, x.shape[1], -1); os_ = []
             for b, blk in enumerate(model.cls_blocks):
                 o, al = attend(blk, cls, x, m); O[b, a:a + 1000] = o.cpu().numpy(); A[b, a:a + 1000] = al.cpu().numpy(); os_.append(o)
@@ -61,21 +68,21 @@ def extract(model, which, n, device='mps'):
     return O, A, M, L, Ld
 
 
-def phi_pooled(J, n, A, kn=None, chunk=2000):
+def phi_pooled(J, rows, A, kn=None, chunk=2000):
     """Σ_i α_bhi φ(particle i) for all 16 heads: (n, 16, K), and the thresholds"""
-    out = None
+    out = None; n = len(rows)
     for a in range(0, n, chunk):
-        r = np.arange(a, min(a + chunk, n)); F, ok = particle_features(J, r, ctx=[]); F = np.concatenate([F, nbr_features(J['x'][r], J['ext'][r], J['jet'][r])], -1)
+        r = rows[a:a + chunk]; F, ok = particle_features(J, r, ctx=[]); F = np.concatenate([F, nbr_features(J['x'][r], J['ext'][r], J['jet'][r])], -1)
         if kn is None: kn = np.quantile(F[ok][::3], np.linspace(.15, .85, 5), axis=0).astype(np.float32)
         Phi = np.concatenate([F] + [np.maximum(0, F - t) for t in kn], -1) * ok[..., None]       # (c, 128, K)
-        w = A[:, r, :, 1:].transpose(1, 0, 2, 3).reshape(len(r), 16, 128)                          # particle weights of the 16 heads
+        w = A[:, a:a + len(r), :, 1:].transpose(1, 0, 2, 3).reshape(len(r), 16, 128)             # particle weights of the 16 heads
         P = np.einsum('nhp,npk->nhk', w, Phi, optimize=True)
         if out is None: out = np.zeros((n, 16, P.shape[-1] + 2), np.float32)
-        out[r, :, :-2] = P; out[r, :, -2] = A[:, r, :, 0].transpose(1, 0, 2).reshape(len(r), 16); out[r, :, -1] = 1
+        sl = slice(a, a + len(r)); out[sl, :, :-2] = P; out[sl, :, -2] = A[:, sl, :, 0].transpose(1, 0, 2).reshape(len(r), 16); out[sl, :, -1] = 1
     return out, kn
 
 
-def formula_weights(model, J, n, A_true, M, params=None, n_score_fit=20000, chunk=2000, log=print):
+def formula_weights(model, J, rows, A_true, M, params=None, n_score_fit=20000, chunk=2000, log=print):
     """S9: block-1 attention weights from per-particle score formulas. Per head h: s_i = φ(particle i)·w_h with φ the
     hinge terms of its own inputs, neighbourhood and ParT pair-kernel context; the class token's own score is 0 (in
     block 1 it is a constant, absorbed by the formula's intercept); α = softmax over [0, s_1, …, s_n]. Least squares on
@@ -85,7 +92,7 @@ def formula_weights(model, J, n, A_true, M, params=None, n_score_fit=20000, chun
         F, ok = particle_features(J, r, ctx=[])
         return np.concatenate([F, nbr_features(J['x'][r], J['ext'][r], J['jet'][r]), pk_features(J['x'][r], J['ext'][r], J['jet'][r], model)], -1), ok
     if params is None:
-        F, ok = feats_rows(np.arange(n_score_fit)); kn = np.quantile(F[ok][::7], np.linspace(.15, .85, 5), axis=0).astype(np.float32); mu, sd = F[ok].mean(0), F[ok].std(0) + 1e-6
+        n = len(rows); n_score_fit = min(n_score_fit, n); F, ok = feats_rows(rows[:n_score_fit]); kn = np.quantile(F[ok][::7], np.linspace(.15, .85, 5), axis=0).astype(np.float32); mu, sd = F[ok].mean(0), F[ok].std(0) + 1e-6
         params = dict(kn=kn, mu=mu, sd=sd)
         phi = lambda F: np.concatenate([np.ones(F.shape[:-1] + (1,), np.float32), (F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
         B = phi(F[ok]).astype(np.float64); al = A_true[:n_score_fit]
@@ -95,11 +102,11 @@ def formula_weights(model, J, n, A_true, M, params=None, n_score_fit=20000, chun
         log(f'  block-1 score formulas: {B.shape[1]} terms per particle, R² per head ' + ' '.join(f'{v:.2f}' for v in params['r2']))
     kn, mu, sd, W = params['kn'], params['mu'], params['sd'], params['W']
     phi = lambda F: np.concatenate([np.ones(F.shape[:-1] + (1,), np.float32), (F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
-    A = np.zeros((n, 8, 129), np.float32)
+    n = len(rows); A = np.zeros((n, 8, 129), np.float32)
     for a in range(0, n, chunk):
-        r = np.arange(a, min(a + chunk, n)); F, ok = feats_rows(r); s = (phi(F) @ W).transpose(0, 2, 1)                  # (c, 8, 128)
+        r = rows[a:a + chunk]; F, ok = feats_rows(r); s = (phi(F) @ W).transpose(0, 2, 1)                              # (c, 8, 128)
         S = np.concatenate([np.zeros((len(r), 8, 1), np.float32), np.where(ok[:, None], s, -np.inf)], -1)
-        e = np.exp(S - S.max(-1, keepdims=True)); A[r] = e / e.sum(-1, keepdims=True)
+        e = np.exp(S - S.max(-1, keepdims=True)); A[a:a + len(r)] = e / e.sum(-1, keepdims=True)
     return A, params
 
 
@@ -110,16 +117,16 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
     Of, Af, Mf, Lf, Lfd = extract(model, 'fit', n_fit, device); Od, Ad, Md, Ld, Ldd = extract(model, 'dev', n_dev, device)
     ref = Ld.argmax(1); res = dict(n_fit=n_fit, n_dev=n_dev, downstream_check=float((Ldd.argmax(1) == ref).mean()))
     log(f'  downstream from ParT\'s own head outputs: same class {100 * res["downstream_check"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
-    Jf, Jd = jets('full', 'fit'), jets('full', 'dev')
+    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rows_f, rows_d = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev); n_fit, n_dev = len(rows_f), len(rows_d)
     if weights == 'formula':                                                 # S9: block-1 weights from score formulas, block 2 uniform
-        Af[0], prm = formula_weights(model, Jf, n_fit, Af[0], Mf, log=log); Ad[0], _ = formula_weights(model, Jd, n_dev, None, Md, params=prm)
+        Af[0], prm = formula_weights(model, Jf, rows_f, Af[0], Mf, log=log); Ad[0], _ = formula_weights(model, Jd, rows_d, None, Md, params=prm)
         uniform = '2'; res['weights'] = 'formula'; res['score_r2'] = [float(v) for v in prm['r2']]
         log(f'  block-1 weights from the score formulas, block 2 uniform, {time.time() - t0:.0f} s')
     for b in (int(c) - 1 for c in uniform):                                 # S8: these blocks' weights uniform over [class token, particles]
         for A_, M_ in ((Af, Mf), (Ad, Md)):
             okm = np.concatenate([np.ones((len(M_), 1), bool), M_], 1); A_[b] = (okm / okm.sum(1, keepdims=True))[:, None, :]
     res['uniform_blocks'] = uniform
-    Pf, kn = phi_pooled(Jf, n_fit, Af); Pd, _ = phi_pooled(Jd, n_dev, Ad, kn); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
+    Pf, kn = phi_pooled(Jf, rows_f, Af); Pd, _ = phi_pooled(Jd, rows_d, Ad, kn); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
     Of_, Od_ = Of.transpose(1, 0, 2, 3).reshape(n_fit, 16, 16), Od.transpose(1, 0, 2, 3).reshape(n_dev, 16, 16)
     pred = np.zeros_like(Od_); r2 = np.zeros((16, 16))
     for h in range(16):

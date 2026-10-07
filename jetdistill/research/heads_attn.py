@@ -13,7 +13,7 @@ from ..pipeline import jets
 from ..part.clsfit import particle_features
 from ..part.network import ParTNetwork
 from .nbr import nbr_features, pk_features
-from .heads import after
+from .heads import after, rows_of_split
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / 'research' / 'results'
 
@@ -32,9 +32,10 @@ def kv_true(model, X, M, device='mps'):
     return out
 
 
-def feats(J, n, model):
-    F, ok = particle_features(J, np.arange(n), ctx=[])
-    F = np.concatenate([F, nbr_features(J['x'][:n], J['ext'][:n], J['jet'][:n]), pk_features(J['x'][:n], J['ext'][:n], J['jet'][:n], model)], -1)
+def feats(J, rows, model):
+    if np.isscalar(rows): rows = np.arange(rows)
+    F, ok = particle_features(J, rows, ctx=[])
+    F = np.concatenate([F, nbr_features(J['x'][rows], J['ext'][rows], J['jet'][rows]), pk_features(J['x'][rows], J['ext'][rows], J['jet'][rows], model)], -1)
     return F, ok
 
 
@@ -57,7 +58,8 @@ def run(n_fit=40000, n_dev=20000, epochs=40, lr=1e-3, lam=0.1, bs=2000, device='
     for p in model.parameters(): p.requires_grad_(False)
     D = RESULTS / '_cls' / 'full'
     Xf, Mf, Lf = np.load(D / 'fit' / 'x_f16.npy', mmap_mode='r')[:n_fit], np.load(D / 'fit' / 'mask.npy')[:n_fit], np.load(D / 'fit' / 'L.npy')[:n_fit]
-    Xd, Md, Ld = np.load(D / 'dev' / 'x_f16.npy', mmap_mode='r')[:n_dev], np.load(D / 'dev' / 'mask.npy')[:n_dev], np.load(D / 'dev' / 'L.npy')[:n_dev]
+    rows_d = rows_of_split('dev', n_dev); n_dev = len(rows_d)
+    Xd, Md, Ld = np.load(D / 'dev' / 'x_f16.npy', mmap_mode='r')[rows_d], np.load(D / 'dev' / 'mask.npy')[rows_d], np.load(D / 'dev' / 'L.npy')[rows_d]
     KVf, KVd = kv_true(model, Xf, Mf, device), kv_true(model, Xd, Md, device); ref = Ld.argmax(1)
     T = lambda q, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(q)).to(device, dt)
     def agree(kv_of, Mx, nn):
@@ -67,7 +69,7 @@ def run(n_fit=40000, n_dev=20000, epochs=40, lr=1e-3, lam=0.1, bs=2000, device='
                 i = o[a:a + bs]; P = int(Mx[i].sum(1).max()); pred[i] = forward(model, kv_of(i, P), T(Mx[i, :P], torch.bool)).argmax(1).cpu().numpy()
         return float((pred == ref).mean())
     chk = agree(lambda i, P: T(KVd[i, :P]), Md, n_dev); log(f'  ParT\'s own keys/values through this forward: {100 * chk:.2f}% (must be 100), {time.time() - t0:.0f} s')
-    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); Ff, okf = feats(Jf, n_fit, model); Fd, okd = feats(Jd, n_dev, model)
+    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); Ff, okf = feats(Jf, n_fit, model); Fd, okd = feats(Jd, rows_d, model)
     assert (okf == Mf).all() and (okd == Md).all()
     kn = np.quantile(Ff[okf][::7], np.linspace(.15, .85, 5), axis=0).astype(np.float32); mu, sd = Ff[okf].mean(0), Ff[okf].std(0) + 1e-6
     def phi(F):                                                              # per particle: 1, features (standardized), hinges

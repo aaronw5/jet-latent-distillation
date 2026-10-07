@@ -169,3 +169,12 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
 - Reading: with ParT's values the weights hardly matter (S7), with formula values they matter a lot — ParT's values
   carry each particle's context, formula values only its own physics, so the selection must do the work. Block 2 can
   stay a plain average (−2 pt); block 1's weights must be formulas (S9).
+
+### Correction (2026-10-07 05:20): the validation jets of S4–S9 were not class-balanced
+- The extracted dev jets are stored in the sorted order of the dev split (by file); S4–S9 took the first 20k (S7:
+  10k, S6: 20k): 9472 H→bb, 8411 H→cc, 154 QCD, … of 20k. Those agreements (93.2 %, 95.8 %, 91.2 %, 76.1 %,
+  67.8 %, 75.8 %) are therefore not comparable to the 80 % of the jet-level formulas (all 100k dev jets) and are
+  withdrawn. The fit jets (first 100k of the shuffled fit split) are balanced. Fix: a random balanced 20k of the 100k
+  dev jets (heads.rows_of_split, seed 0) everywhere; S5c, S7, S8b, S9/S10 rerun (suffix -bal).
+- S9 (skewed dev, for the record): least squares 67.9 % → tuned 75.8 % (score formulas R² 0.51–0.90).
+- GELU run finished and published (all_plus_gelu page).

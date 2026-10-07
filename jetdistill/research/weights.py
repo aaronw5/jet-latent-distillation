@@ -12,7 +12,7 @@ import numpy as np
 from ..config import RESULTS
 from ..pipeline import jets
 from ..part.network import ParTNetwork
-from .heads import after
+from .heads import after, rows_of_split
 from .heads_attn import feats
 
 OUT = pathlib.Path(__file__).resolve().parents[2] / 'research' / 'results'
@@ -51,7 +51,8 @@ def logits(model, S, V, device='mps'):
 def run(n_fit=20000, n_dev=10000, device='mps', log=print):
     t0 = time.time(); model = ParTNetwork('full').model; model.eval(); D = RESULTS / '_cls' / 'full'
     Xf, Mf = np.load(D / 'fit' / 'x_f16.npy', mmap_mode='r')[:n_fit], np.load(D / 'fit' / 'mask.npy')[:n_fit]
-    Xd, Md, Ld = np.load(D / 'dev' / 'x_f16.npy', mmap_mode='r')[:n_dev], np.load(D / 'dev' / 'mask.npy')[:n_dev], np.load(D / 'dev' / 'L.npy')[:n_dev]
+    rows_d = rows_of_split('dev', n_dev); n_dev = len(rows_d)
+    Xd, Md, Ld = np.load(D / 'dev' / 'x_f16.npy', mmap_mode='r')[rows_d], np.load(D / 'dev' / 'mask.npy')[rows_d], np.load(D / 'dev' / 'L.npy')[rows_d]
     Sf, _ = internals(model, Xf, Mf, device); Sd, Vd = internals(model, Xd, Md, device); ref = Ld.argmax(1)
     res = dict(n_fit=n_fit, n_dev=n_dev, exact=float((logits(model, Sd, Vd, device) == ref).mean()))
     log(f'  ParT\'s own weights and values: {100 * res["exact"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
@@ -65,7 +66,7 @@ def run(n_fit=20000, n_dev=10000, device='mps', log=print):
         res[f'block{b + 1}_uniform_particles'] = swap(b, u)
         log(f"  block {b + 1} weights uniform: {100 * res[f'block{b + 1}_uniform']:.2f}%; particles uniform (ParT's self-weight): {100 * res[f'block{b + 1}_uniform_particles']:.2f}%")
     # formula scores per head: hinge(own + nbr + pk) per particle, least squares within jets
-    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); Ff, okf = feats(Jf, n_fit, model); Fd, okd = feats(Jd, n_dev, model)
+    Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); Ff, okf = feats(Jf, n_fit, model); Fd, okd = feats(Jd, rows_d, model)
     kn = np.quantile(Ff[okf][::7], np.linspace(.15, .85, 5), axis=0).astype(np.float32); mu, sd = Ff[okf].mean(0), Ff[okf].std(0) + 1e-6
     phi = lambda F: np.concatenate([(F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
     Bf, Bd = phi(Ff[okf]).astype(np.float32), phi(Fd[okd]).astype(np.float32)
