@@ -495,3 +495,9 @@ that drive it; neurons sorted by importance everywhere.
   (accuracy 0.8397, AUC 0.9835). Ten formulas — one per class, one f per head — replace the 128 neurons and ParT's last layer.
 - **W1p on the 2M test jets: 96.75 %** (accuracy 0.8561, AUC 0.9870; ParT 0.861 / 0.987) — the selection written as formulas
   (3,664 head–input pairs, one term per input), ParT's values: within 3.3 pt of ParT and its accuracy within 0.5 pt.
+- **Best halves plugged together unchanged** (dev 20k): S15 neurons + W1q weights 16.2 %; with ParT's class-token share
+  and W1q's particle weights 70.9 %; S16 neurons (no class-token term) + W1q particle weights 39.3 % (91.0 % with ParT's).
+  The W1q weights pick the same top particle as ParT in only **10–48 % of jets per head** — yet with ParT's values they
+  give 96.75 %: ParT's values are redundant enough that many different weightings pool to the same answer; the formula
+  neurons are not. So the halves must be fitted to each other (C1 78 %, C2 running), and the share term is worth ~55 pt
+  of the mismatch.
