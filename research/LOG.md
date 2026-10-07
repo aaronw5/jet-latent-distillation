@@ -474,3 +474,7 @@ that drive it; neurons sorted by importance everywhere.
 - (13:40) Combined study **C1** (W1q selection formulas feeding the S15 neuron formulas; only ParT's last layer kept) running
   the full loop (fit → one term → prune → statements → 2M test). Try-a-jet page (weights ParT/formula × content
   ParT/formula, per-head and per-neuron drop-downs) builds with publish batch 3 after S17's test.
+- (user, ~14:00) "The class blocks are sequential — why fit both?" The class token is a residual stream (c2 = c1 + block 2's
+  read; both blocks read the same, unchanged particles), so the final 128 neurons contain both blocks' reads; S15/S17/S18
+  fit only that final output, summing over the 16 heads' selections. **S19** tests one block's selection only (block-2
+  heads / block-1 heads, 128 neurons, same fit as S15): running. C1o (combined, one term per input): 65.21 % (C1 78.35 %).
