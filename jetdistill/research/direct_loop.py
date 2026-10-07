@@ -4,7 +4,7 @@ layer. Basis per head: [x (38), max(0, x − θ_k) (5 × 38), max(0, θ_k − x)
 α_cls, 1] = 420 columns; W (16, 420, 128).
 
   python -m jetdistill.research.direct_loop one_term|prune [args]"""
-import json, sys, time
+import json, os, sys, time, types
 import numpy as np
 from ..pipeline import jets
 from ..part.network import ParTNetwork
@@ -12,6 +12,7 @@ from .heads import extract, phi_pooled, rows_of_split, OUT
 from .one_term import extend, cols_of
 
 NV = 38
+PRE = os.environ.get('DPRE', 'S15'); LOGITS = bool(os.environ.get('LOGITS'))
 
 
 def load(n_fit, n_dev, device, log):
@@ -19,11 +20,12 @@ def load(n_fit, n_dev, device, log):
     for p in model.parameters(): p.requires_grad_(False)
     _, Af, Mf, Lf, _ = extract(model, 'fit', n_fit, device); _, Ad, Md, Ld, _ = extract(model, 'dev', n_dev, device)
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rf, rd = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
-    P15 = np.load(OUT / 'S15_post_model.npz'); kn = P15['kn']
+    P15 = np.load(OUT / f'{PRE}_post_model.npz'); kn = P15['kn']
     Pf, _ = phi_pooled(Jf, rf, Af, kn); Pd, _ = phi_pooled(Jd, rd, Ad, kn)
     Ef, Ed = extend(Pf, kn[:, :NV], NV), extend(Pd, kn[:, :NV], NV)                      # (n, 16, 420)
-    Hf = np.asarray(Jf['H'][rf], np.float32); W0 = P15['W'].reshape(16, Pf.shape[2], 128)
-    We = np.zeros((16, Ef.shape[2], 128), np.float32); We[:, :6 * NV] = W0[:, :6 * NV]; We[:, -2:] = W0[:, 6 * NV:]
+    Hf = Lf.astype(np.float32) if LOGITS else np.asarray(Jf['H'][rf], np.float32); W0 = P15['W'].reshape(16, Pf.shape[2], -1)
+    if LOGITS: model = types.SimpleNamespace(fc=lambda y: y)
+    We = np.zeros((16, Ef.shape[2], W0.shape[2]), np.float32); We[:, :6 * NV] = W0[:, :6 * NV]; We[:, -2:] = W0[:, 6 * NV:]
     return model, Ef, Ed, Hf, Lf, Ld.argmax(1), kn, We
 
 
@@ -55,7 +57,7 @@ def one_term(n_fit=100000, n_dev=20000, epochs=150, device='mps', log=print):
     log(f'  S15: {100 * a0:.2f}% ({int((We[:, :6 * NV] != 0).sum())} nonzero term coefficients), {time.time() - t0:.0f} s')
     W1 = np.zeros_like(We); W1[:, -2:] = We[:, -2:]
     for h in range(16):
-        for o in range(128):
+        for o in range(We.shape[2]):
             for f in range(NV):
                 c6 = [f] + [NV + k * NV + f for k in range(5)]; w = We[h, c6, o]
                 if not np.any(w): continue
@@ -71,26 +73,26 @@ def one_term(n_fit=100000, n_dev=20000, epochs=150, device='mps', log=print):
     nterm = int((W1[:, :K - 2] != 0).sum()); log(f'  one term per input per (neuron, head): least squares {100 * a1:.2f}% ({nterm} terms), {time.time() - t0:.0f} s')
     mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1
     best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S15 one-term')
-    np.savez(OUT / 'S15o_model.npz', W=best[1].reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True)
-    r = dict(experiment='S15o', start=a0, one_term_ls=a1, best=best[0], best_epoch=best[2], terms=nterm, terms_start=int((We[:, :6 * NV] != 0).sum()), seconds=time.time() - t0)
-    (OUT / 'S15o_one_term.json').write_text(json.dumps(r, indent=1)); log(f'S15o: {100 * best[0]:.2f}% with one term per input per (neuron, head) ({nterm} terms; start {r["terms_start"]})'); return r
+    np.savez(OUT / f'{PRE}o_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS)
+    r = dict(experiment=f'{PRE}o', start=a0, one_term_ls=a1, best=best[0], best_epoch=best[2], terms=nterm, terms_start=int((We[:, :6 * NV] != 0).sum()), seconds=time.time() - t0)
+    (OUT / f'{PRE}o_one_term.json').write_text(json.dumps(r, indent=1)); log(f'{PRE}o: {100 * best[0]:.2f}% with one term per input per (neuron, head) ({nterm} terms; start {r["terms_start"]})'); return r
 
 
 def prune(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, device='mps', log=print):
     """remove (neuron, input) groups — the input's terms in all 16 heads of that neuron — least needed first, re-tune"""
     import torch
     t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
-    P = np.load(OUT / 'S15o_model.npz'); W = P['W'].reshape(16, K, 128).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    P = np.load(OUT / f'{PRE}o_model.npz'); W = P['W'].reshape(16, K, -1).astype(np.float32); NO = W.shape[2]; T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
     def agree(Wx):
         with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
     group = lambda f: [f] + [NV + k * NV + f for k in range(5)] + [6 * NV + k * NV + f for k in range(5)]
-    keep = np.zeros((128, NV), bool)
-    for o in range(128):
+    keep = np.zeros((NO, NV), bool)
+    for o in range(NO):
         for f in range(NV): keep[o, f] = np.any(W[:, group(f), o])
     a_ref = a_now = agree(W); path = [dict(pairs=int(keep.sum()), agreement=a_now)]; log(f'  start: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%')
     for rnd in range(rounds):
         drops = {}
-        for o in range(128):
+        for o in range(NO):
             for f in np.flatnonzero(keep[o]):
                 Wt = W.copy(); Wt[:, group(f), o] = 0; drops[(o, f)] = a_now - agree(Wt)
         order = sorted(drops, key=drops.get); cum, rem = 0.0, []
@@ -101,11 +103,11 @@ def prune(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, device='mps',
         for o, f in rem: keep[o, f] = False; W[:, group(f), o] = 0
         mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
         best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W)
-        path.append(dict(round=rnd + 1, removed=len(rem), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / 'S15p_model.npz', W=W.reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, keep=keep)
+        path.append(dict(round=rnd + 1, removed=len(rem), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / f'{PRE}p_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, keep=keep, logits=LOGITS)
         log(f'  round {rnd + 1}: removed {len(rem)} (neuron, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per neuron), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, start=a_ref, final=a_now, inputs_per_neuron=keep.sum(1).tolist(), path=path, seconds=time.time() - t0)
-    (OUT / 'S15p_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned S15: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%'); return r
+    (OUT / f'{PRE}p_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned {PRE}: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%'); return r
 
 
 def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S15p', out='S15q', device='mps', log=print):
@@ -113,7 +115,7 @@ def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S1
     agreement drop (≤ tol points) — then re-tuned; stops when the re-tuned model falls below the start by more than tol"""
     import torch
     t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
-    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, 128).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, -1).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
     def agree(Wx):
         with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
     sd = Ed.std(0)                                                                                   # (16, K): spread of every pooled term over jets
@@ -130,7 +132,7 @@ def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S1
         if lo == 0: log('  nothing removable within the tolerance: stop'); break
         W = after(lo); mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
         best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'term prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W); nt = int((W[:, :K - 2] != 0).sum())
-        path.append(dict(round=rnd + 1, removed=int(lo), terms=nt, agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True)
+        path.append(dict(round=rnd + 1, removed=int(lo), terms=nt, agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS)
         log(f'  round {rnd + 1}: removed {lo} statements → {nt} left, re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, src=src, start=a_ref, final=a_now, terms_start=n0, terms=int((W[:, :K - 2] != 0).sum()), path=path, seconds=time.time() - t0)
@@ -142,11 +144,11 @@ def share(src='S15q', out='S17', epochs=60, n_fit=100000, n_dev=20000, device='m
     reproduces the heads' current pieces jointly (least squares over a particle sample); per-head coefficients kept; re-tuned"""
     import torch
     t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
-    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, 128).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, -1).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
     def agree(Wx):
         with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
     a_src = agree(W); S = Ef[:20000]; W1 = np.zeros_like(W); W1[:, -2:] = W[:, -2:]; nst = 0
-    for o in range(128):
+    for o in range(W.shape[2]):
         for f in range(NV):
             cf = cols_of(f, NV); Wf = W[:, cf, o]                                                   # (16, 11) the heads' terms of this input
             if not np.any(Wf): continue
@@ -157,7 +159,7 @@ def share(src='S15q', out='S17', epochs=60, n_fit=100000, n_dev=20000, device='m
             W1[:, best[1], o] = best[2]; nst += 1
     a1 = agree(W1); log(f'  {src}: {100 * a_src:.2f}%; one shared statement per (neuron, input), per-head coefficients: {100 * a1:.2f}% before tuning ({nst} statements), {time.time() - t0:.0f} s')
     mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1; best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S17')
-    np.savez(OUT / f'{out}_model.npz', W=best[1].reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, shared=True)
+    np.savez(OUT / f'{out}_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, shared=True, logits=LOGITS)
     r = dict(experiment=out, src=src, start_src=a_src, start=a1, best=best[0], best_epoch=best[2], statements=nst, coefficients=int((best[1][:, :K - 2] != 0).sum()), seconds=time.time() - t0)
     (OUT / f'{out}_shared.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {nst} statements (one per neuron and input, shared by the heads; {r["coefficients"]} per-head coefficients): {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
 

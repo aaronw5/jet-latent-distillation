@@ -27,7 +27,9 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
     # targets: the 128 neurons (after the final LN) or the class token before it
     D = RESULTS / '_cls' / 'full'; T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
     Hf = np.asarray(Jf['H'][rf], np.float32); Hd = np.asarray(Jd['H'][rd], np.float32)
-    if variant == 'pre':
+    if os.environ.get('LOGITS'):                                                   # S18: the 10 class logits directly, no last layer
+        Yf, Yd = Lf.astype(np.float32), Ld.astype(np.float32); head = lambda y: y; variant = 'post'
+    elif variant == 'pre':
         from .e4_layernorm import pre_ln
         Cf, _, _ = pre_ln('fit', n_fit, device); Cd_all, _, _ = pre_ln('dev', 100000, device); Yf, Yd = Cf, Cd_all[rd]; head = lambda y: model.fc(model.norm(y))
     else:
@@ -35,7 +37,7 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
     with torch.no_grad(): chk = float((head(T(Yd)).argmax(1).cpu().numpy() == ref).mean())
     log(f'  {variant}: {16 * K} pooled terms per jet; ParT\'s own targets through the last layer: {100 * chk:.2f}% (must be ≈ 100), {time.time() - t0:.0f} s')
     G = Bf.T.astype(np.float64) @ Bf / n; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); ok_ = d > 1e-9
-    W0 = np.zeros((16 * K, 128)); Gs = G[np.ix_(ok_, ok_)] / d[ok_][:, None] / d[ok_][None]
+    NO = Yf.shape[1]; W0 = np.zeros((16 * K, NO)); Gs = G[np.ix_(ok_, ok_)] / d[ok_][:, None] / d[ok_][None]
     W0[ok_] = np.linalg.solve(Gs + 1e-4 * np.eye(ok_.sum()), (Bf[:, ok_].T.astype(np.float64) @ Yf / n) / d[ok_][:, None]) / d[ok_][:, None]
     ev, Q = np.linalg.eigh(Gs); ev = np.maximum(ev, 1e-3 * ev.max()); Mw = np.zeros((16 * K, ok_.sum())); Mw[ok_] = Q / np.sqrt(ev)[None] / d[ok_][:, None]
     U = torch.nn.Parameter(T(np.sqrt(ev)[:, None] * (Q.T @ (d[ok_][:, None] * W0[ok_])))); Mt = T(Mw)
@@ -51,7 +53,7 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
             ag = agree()
             if ag > best[0]: best = (ag, U.detach().clone(), ep + 1)
             if ep % 50 == 49: log(f'  S15 {variant} epoch {ep + 1}: {100 * ag:.2f}% (best {100 * best[0]:.2f}%), {time.time() - t0:.0f} s')
-    W = (Mt @ best[1]).cpu().numpy(); tag = os.environ.get('OUT_TAG', 'S15'); np.savez(OUT / f'{tag}_{variant}_model.npz', W=W, kn=kn)
+    W = (Mt @ best[1]).cpu().numpy(); tag = os.environ.get('OUT_TAG', 'S15'); np.savez(OUT / f'{tag}_{variant}_model.npz', W=W, kn=kn, logits=bool(os.environ.get('LOGITS')))
     r = dict(experiment=f'{tag}_{variant}', terms=int(16 * K), least_squares=a0, best=best[0], best_epoch=best[2], check=chk, seconds=time.time() - t0)
     (OUT / f'{tag}_{variant}.json').write_text(json.dumps(r, indent=1)); log(f'{tag} {variant}: the 128 neurons directly as per-particle formulas with ParT weights (no head structure / MLP): {100 * best[0]:.2f}% (least squares {100 * a0:.2f}%)'); return r
 

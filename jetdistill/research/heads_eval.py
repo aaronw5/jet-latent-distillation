@@ -56,7 +56,7 @@ def evaluate(tags='S5', which='full_test', device='mps', chunk=5000, log=print):
         out = {}
         for t in tags:
             At = uniformize(A.copy(), M, blocks[t]); P, _ = phi_pooled(J, r, At, kn[t])
-            if direct[t]: out[t] = np.concatenate([model.fc(T(P[a:a + 5000].reshape(min(5000, len(r) - a), -1)) @ Wt[t]).cpu().numpy() for a in range(0, len(r), 5000)])
+            if direct[t]: out[t] = np.concatenate([(lambda y: y if bool(Ms[t].get('logits', False)) else model.fc(y))(T(P[a:a + 5000].reshape(min(5000, len(r) - a), -1)) @ Wt[t]).cpu().numpy() for a in range(0, len(r), 5000)])
             else: out[t] = np.concatenate([downstream(model, *torch.einsum('nhk,hko->nho', T(P[a:a + 5000]), Wt[t]).split(8, 1)).cpu().numpy() for a in range(0, len(r), 5000)])
         return out
     if which == 'dev':
