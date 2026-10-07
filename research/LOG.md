@@ -414,3 +414,17 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   no attention) started.
 - User (12:05): the model meant is the 97 % formula α **with formula values**, full loop; the ParT-values variant (W1) may be
   done too but its page must be about what goes into each weight (the score formulas), not values.
+
+### W1 loop, A11, P1 (clock ~12:15)
+- **W1o**: the A2h selection formulas with at most one term per input per head: 97.04 → 96.54 % (least squares, 5,024
+  statements from 29,952 coefficients) → re-tuned **96.97 %**. **W1p**: pruned by (head, input), 5 rounds, 5,024 →
+  **3,664 pairs** (77–297 inputs per head), **96.85 %**. Rank agreement of the formula weights with ParT's: block-1 heads
+  high, block-2 heads τ ≈ 0.16–0.18 — the block-2 selection is barely reproduced, and ParT's values carry it anyway.
+  Page builder `alpha_page.py` (per head: what goes into the weight, every statement a drop-down, formula vs ParT's
+  weights on example jets). 2M test evaluator for formula-α models to be written.
+- **A11** (the formula α with formula values, direct structure): S15p's neurons with the formula α as they are 21.8 %;
+  neurons refit on the formula-α pooled terms 74.7 %, tuned 77.1 %; everything tuned together **78.9 %**. Below the
+  per-head all-formula A10 (84.1 %): the direct structure, linear in the pooled terms, cannot absorb the selection's errors
+  the way ParT's values do (97 %) — the values' context is what compensates a wrong selection.
+- **P1** (no attention at all: the 12 hardest + 6 most displaced particles in fixed order, hinge terms + jet-level inputs
+  → 128 neurons): least squares ~, tuned **76.0 %**. A fixed ordering is a worse selection than the jet-level formulas (80 %).
