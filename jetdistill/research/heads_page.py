@@ -175,7 +175,7 @@ def page(tag, outdir, device='mps', log=print):
         panels += f'''<div class="head{" on" if i == 0 else ""}" id="h{i}"><h2>Block {hd["block"]}, head {hd["head"]} <span class="cnt">— removing it: −{100 * hd["drop"]:.2f} pt agreement · class token’s own share {hd["self_weight"]:.2f} · {hd["eff_particles"]:.1f} effective particles · selection: {selmode(hd)}</span></h2>
 {rule}<h3>The rule applied to a jet</h3><div class="slot"></div><h3>What the selection does on average</h3><div class="card"><div class="grid">{prof}</div><div class="cnt">{flags}</div></div>
 <h3>What it sums over the selected particles: the 16 value neurons</h3><div class="card"><span class="cnt">inputs by total weight:</span>{fb}<div class="grid">{cv}</div><div style="margin-top:8px"><span class="cnt">neuron:</span> {nb}</div>{np_}</div></div>'''
-    js = """const EX=%s, CL=%s; let H=0, JJ=0;
+    js = """const EX=__EX__, CL=__CL__; let H=0, JJ=0;
 function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.hb').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.head')[i].querySelector('.slot').appendChild(document.getElementById('jetbox'));drawJet();}
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
 function showNeu(i,j){for(let k=0;k<16;k++){document.getElementById('n'+i+'_'+k).classList.toggle('on',k==j);}document.querySelectorAll('#h'+i+' .nbtn').forEach((e,k)=>e.classList.toggle('on',k==j));}
@@ -187,7 +187,7 @@ function drawJet(){const e=EX[JJ], h=e.heads[H], hasS=h.s!==undefined; let mx=Ma
  document.getElementById('jet').innerHTML=s+'</table>'; document.getElementById('contrib').innerHTML=hasS?'<span class="cnt">click a particle</span>':'<span class="cnt">this head’s weights are '+(hasS?'':'not from a formula on this page')+'</span>';}
 function showP(k){const e=EX[JJ], h=e.heads[H]; if(h.top===undefined) return; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
-setHead(0);""" % (json.dumps(an['examples']), json.dumps(CLASSES))
+setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES))
     shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k != 'examples'}))
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
 <p class="cnt"><a href="../../index.html">← all setups</a> · <a href="../../research/index.html">research log</a></p><h1>{html.escape(title)}</h1>
