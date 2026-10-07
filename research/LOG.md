@@ -392,3 +392,9 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
 - S15 pre (class token before the final LN, ParT's LN applied): 93.02 % → the post variant (93.29 %) is carried.
 - User: S15 is the model to carry (simpler, no downstream MLP, no head values): one term per input → prune → re-tune →
   2M test → a page in the JEDI-linear neuron layout (128 neurons). α stays ParT's.
+
+### S15 loop (clock ~11:45)
+- One term per input per (neuron, head): least squares 87.41 % → re-tuned **92.85 %** (77,824 terms from 466,944).
+- Pruning by (neuron, input), 8 rounds: 4,864 → **367 pairs**, 0–33 inputs per neuron, **92.77 %**. 2M test running.
+- User (11:50): after S15, continue the α loop; and run the full loop on the 97 % model (formula α, ParT's values):
+  one term per input, prune, tune toward ParT's probabilities, 2M test, page — "W1".
