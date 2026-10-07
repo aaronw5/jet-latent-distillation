@@ -365,3 +365,9 @@ hard cut uniform over ParT's top 10 / 5 / 3 per head 79.19 / 76.68 / 73.41 %. �
 ranking: the per-jet ORDER of the particles carries 90 of the 93 points, the magnitudes < 3. New target (A9): a
 per-head formula RANKER (pairwise ranking loss against ParT's order within each jet) + a fixed per-rank weight
 profile — a far easier formula target than the softmax scores.
+
+## Direction (user, ~11:10): α is a per-particle classifier (each particle's weight from its own features); the 83 %
+models are starting points — train and tune the thresholds until > 90 %. Identify the most promising and tune hard.
+- A9: formula ranker (ordering carries 90 of the 93 points) → then S5 values re-tuned on it.
+- A10: the all-formula per-head model with coefficients AND thresholds learnable, long cosine schedule, 100k jets,
+  started from the best weights (A2h / A9) and values (S12A2h).
