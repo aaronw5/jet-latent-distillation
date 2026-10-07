@@ -51,11 +51,14 @@ def evaluate(tags='S5', which='full_test', device='mps', chunk=5000, log=print):
         return to_standard(W_, Mt_['knv'], nv_)
     Wt = {t: T(std_W(Ms[t])) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] if 'uniform' in Ms[t] else [] for t in tags}
     J = jets('full', which)
-    direct = {t: Ms[t]['W'].ndim == 2 for t in tags}                      # S15-type: the 128 neurons = all heads' pooled terms @ W → ParT's last layer
+    direct = {t: Ms[t]['W'].ndim == 2 for t in tags}; afrom = {t: str(Ms[t].get('alpha_from', '')) for t in tags}
+    if any(afrom.values()):
+        from .direct_alpha import zfun, formula_alpha
+        zf = zfun(model, device)                      # S15-type: the 128 neurons = all heads' pooled terms @ W → ParT's last layer
     def logits_of(A, M, r):
         out = {}
         for t in tags:
-            At = uniformize(A.copy(), M, blocks[t]); P, _ = phi_pooled(J, r, At, kn[t])
+            At = formula_alpha(afrom[t], J, r, model, zf(J, r, M), device) if afrom[t] else uniformize(A.copy(), M, blocks[t]); P, _ = phi_pooled(J, r, At, kn[t])
             if direct[t]: out[t] = np.concatenate([(lambda y: y if bool(Ms[t].get('logits', False)) else model.fc(y))(T(P[a:a + 5000].reshape(min(5000, len(r) - a), -1)) @ Wt[t]).cpu().numpy() for a in range(0, len(r), 5000)])
             else: out[t] = np.concatenate([downstream(model, *torch.einsum('nhk,hko->nho', T(P[a:a + 5000]), Wt[t]).split(8, 1)).cpu().numpy() for a in range(0, len(r), 5000)])
         return out

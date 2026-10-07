@@ -12,7 +12,7 @@ from .heads import extract, phi_pooled, rows_of_split, OUT
 from .one_term import extend, cols_of
 
 NV = 38
-PRE = os.environ.get('DPRE', 'S15'); LOGITS = bool(os.environ.get('LOGITS'))
+PRE = os.environ.get('DPRE', 'S15'); LOGITS = bool(os.environ.get('LOGITS')); AF = os.environ.get('ALPHA_FROM', ''); XA = dict(alpha_from=AF) if AF else {}
 
 
 def load(n_fit, n_dev, device, log):
@@ -20,6 +20,9 @@ def load(n_fit, n_dev, device, log):
     for p in model.parameters(): p.requires_grad_(False)
     _, Af, Mf, Lf, _ = extract(model, 'fit', n_fit, device); _, Ad, Md, Ld, _ = extract(model, 'dev', n_dev, device)
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rf, rd = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev)
+    if AF:                                                                                   # the combined models: the weights from the selection formulas, not ParT
+        from .direct_alpha import zfun, formula_alpha
+        zf = zfun(model, device); Af = formula_alpha(AF, Jf, rf, model, zf(Jf, rf, Mf), device); Ad = formula_alpha(AF, Jd, rd, model, zf(Jd, rd, Md), device); log(f'  weights from the selection formulas {AF}')
     P15 = np.load(OUT / f'{PRE}_post_model.npz'); kn = P15['kn']
     Pf, _ = phi_pooled(Jf, rf, Af, kn); Pd, _ = phi_pooled(Jd, rd, Ad, kn)
     Ef, Ed = extend(Pf, kn[:, :NV], NV), extend(Pd, kn[:, :NV], NV)                      # (n, 16, 420)
@@ -73,7 +76,7 @@ def one_term(n_fit=100000, n_dev=20000, epochs=150, device='mps', log=print):
     nterm = int((W1[:, :K - 2] != 0).sum()); log(f'  one term per input per (neuron, head): least squares {100 * a1:.2f}% ({nterm} terms), {time.time() - t0:.0f} s')
     mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1
     best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S15 one-term')
-    np.savez(OUT / f'{PRE}o_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS)
+    np.savez(OUT / f'{PRE}o_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS, **XA)
     r = dict(experiment=f'{PRE}o', start=a0, one_term_ls=a1, best=best[0], best_epoch=best[2], terms=nterm, terms_start=int((We[:, :6 * NV] != 0).sum()), seconds=time.time() - t0)
     (OUT / f'{PRE}o_one_term.json').write_text(json.dumps(r, indent=1)); log(f'{PRE}o: {100 * best[0]:.2f}% with one term per input per (neuron, head) ({nterm} terms; start {r["terms_start"]})'); return r
 
@@ -103,7 +106,7 @@ def prune(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, device='mps',
         for o, f in rem: keep[o, f] = False; W[:, group(f), o] = 0
         mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
         best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W)
-        path.append(dict(round=rnd + 1, removed=len(rem), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / f'{PRE}p_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, keep=keep, logits=LOGITS)
+        path.append(dict(round=rnd + 1, removed=len(rem), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / f'{PRE}p_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, keep=keep, logits=LOGITS, **XA)
         log(f'  round {rnd + 1}: removed {len(rem)} (neuron, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per neuron), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, start=a_ref, final=a_now, inputs_per_neuron=keep.sum(1).tolist(), path=path, seconds=time.time() - t0)
@@ -132,7 +135,7 @@ def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S1
         if lo == 0: log('  nothing removable within the tolerance: stop'); break
         W = after(lo); mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
         best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'term prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W); nt = int((W[:, :K - 2] != 0).sum())
-        path.append(dict(round=rnd + 1, removed=int(lo), terms=nt, agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS)
+        path.append(dict(round=rnd + 1, removed=int(lo), terms=nt, agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, logits=LOGITS, **XA)
         log(f'  round {rnd + 1}: removed {lo} statements → {nt} left, re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, src=src, start=a_ref, final=a_now, terms_start=n0, terms=int((W[:, :K - 2] != 0).sum()), path=path, seconds=time.time() - t0)
@@ -159,7 +162,7 @@ def share(src='S15q', out='S17', epochs=60, n_fit=100000, n_dev=20000, device='m
             W1[:, best[1], o] = best[2]; nst += 1
     a1 = agree(W1); log(f'  {src}: {100 * a_src:.2f}%; one shared statement per (neuron, input), per-head coefficients: {100 * a1:.2f}% before tuning ({nst} statements), {time.time() - t0:.0f} s')
     mask = (W1 != 0).astype(np.float32); mask[:, -2:] = 1; best = tune(model, Ef, Ed, Hf, Lf, ref, W1, mask, epochs, device=device, log=log, label='S17')
-    np.savez(OUT / f'{out}_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, shared=True, logits=LOGITS)
+    np.savez(OUT / f'{out}_model.npz', W=best[1].reshape(16 * K, -1), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True, shared=True, logits=LOGITS, **XA)
     r = dict(experiment=out, src=src, start_src=a_src, start=a1, best=best[0], best_epoch=best[2], statements=nst, coefficients=int((best[1][:, :K - 2] != 0).sum()), seconds=time.time() - t0)
     (OUT / f'{out}_shared.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {nst} statements (one per neuron and input, shared by the heads; {r["coefficients"]} per-head coefficients): {100 * best[0]:.2f}% (from {src} {100 * a_src:.2f}%)'); return r
 

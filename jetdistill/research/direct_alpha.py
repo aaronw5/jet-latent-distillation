@@ -27,10 +27,12 @@ def run(n_fit=30000, n_dev=20000, epochs=20, n_jet=100000, lr=3e-4, bs=500, devi
     Zf_all, Zd = zfeat(Jf, Jd, n_jet, rd, Mfa, Md); Zf = Zf_all[:n_fit]
     PA = np.load(OUT / f'{at}_alpha.npz'); PW = np.load(OUT / f'{wt}_model.npz'); K = 11 * NV + 2; W0 = PW['W'].reshape(16, K, 128).astype(np.float32); knv = PW['knv']
     T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
-    knt, mut, sdt, kvt = T(PA['kn']), T(PA['mu']), T(PA['sd']), T(knv); Kc = PA['kn'].shape[0]
-    def phi(F): return torch.cat([(F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(Kc)], -1)
+    knt, mut, sdt, kvt = T(PA['kn']), T(PA['mu']), T(PA['sd']), T(knv); Kc = PA['kn'].shape[0]; EXT = 'W' in PA.files            # W-family α (extended basis with intercept) or A2h-family
+    def phi(F):
+        if EXT: return torch.cat([torch.ones_like(F[..., :1]), (F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(Kc)] + [torch.clamp(knt[k] - F, min=0) / sdt for k in range(Kc)], -1)
+        return torch.cat([(F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(Kc)], -1)
     def tv(X): return torch.cat([X] + [torch.clamp(X - kvt[k], min=0) for k in range(5)] + [torch.clamp(kvt[k] - X, min=0) for k in range(5)], -1)      # (n, P, 418)
-    Wc = torch.nn.Parameter(T(PA['coef'].T)); Wz = torch.nn.Parameter(T(PA['cz'].T)); mask = T((W0 != 0).astype(np.float32)); mask[:, -2:] = 1
+    Wc = torch.nn.Parameter(T(PA['W'] if EXT else PA['coef'].T)); Wz = torch.nn.Parameter(T(PA['cz'].T)); mask = T((W0 != 0).astype(np.float32)); mask[:, -2:] = 1
     sdc = np.ones((16, K), np.float32); Wv = torch.nn.Parameter(T(W0)); fc = model.fc
     def logits(F, ok, Z):
         n = F.shape[0]; P = int(ok.sum(1).max()); F, ok = F[:, :P].float(), ok[:, :P]
@@ -88,8 +90,40 @@ def run(n_fit=30000, n_dev=20000, epochs=20, n_jet=100000, lr=3e-4, bs=500, devi
         log(f'  {tag} epoch {ep + 1}: {100 * ag:.2f}% (best {100 * best[0]:.2f}% at {best[2]}), {time.time() - t0:.0f} s')
     Wc2, Wz2, Wv2 = (p.cpu().numpy() for p in best[1])
     np.savez(OUT / f'{tag}_model.npz', W=(Wv2 * mask.cpu().numpy()).reshape(16 * K, 128), kn=PW['kn'], knv=knv, nv=NV, basis='extended', direct=True, coef=Wc2.T, cz=Wz2.T, akn=PA['kn'], amu=PA['mu'], asd=PA['sd'])
+    np.savez(OUT / f'{tag}_alpha.npz', **({'W': Wc2} if EXT else {'coef': Wc2.T}), cz=Wz2.T, kn=PA['kn'], mu=PA['mu'], sd=PA['sd'], basis='extended' if EXT else 'standard')       # the tuned selection formulas
+    from .one_term import to_standard
+    np.savez(OUT / f'{tag}_post_model.npz', W=to_standard((Wv2 * mask.cpu().numpy()).astype(np.float64), knv, NV).reshape(16 * (6 * NV + 2), 128), kn=PW['kn'])   # start for the neuron loop (direct_loop, DPRE=tag)
     r = dict(experiment=tag, alpha=at, w=wt, n_fit=n_fit, epochs=epochs, s15_as_is=a_s15, least_squares=a_ls, stage1=bw[0], start=a0, best=best[0], best_epoch=best[2], path=path, seconds=time.time() - t0)
     (OUT / f'{tag}_direct_alpha.json').write_text(json.dumps(r, indent=1)); log(f'{tag}: direct-128 neurons with formula attention, all tuned: {100 * best[0]:.2f}% (start {100 * a0:.2f}%)'); return r
+
+
+def zfun(model, device='mps'):
+    """the jet-level inputs of the class-token share formulas for any jets: z(J, rows, mask)"""
+    from .ceiling_jet import matrix
+    from sklearn.preprocessing import QuantileTransformer
+    Jf = jets('full', 'fit'); _, _, Mf, _, _ = extract(model, 'fit', 100000, device); keys = [k for k in Jf['Q']]; Q100 = matrix(Jf, keys)[:100000]; okq = np.isfinite(Q100).all(0) & (Q100.std(0) > 0)
+    qt = QuantileTransformer(n_quantiles=500, output_distribution='normal', subsample=50000, random_state=0).fit(Q100[:, okq])
+    return lambda J, rows, M: np.concatenate([np.clip(qt.transform(matrix(J, keys)[rows][:, okq]), -5, 5), np.log(M.sum(1, keepdims=True)), np.ones((len(M), 1))], 1).astype(np.float32)
+
+
+def formula_alpha(tag, J, rows, model, Z, device='mps', chunk=2000, bs=500):
+    """the attention weights (2, n, 8, 129) of the jets `rows` from the selection formulas `tag`_alpha.npz (W- or A2h-family)"""
+    import torch
+    PA = np.load(OUT / f'{tag}_alpha.npz'); EXT = 'W' in PA.files; T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
+    knt, mut, sdt, Kc = T(PA['kn']), T(PA['mu']), T(PA['sd']), PA['kn'].shape[0]; Wc = T(PA['W'] if EXT else PA['coef'].T); Wz = T(PA['cz'].T)
+    def phi(F):
+        if EXT: return torch.cat([torch.ones_like(F[..., :1]), (F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(Kc)] + [torch.clamp(knt[k] - F, min=0) / sdt for k in range(Kc)], -1)
+        return torch.cat([(F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(Kc)], -1)
+    A = np.zeros((2, len(rows), 8, 129), np.float32)
+    with torch.no_grad():
+        for a in range(0, len(rows), chunk):
+            r = rows[a:a + chunk]; F, ok = feats(J, r, model); F = np.concatenate([F, rel_feats(F, ok)], -1)
+            for c0 in range(0, len(r), bs):
+                sl = slice(c0, c0 + bs); okc = ok[sl]; P = int(okc.sum(1).max()); Ft, okt = T(F[sl, :P]), T(okc[:, :P], torch.bool)
+                s = (phi(Ft) @ Wc).masked_fill(~okt[..., None], -1e9); rel = torch.softmax(s, 1); acls = torch.sigmoid(-(T(Z[a + c0:a + c0 + len(okc)]) @ Wz))
+                al = torch.cat([acls[:, :, None], (1 - acls)[:, :, None] * rel.permute(0, 2, 1)], 2).cpu().numpy()            # (b, 16, 1+P)
+                for h in range(16): A[h // 8, a + c0:a + c0 + len(okc), h % 8, :1 + P] = al[:, h]
+    return A
 
 
 if __name__ == '__main__':
