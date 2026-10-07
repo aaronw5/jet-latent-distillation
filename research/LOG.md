@@ -127,3 +127,21 @@ research/results/S1_cls_attention.json (overwritten by the corrected run).
   particles matter depends on the whole jet (bilinear: Σ_k g_k(jet) f_k(particle)).
 - The S1 statements "hardest charged / wide-angle / displaced heads" and "block 2 = plain average" are withdrawn
   (artefacts of the normalized query).
+
+### S4b — per-head formulas, ParT's own attention weights (2026-10-07 03:20)
+research/results/S4_heads_oracle.json. 40k fitting / 20k validation jets; per head: 230 pooled terms (Σ_i α_hi ·
+hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least squares only.
+- One head as a formula, the rest ParT: 97.1–99.8 %. All 8 block-2 heads: 98.4 %; all 8 block-1 heads: 86.1 %;
+  **all 16 heads: 82.5 %** — above every previous formula result (80.2 %), before any tuning.
+- Head-output R² is low (medians 0.03–0.58), yet agreement is high: the downstream (LNs) is forgiving, and least
+  squares spends effort equally on all 256 outputs → tuning toward ParT's probabilities next (S5).
+- Plan: S5 tune (JEDI step 2) through ParT's exact downstream; S6 formula weights: score = query·key, block 1's query
+  is a constant (key per particle → formula), block 2's query = ParT's own query projection of the formula class token.
+
+### S5 — per-head formulas tuned toward ParT (2026-10-07 03:35)
+- First run (plain coefficients scaled by term spread, Adam lr 1e-3) diverged (82.5 → 0.8 %): correlated hinge terms.
+- S5b: per head, tuned in whitened terms (Gram eigenbasis), lr 3e-4, λ = 0.01 on the head outputs, 40k fitting /
+  20k validation jets: 82.5 % (least squares) → 84.7 / 86.1 / 87.2 / 88.1 / 88.8 / 89.5 / 89.8 / 90.1 / 90.4 /
+  **90.6 %** after 100 epochs, still rising.
+- With ParT's own attention weights, the head values are sums over particles of per-particle physics formulas
+  (JEDI-linear's structure) and reproduce ParT to > 90 %. The open part: the weights as formulas (S6).
