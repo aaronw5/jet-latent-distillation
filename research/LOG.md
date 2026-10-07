@@ -493,3 +493,5 @@ that drive it; neurons sorted by importance everywhere.
   W2, and the **Try-a-jet** page (jet/).
 - **S18q** (the 10 class scores directly, statements pruned: 3,856 → 3,477, dev 92.69 %): **92.37 % on the 2M test jets**
   (accuracy 0.8397, AUC 0.9835). Ten formulas — one per class, one f per head — replace the 128 neurons and ParT's last layer.
+- **W1p on the 2M test jets: 96.75 %** (accuracy 0.8561, AUC 0.9870; ParT 0.861 / 0.987) — the selection written as formulas
+  (3,664 head–input pairs, one term per input), ParT's values: within 3.3 pt of ParT and its accuracy within 0.5 pt.
