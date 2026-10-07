@@ -73,7 +73,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         g = sum(c * (xs if k == 'lin' else np.maximum(0, xs - t) if k == 'gt' else np.maximum(0, t - xs)) for c, k, t in terms_all); return 1 if np.polyfit(xs, g, 1)[0] >= 0 else -1
     neurons = []; sdV = V.std(0)
     for n in range(128):
-        ins = []
+        ins = []; FIRE = {}
         for f in range(NV):
             heads_f = []
             for h in range(16):
@@ -83,8 +83,12 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                     heads_f.append(dict(head=h, coef=c, kind=k, thr=t, fires=float(fire.mean()), kinds={k2: float(v2[fire].mean()) if fire.any() else 0.0 for k2, v2 in KR.items()},
                                         hard=float(ZR[fire].mean()) if fire.any() else 0.0, by_class=byclass(con), size=float(np.abs(con).sum() / n_dev)))
             if not heads_f: continue
-            imp = float(sum(E[:, h, cols(f)] @ W[h, cols(f), n] for h in range(16)).std())
-            ins.append(dict(feature=names[f], f=f, importance=imp, heads=sorted(heads_f, key=lambda d: -d['size']), direction=direction([(d['coef'], d['kind'], d['thr']) for d in heads_f], f)))
+            imp = float(sum(E[:, h, cols(f)] @ W[h, cols(f), n] for h in range(16)).std()); heads_f.sort(key=lambda d: -d['size'])
+            shared = len({(hd['kind'], hd['thr']) for hd in heads_f}) == 1; h0 = heads_f[0]; xf = XR[:, f]
+            fire = np.ones(len(xf), bool) if h0['kind'] == 'lin' else (xf > h0['thr']) if h0['kind'] == 'gt' else (xf < h0['thr']); FIRE[f] = fire
+            stat = dict(kind=h0['kind'], thr=h0['thr'], fires=h0['fires'], kinds=h0['kinds'], hard=h0['hard'], size=float(sum(hd['size'] for hd in heads_f)),
+                        by_class=[float(sum(hd['by_class'][c] for hd in heads_f)) for c in range(10)], coefs=[(hd['head'], hd['coef']) for hd in heads_f])
+            ins.append(dict(feature=names[f], f=f, importance=imp, heads=heads_f, shared=shared, stat=stat, direction=direction([(d['coef'], d['kind'], d['thr']) for d in heads_f], f)))
         ins.sort(key=lambda d: -d['importance']); v = V[:, n]
         Va = Lm - np.outer(v - v.mean(), FW[:, n]); drop = a0 - float((Va.argmax(1) == ref).mean())
         means = [float(v[ytrue == c].mean()) for c in range(10)]; auc = [float(roc_auc_score(ytrue == c, v)) if 0 < (ytrue == c).sum() < len(v) else .5 for c in range(10)]
@@ -98,19 +102,16 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         title = (ph(ins[0]) if ins else 'constant') + (f', {ph(ins[1])}' if len(ins) > 1 else '')
         big = int(np.argmax(means)); sep = int(np.argmax(np.abs(np.array(auc) - .5)))
         hs = np.array([float(np.abs(E[:, h, :] @ W[h, :, n] - (E[:, h, :] @ W[h, :, n]).mean()).mean()) for h in range(16)]); hs = hs / (hs.sum() or 1)
-        groups = []
-        if ins:
-            cuts = []
-            for d in ins[:2]:
-                kt = [t for hd in d['heads'] for t in [hd['thr']] if t is not None]; cuts.append((d['feature'], d['f'], float(np.median(kt)) if kt else float(np.median(XR[:, d['f']]))))
+        groups = []; hinges = [d for d in ins if d['stat']['kind'] != 'lin'][:8]                   # the patterns of the top 8 if-statements (≤ 256), the populated ones
+        if hinges:
             awt = AR.mean(0); contrib = G[:, n]; tot_c = np.abs(contrib).sum() or 1.0; fbar = (AR * FH[:, :, n]).sum(0) / np.maximum(AR.sum(0), 1e-12)
-            ms = [[(f'{n_} < {t_:.3g}', XR[:, fi] < t_), (f'{n_} ≥ {t_:.3g}', XR[:, fi] >= t_)] for n_, fi, t_ in cuts]
-            combos = [(a[0] + ' and ' + b[0], a[1] & b[1]) for a in ms[0] for b in ms[1]] if len(ms) == 2 else ms[0]
-            for name, g in combos:
-                ng = int(g.sum())
-                if ng == 0: continue
-                groups.append(dict(name=name, share=ng / len(g), mean_f=float(fbar[g].mean()), mean_w=float(awt[g].mean() * nmean), contrib=float(contrib[g].sum() / tot_c),
-                                   kinds={k_: float(v_[g].mean()) for k_, v_ in KR.items()}, hard=float(ZR[g].mean()), by_class=[float(contrib[g & (YR == c)].sum() / ncls[c]) for c in range(10)]))
+            Mk = np.stack([FIRE[d['f']] for d in hinges], 1); code = (Mk * (1 << np.arange(len(hinges)))).sum(1); short = lambda d: f"{d['feature']} {'>' if d['stat']['kind'] == 'gt' else '<'} {d['stat']['thr']:.3g}"
+            pats = []
+            for cval in np.unique(code):
+                g = code == cval; on = [short(d) for b, d in enumerate(hinges) if cval >> b & 1]; off = [short(d) for b, d in enumerate(hinges) if not cval >> b & 1]
+                pats.append(dict(name=('fires: ' + ', '.join(on) if on else 'no statement fires') + (' · not: ' + ', '.join(off) if off and on else ''), fires=on, share=float(g.mean()), mean_f=float(fbar[g].mean()), mean_w=float(awt[g].mean() * nmean),
+                                 contrib=float(contrib[g].sum() / tot_c), abs_share=float(np.abs(contrib[g]).sum() / tot_c), kinds={k_: float(v_[g].mean()) for k_, v_ in KR.items()}, hard=float(ZR[g].mean()), by_class=[float(contrib[g & (YR == c)].sum() / ncls[c]) for c in range(10)]))
+            pats.sort(key=lambda g: -g['abs_share']); groups = pats[:10]
         neurons.append(dict(n=n, title=title, inputs=ins, strength=strength, drop=drop, r2=r2, means=means, auc=auc, effect=eff, fc=[float(FW[c, n]) for c in range(10)], bias=float(W[:, -1, n].sum()),
                             cls=[float(W[h, -2, n]) for h in range(16)], head_share=hs.round(4).tolist(), groups=groups,
                             measures=('Sums over the particles of the jet, with each head’s weights, a formula that ' + '; '.join(parts) + '.') if ins else 'A constant plus the class-token terms: no particle input.',
@@ -242,6 +243,19 @@ def page(tag, outdir, device='mps', log=print):
         out = []
         for din in d['inputs']:
             feat = din['feature']
+            if din.get('shared'):
+                st = din['stat']; k = st['kind']; line = stmt(dict(coef=1.0, kind=k, thr=st['thr']), feat).replace('add +1 · ', 'add c_h · ')
+                kinds = ', '.join(f'{k2} {100 * v2:.0f} %' for k2, v2 in sorted(st['kinds'].items(), key=lambda q: -q[1]) if v2 > .05)
+                byc = sorted(enumerate(st['by_class']), key=lambda q: -abs(q[1]))[:4]; mxc = max(abs(v2) for _, v2 in byc) or 1
+                cls = ''.join(f'<tr><td>{CLASSES[ci]}</td><td style="width:120px"><div class="bar" style="width:{100 * abs(v2) / mxc:.0f}px;background:{"#2f855a" if v2 >= 0 else "#c05621"}"></div></td><td class="num">{v2:+.3g}</td></tr>' for ci, v2 in byc)
+                when = 'always (a linear term)' if k == 'lin' else f'for {100 * st["fires"]:.0f} % of all particles'
+                coefs = ', '.join(f'{HN(h)} {c:+.3g}' for h, c in st['coefs'])
+                out.append(f'''<details class="xterm"><summary><code>{html.escape(line)}</code> <span class="cnt">typical contribution ±{din["importance"]:.3g}; {len(st["coefs"])} head{"s" if len(st["coefs"]) != 1 else ""}</span></summary>
+<div class="grid" style="margin:6px 0 4px 10px"><div><div><b>{html.escape(feat)}</b>: {html.escape(WORDS.get(feat, ""))} <span class="cnt">({html.escape(DEFS.get(feat, ""))})</span></div>
+<div style="margin-top:4px">Applied to every particle i; what it adds is weighted by each head’s attention for that particle, with the head’s own coefficient c<sub>h</sub>: Σ<sub>h</sub> c<sub>h</sub> α<sub>hi</sub> · (…). <b>c<sub>h</sub></b>: {html.escape(coefs)}. Fires {when}{"" if k == "lin" else f"; those are {kinds}; hard (pT share > 5 %) {100 * st['hard']:.0f} %"}. The amount added grows with the distance from the threshold.</div></div>
+<div><div class="cnt">distribution of this input over the particles (threshold in orange)</div><div class="hh" data-f="{html.escape(feat)}" data-thr="{'' if st['thr'] is None else st['thr']}"></div></div>
+<div><div class="cnt">what this statement adds to the neuron, per jet, by true class (all heads, α-weighted)</div><table class="bars">{cls}</table></div></div></details>''')
+                continue
             out.append(f'<div style="margin:6px 0 2px"><b>{html.escape(feat)}</b> <span class="cnt">— {html.escape(WORDS.get(feat, ""))}; typical contribution ±{din["importance"]:.3g}; {len(din["heads"])} statement{"s" if len(din["heads"]) != 1 else ""} (one per head that uses it)</span></div>')
             for hd in din['heads']:
                 line = stmt(hd, feat); k = hd['kind']
@@ -260,23 +274,23 @@ def page(tag, outdir, device='mps', log=print):
         top_cls = lambda g: ', '.join(f'{CLASSES[c]} {v:+.2f}' for c, v in sorted(enumerate(g['by_class']), key=lambda t: -abs(t[1]))[:3])
         words = ''.join(f'<li><b>{html.escape(g["name"])}</b>: {html.escape(group_words(g, CLASSES))}</li>' for g in gs)
         rows = ''.join(f'<tr><td>{html.escape(g["name"])}</td><td class="num">{100 * g["share"]:.1f} %</td><td class="num">{g["mean_f"]:+.3g}</td><td class="num">{g["mean_w"]:.2f}</td><td class="num">{100 * g["contrib"]:+.1f} %</td><td>{", ".join(f"{k} {100 * v:.0f} %" for k, v in sorted(g["kinds"].items(), key=lambda t: -t[1]) if v > .05)}; hard {100 * g["hard"]:.0f} %</td><td>{top_cls(g)}</td></tr>' for g in gs)
-        return ('<table><tr><th>particles with</th><th class="num">share of particles</th><th class="num">mean f (α-averaged over heads)</th><th class="num">mean weight ×n</th><th class="num">share of the neuron</th><th>what they are</th><th>jets where they add most (per jet)</th></tr>' + rows
+        return ('<p class="cnt" style="margin:0 0 6px">Groups = the populated firing patterns of the neuron’s largest if-statements (which statements fire for a particle), the 10 largest by their share of the neuron.</p><table><tr><th>particles for which</th><th class="num">share of particles</th><th class="num">mean f (α-averaged over heads)</th><th class="num">mean weight ×n</th><th class="num">share of the neuron</th><th>what they are</th><th>jets where they add most (per jet)</th></tr>' + rows
                 + '</table><ul style="margin:8px 0 4px 18px">' + words + '</ul><p class="cnt">mean weight ×n: the heads’ average weight on these particles times the jet’s multiplicity (1 = an average particle). Share of the neuron: their part of Σ_h Σ_i |α f| over all jets. Hard: pT share above 5 %.</p>')
     hpill = lambda d: ''.join(f'<span class="cnt" style="margin-right:6px">{HN(h)} {100 * s:.0f} %</span>' for h, s in sorted(enumerate(d['head_share']), key=lambda t: -t[1])[:4] if s > .05)
-    dd = ''
-    for d in an['neurons']:
+    dd = ''; by_imp = sorted(an['neurons'], key=lambda d: -d['strength'])
+    for d in by_imp:
         fcw = ', '.join(f'{CLASSES[c]} {d["fc"][c]:+.2f}' for c in np.argsort(-np.abs(d['fc']))[:3])
         dd += f'''<details class="nd" id="neu{d["n"] + 1}"><summary><b>Neuron {d["n"] + 1}</b> — {html.escape(d["title"])} <span class="pill" style="background:{imp_col[d["importance"]]};color:{"#fff" if d["importance"] == "major" else "#1d2433"}">{d["importance"]}</span> <span class="cnt">{len(d["inputs"])} inputs · R² {d["r2"]:.2f}</span></summary>
 <p style="margin:6px 0"><b>What it measures.</b> {html.escape(d["measures"])}</p><p style="margin:4px 0"><b>Role.</b> {html.escape(d["role"])} <span class="cnt">Scale: {html.escape(d["scale"])}.</span></p>
 <p style="margin:4px 0" class="cnt"><b>Which heads carry it:</b> {hpill(d)} (share of the neuron’s variation coming through each head’s weights). <b>In the last layer</b> it enters the class scores with weights {html.escape(fcw)}, …</p>
-<details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn, once per head; the neuron = b + Σ<sub>h</sub> [Σ<sub>i</sub> α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub>]; open a statement for its details)</span></summary>{terms_html(d)}</details>
+<details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn; the neuron = b + Σ<sub>h</sub> [Σ<sub>i</sub> α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub>]; when the heads share a statement it is listed once with each head’s coefficient c<sub>h</sub>; open a statement for its details)</span></summary>{terms_html(d)}</details>
 <details><summary><b>Formula</b></summary><pre>{html.escape(neuron_formula(d))}</pre></details>
 <details><summary><b>Python code</b> <span class="cnt">(complete, every term)</span></summary><pre>{html.escape(neuron_python(d))}</pre></details>
-<details><summary><b>Particle groups</b> <span class="cnt">(this neuron as a particle tagger: its top inputs cut at their thresholds)</span></summary>{groups_html(d["groups"])}</details>
+<details><summary><b>Particle groups</b> <span class="cnt">(this neuron as a particle tagger: the kinds of particle its if-statements single out, with what each kind does to the neuron)</span></summary>{groups_html(d["groups"])}</details>
 <details><summary><b>By class</b></summary><div class="grid"><div><b>Mean value by true class</b>{bars(d["means"], "the neuron’s mean on jets of each true class", lambda v: f"{v:.2f}", center=float(np.mean(d["means"])))}</div>
 <div><b>Separation (AUC vs the rest)</b>{bars(d["auc"], "0.5 = no separation", lambda v: f"{v:.2f}", center=0.5)}</div><div><b>Weight in the class scores</b>{bars(d["effect"], "change of each class score when the neuron rises by one standard deviation (its last-layer weight × its spread)", lambda v: f"{v:+.2f}")}</div></div></details>
 </details>'''
-    idx = ''.join(f'<a class="nbtn" href="#neu{d["n"] + 1}" style="border-left:4px solid {imp_col[d["importance"]]};text-decoration:none;color:inherit" title="{html.escape(d["title"])}" onclick="document.getElementById(\'neu{d["n"] + 1}\').open=true">{d["n"] + 1}</a>' for d in an['neurons'])
+    idx = ''.join(f'<a class="nbtn" href="#neu{d["n"] + 1}" style="border-left:4px solid {imp_col[d["importance"]]};text-decoration:none;color:inherit" title="{html.escape(d["title"])}" onclick="document.getElementById(\'neu{d["n"] + 1}\').open=true">{d["n"] + 1}</a>' for d in by_imp)
     # the heads
     hrows = ''
     for i, hd in enumerate(an['heads']):
@@ -348,7 +362,7 @@ const NAMES=__NAMES__; setJet(0);""".replace('__EX__', json.dumps(an['examples']
 <h2>The 16 heads: who weights the particles</h2><div class="card"><p class="cnt" style="margin:0 0 6px">The attention weights are ParT’s (its particle blocks → embeddings → class-token query · keys → softmax); per head and per jet. What each head selects on average, and which neurons it carries:</p>{hrows}</div>
 <h2>A jet, step by step</h2><div class="card"><div class="cnt">jet (6 per ParT class; green border = this model agrees with ParT on it):</div><div>{jb}</div><div style="margin-top:6px"><span class="cnt">neuron to follow:</span> {neusel}</div></div><div class="card" id="jet"></div><div class="card" id="contrib"></div>
 <h2>The 128 neurons</h2><div class="card"><p style="margin:0 0 6px"><b>Only {len(act)} of the 128 neurons have particle inputs after pruning</b> (neurons {', '.join(str(d['n'] + 1) for d in act)}); the others are constants plus class-token terms that hardly vary, and ParT’s last layer gives them little weight (norm of its weights on the active neurons {float(np.linalg.norm(np.array(an['fc']['W'])[:, [d['n'] for d in act]])):.1f} vs {float(np.linalg.norm(np.delete(np.array(an['fc']['W']), [d['n'] for d in act], 1))):.1f} on the rest). <b>How to read a neuron:</b> neuron = b + Σ over the 16 heads h of [ Σ over <b>every particle i of the jet</b> of α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub> ]. f<sub>h</sub> is the formula written under “head b·h·” in the statements, evaluated on that particle’s inputs; α<sub>hi</sub> is head h’s weight for that particle in this jet. Importance: how much the neuron moves the class scores (its last-layer weights × its spread), ranked over the 128 — major = top 20 %, minor = bottom half. R²: how well the formula neuron tracks ParT’s own neuron across jets.</p>
-<div style="margin:4px 0 8px"><span class="cnt">jump to:</span> {idx}</div>{dd}</div>
+<div style="margin:4px 0 8px"><span class="cnt">neurons, most important first (jump to):</span> {idx}</div>{dd}</div>
 {metrics_html}
 <h2>Definitions of the per-particle inputs</h2><div class="card"><table><tr><th>input</th><th>in words</th><th>definition (math)</th></tr>{defs_rows}</table><p class="cnt">Every input describes <b>one particle i</b> of the jet — the particle a head is summing over. “Nearest” always means nearest <b>to particle i</b>, among the <b>other particles of the same jet</b>, by the angle ΔR = √(Δη² + Δφ²).</p><p class="cnt">Code: jetdistill/part/clsfit.py (particle_features), jetdistill/research/nbr.py (nbr_features).</p></div>
 <p class="cnt">Analysis: <a href="analysis.json">analysis.json</a>. Research log: <a href="../../research/index.html">research page</a>.</p>
