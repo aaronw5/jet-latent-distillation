@@ -398,3 +398,9 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
 - Pruning by (neuron, input), 8 rounds: 4,864 → **367 pairs**, 0–33 inputs per neuron, **92.77 %**. 2M test running.
 - User (11:50): after S15, continue the α loop; and run the full loop on the 97 % model (formula α, ParT's values):
   one term per input, prune, tune toward ParT's probabilities, 2M test, page — "W1".
+- S15p anatomy (dev): after pruning only **18 of the 128 neurons have particle inputs** (1, 17, 19, 25, 26, 53, 69, 71, 79, 82,
+  84, 91, 98, 105, 116, 121, 124, 125); the other 110 are constants (their spread across jets 1e-4; ParT's last layer
+  weighs the 18 with norm 7.7 vs 1.0 for the rest). 5,872 statements, 794 of them below 0.01 per jet → statement-level
+  pruning (S15q) queued. **The class-token shares matter**: α_h,cls replaced by their means 75.3 %, the c·α_cls terms
+  removed 47.8 % — but the particles' weights sum to 1 − α_cls, so part of that is normalization. Clean test queued (S16):
+  the same fit with the particle weights renormalized to sum to 1 and no α_cls terms at all.
