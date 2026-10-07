@@ -116,3 +116,14 @@ downstream kept. Steps: oracle (ParT's true weights) → formula weights → hea
 - Correction (03:05): in ParT's class attention the query is the raw class token (attn(x_cls, u, u); only keys and
   values are LayerNorm-ed). S1 had normalized the query → S1's weights were somewhat off; S1 rerun as S1b. The exact
   downstream reimplementation (heads.py) reproduces ParT: 100 % same class, logits within 0.002.
+
+### S1b — class attention read as physics, corrected (2026-10-07 03:15) — supersedes S1
+research/results/S1_cls_attention.json (overwritten by the corrected run).
+- Block 1: all heads broad (22–29 effective particles of ~39), mild preference for harder / charged particles (head 8
+  slightly for displaced); self-weights 0.00–0.15, falling with multiplicity (corr −0.5 to −0.8). Score formulas
+  (within-jet R², own → +nbr → +pk): 0.26–0.83 → 0.41–0.87 → 0.49–0.91.
+- Block 2: more selective (8–17 effective particles), harder and charged; self-weights 0.01–0.25; scores poorly given
+  by per-particle physics (0.06–0.37 → 0.10–0.45 → 0.13–0.57): the block-2 query is block 1's output, so which
+  particles matter depends on the whole jet (bilinear: Σ_k g_k(jet) f_k(particle)).
+- The S1 statements "hardest charged / wide-angle / displaced heads" and "block 2 = plain average" are withdrawn
+  (artefacts of the normalized query).
