@@ -443,3 +443,5 @@ the values (what a head reads off a particle) are the side that needs ParT's con
 that is where the all-formula models lose (A10 84 %, A11 79 %). The two > 90 % lines are complementary: S15/S15q
 (formula content, ParT's selection, 92.6 % test) and W1 (formula selection, ParT's content, 96.9 % dev). A fully
 formula model needs formula VALUES with context — the per-particle embedding — which 3 hops of physics do not supply.
+- **W1q** (W1p pruned further, 0.25 pt per round, 8 rounds): 3,664 → **2,165 (head, input) pairs** (8–244 inputs per head),
+  **96.74 %** (from 96.85 %). Some heads become very compact (8–20 inputs), others keep ~250; test after W1p's.
