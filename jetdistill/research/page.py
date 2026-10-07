@@ -62,6 +62,12 @@ def summary():
         rows.append(('ParT’s head values; block-1 weights from per-particle score formulas', 'everything else', s7['block1_formula'], 'balanced dev 10k'))
         rows.append(('ParT’s head values; block-1 weights uniform', 'everything else', s7['block1_uniform'], 'balanced dev 10k'))
     if s8: rows.append(('per-head formula values; block 2 a plain average', 'ParT’s block-1 weights, downstream', s8['tuned']['best'], 'balanced dev 20k'))
+    for t, name in (('S5', 'per-head formula values, ParT’s weights (S5)'), ('S5rp', 'the same, readable fit and pruned to 380 head–input pairs (S5rp)'),
+                    ('S5rpc', 'the same, re-tuned against cancellation between inputs (S5rpc)'), ('S5rpc1', '<b>at most one term per input per neuron</b> (S5rpc1, 6080 terms)')):
+        m = J(f'{t}_metrics_full_test.json')
+        if m: rows.append((name + ' — 2M test jets', 'ParT’s class-attention weights, downstream', m['agreement'], f'accuracy {m["accuracy"]:.4f}, AUC {m["auc"]:.4f} (ParT {m["part"]["accuracy"]:.4f} / {m["part"]["auc"]:.4f})'))
+    s12 = J('S12_heads_S11.json')
+    if s12: rows.append(('all formulas, stagewise: α from S11 formulas (ranking × jet-level class-token share), values re-tuned (S12)', 'ParT’s downstream', s12['tuned']['best'], 'balanced dev 20k'))
     if s10: rows.append(('<b>all formulas</b>: block-1 weights and head values from per-particle physics, block 2 a plain average, tuned jointly', 'ParT’s downstream (fixed operations)', s10['best'], f'balanced dev 20k; least squares {pct(s10["least_squares"])}'))
     if pr: rows.append((f'the same, pruned to {len(pr["kept"])} of 126 per-particle features', 'ParT’s downstream', pr['final'], 'balanced dev 20k'))
     if te: rows.append(('the pruned all-formula model on the 2M test jets', 'ParT’s downstream', te['agreement'], f'accuracy {te["accuracy"]:.4f}, AUC {te["auc"]:.4f} (ParT {te["part"]["accuracy"]:.4f} / {te["part"]["auc"]:.4f})'))
