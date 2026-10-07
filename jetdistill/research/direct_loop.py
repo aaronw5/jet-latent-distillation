@@ -111,4 +111,34 @@ def prune(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, device='mps',
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
+    elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
+
+
+def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S15p', out='S15q', device='mps', log=print):
+    """statement-level pruning: single terms (neuron, input, head) removed smallest first — how many per round by bisection on the
+    agreement drop (≤ tol points) — then re-tuned; stops when the re-tuned model falls below the start by more than tol"""
+    import torch
+    t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
+    P = np.load(OUT / f'{src}_model.npz'); W = P['W'].reshape(16, K, 128).astype(np.float32); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); Edt = T(Ed)
+    def agree(Wx):
+        with torch.no_grad(): return float((torch.cat([model.fc(torch.einsum('nhk,hko->no', Edt[a:a + 5000], T(Wx))).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
+    sd = Ed.std(0)                                                                                   # (16, K): spread of every pooled term over jets
+    a_ref = a_now = agree(W); n0 = int((W[:, :K - 2] != 0).sum()); path = [dict(terms=n0, agreement=a_now)]; log(f'  start: {n0} statements, {100 * a_now:.2f}%')
+    for rnd in range(rounds):
+        hs, ks, os_ = np.nonzero(W[:, :K - 2]); size = np.abs(W[hs, ks, os_]) * sd[hs, ks]; order = np.argsort(size)
+        def after(m):
+            Wt = W.copy(); Wt[hs[order[:m]], ks[order[:m]], os_[order[:m]]] = 0; return Wt
+        lo, hi = 0, len(order)
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if a_now - agree(after(mid)) <= tol / 100: lo = mid
+            else: hi = mid
+        if lo == 0: log('  nothing removable within the tolerance: stop'); break
+        W = after(lo); mask = (W != 0).astype(np.float32); mask[:, -2:] = 1
+        best = tune(model, Ef, Ed, Hf, Lf, ref, W, mask, epochs, device=device, log=log, label=f'term prune round {rnd + 1}'); W = best[1] * mask; a_now = agree(W); nt = int((W[:, :K - 2] != 0).sum())
+        path.append(dict(round=rnd + 1, removed=int(lo), terms=nt, agreement=a_now)); np.savez(OUT / f'{out}_model.npz', W=W.reshape(16 * K, 128), kn=kn, knv=kn[:, :NV], nv=NV, basis='extended', direct=True)
+        log(f'  round {rnd + 1}: removed {lo} statements → {nt} left, re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
+        if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
+    r = dict(tol=tol, src=src, start=a_ref, final=a_now, terms_start=n0, terms=int((W[:, :K - 2] != 0).sum()), path=path, seconds=time.time() - t0)
+    (OUT / f'{out}_pruned_terms.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {r["terms"]} statements (from {n0}), {100 * a_now:.2f}%'); return r
