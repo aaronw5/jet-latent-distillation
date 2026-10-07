@@ -463,3 +463,11 @@ formula model needs formula VALUES with context — the per-particle embedding �
   first, particle groups = the firing patterns of the most discriminating statements (top 10, with descriptions).
 - S17 tuned 200 epochs: **92.27 %** (367 shared statements; S15q 92.86 % with 5,020). 2M test and page queued (batch 3 with
   S15q, S5rpc1 rebuilt, W2).
+
+### S18 — the 10 class logits directly (user, ~13:10)
+ParT's last layer is linear, so with ParT's α the class scores themselves are per-particle formulas:
+logit_c = b_c + Σ_h [Σ_i α_hi f_hc(x_i) + c_hc α_h,cls] — 10 formulas instead of 128 neurons + a 10 × 128 matrix, same
+function class. Fit on ParT's logits (least squares, then toward ParT's probabilities + λ·R on the logits), one term per
+input per (class, head), pruned by (class, input), then single statements. Running. Pages: the 128-neuron page gets a
+class tab per class listing the neurons that go into its score (W × spread, linked to their drop-downs) and the inputs
+that drive it; neurons sorted by importance everywhere.

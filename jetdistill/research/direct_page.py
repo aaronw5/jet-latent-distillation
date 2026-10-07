@@ -30,7 +30,7 @@ HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
 
 def load_model(tag):
-    P = dict(np.load(OUT / f'{tag}_model.npz')); K = 11 * NV + 2; return dict(W=P['W'].reshape(16, K, 128).astype(np.float64), knv=P['knv'], kn=P['kn'], names=(PFEAT + NBR)[:NV])
+    P = dict(np.load(OUT / f'{tag}_model.npz')); K = 11 * NV + 2; return dict(W=P['W'].reshape(16, K, -1).astype(np.float64), knv=P['knv'], kn=P['kn'], names=(PFEAT + NBR)[:NV], logits=bool(P.get('logits', False)))
 
 
 def cols(f): return [f] + [NV + k * NV + f for k in range(5)] + [6 * NV + k * NV + f for k in range(5)]
@@ -52,7 +52,9 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
     m = load_model(tag); W, knv, names = m['W'], m['knv'], m['names']; model = ParTNetwork('full').model; model.eval()
     J = jets('full', 'dev'); rows = rows_of_split('dev', n_dev); _, A, M, L, _ = extract(model, 'dev', n_dev, device); ref = L.argmax(1); ytrue = np.asarray(J['y'][rows])
     Pd, _ = phi_pooled(J, rows, A, m['kn']); E = extend(Pd, knv, NV); V = np.einsum('nhk,hko->no', E, W)                           # the 128 neurons of the formula model
-    Hp = np.asarray(J['H'][rows], np.float32); FW = model.fc[0].weight.detach().cpu().numpy().astype(np.float64); FB = model.fc[0].bias.detach().cpu().numpy().astype(np.float64)
+    NO = W.shape[2]; LG = m['logits']
+    if LG: Hp = L.astype(np.float32); FW = np.eye(10); FB = np.zeros(10)                                     # S18: the outputs ARE the class scores
+    else: Hp = np.asarray(J['H'][rows], np.float32); FW = model.fc[0].weight.detach().cpu().numpy().astype(np.float64); FB = model.fc[0].bias.detach().cpu().numpy().astype(np.float64)
     Lm = V @ FW.T + FB; pred = Lm.argmax(1); a0 = float((pred == ref).mean()); log(f'  {tag}: {100 * a0:.2f}% on {n_dev} dev jets')
     F0, ok = particle_features(J, rows, ctx=[]); Fn = nbr_features(J['x'][rows], J['ext'][rows], J['jet'][rows]); X = np.concatenate([F0, Fn], -1)[..., :NV]
     d0s = np.abs(np.asarray(J['ext'][rows][..., 3], np.float32)) / np.maximum(np.asarray(J['ext'][rows][..., 4], np.float32), 1e-6); npart = ok.sum(1); nmean = npart.mean()
@@ -63,7 +65,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
     for f in range(NV):
         lo_, hi_ = np.quantile(XR[:, f], [.01, .99]); hi_ = hi_ if hi_ > lo_ else lo_ + 1; cnts, edges = np.histogram(XR[:, f], 40, (lo_, hi_)); HIST[names[f]] = dict(edges=[round(float(e), 5) for e in edges], counts=[int(c) for c in cnts])
     # per particle: f_h(x_i) for every head and neuron (sparse rows only), and its α-weighted total contribution g_n(i)
-    FH = np.zeros((16, len(XR), 128), np.float32); G = np.zeros((len(XR), 128), np.float32)
+    FH = np.zeros((16, len(XR), NO), np.float32); G = np.zeros((len(XR), NO), np.float32)
     for h in range(16):
         nz = np.flatnonzero(np.abs(W[h, :11 * NV]).sum(1))
         if len(nz): FH[h] = TR[:, nz] @ W[h, nz].astype(np.float32)
@@ -74,7 +76,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         lo, hi = float(knv[0, f]), float(knv[-1, f]); xs = np.linspace(lo - .3 * (hi - lo + 1e-9), hi + .3 * (hi - lo + 1e-9), 25)
         g = sum(c * (xs if k == 'lin' else np.maximum(0, xs - t) if k == 'gt' else np.maximum(0, t - xs)) for c, k, t in terms_all); return 1 if np.polyfit(xs, g, 1)[0] >= 0 else -1
     neurons = []; sdV = V.std(0)
-    for n in range(128):
+    for n in range(NO):
         ins = []; FIRE = {}
         for f in range(NV):
             heads_f = []
@@ -141,6 +143,19 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                             scale=f'largest for {CLASSES[big]} jets; separates {CLASSES[sep]} jets best (AUC {max(auc[sep], 1 - auc[sep]):.2f})'))
         if n % 32 == 31: log(f'  neurons 1–{n + 1} analysed')
     st = np.array([d['strength'] for d in neurons]); q80, q50 = np.quantile(st, .8), np.quantile(st, .5)
+    classes = []
+    if not LG:
+        Cf = np.zeros((n_dev, 10, NV), np.float32)                                                            # per jet: what each input adds to each class score (through all neurons)
+        for f in range(NV): Cf[:, :, f] = np.einsum('nhk,hko->no', E[:, :, cols(f)], W[:, cols(f), :]) @ FW.T
+        for c in range(10):
+            sp = np.abs(FW[c]) * sdV; tot = sp.sum() or 1.0; order = np.argsort(-sp); keep = []; acc = 0.0
+            for n in order:
+                if acc >= .95 * tot or sp[n] < 1e-6: break
+                acc += sp[n]; keep.append(dict(n=int(n), w=float(FW[c, n]), spread=float(sp[n]), share=float(sp[n] / tot), title=neurons[n]['title'], sign='raises' if FW[c, n] > 0 else 'lowers'))
+            fi = Cf[:, c].std(0); fo = np.argsort(-fi)[:10]; sc = Lm[:, c]
+            classes.append(dict(c=c, bias=float(FB[c]), neurons=keep, inputs=[dict(feature=names[f], spread=float(fi[f]), sign=float(np.corrcoef(Cf[:, c, f], sc)[0, 1]) if Cf[:, c, f].std() > 0 else 0.0) for f in fo],
+                                means=[float(sc[ytrue == k].mean()) for k in range(10)], auc=float(roc_auc_score(ytrue == c, sc)) if 0 < (ytrue == c).sum() < n_dev else .5,
+                                agree=float((pred[ref == c] == c).mean()) if (ref == c).any() else 0.0, n_const=int(sum(1 for n in range(NO) if not neurons[n]['inputs'] and abs(FW[c, n]) > 0))))
     for d in neurons: d['importance'] = 'major' if d['strength'] >= q80 else 'moderate' if d['strength'] >= q50 else 'minor'
     # the heads: what they select (weight profiles), how much of the model goes through each, which neurons they serve most
     heads = []
@@ -175,7 +190,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             ex.append(dict(part=int(ref[i]), truth=int(ytrue[i]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts,
                            A=np.round(AR[:, sl], 4).tolist(), self=[round(float(A[h // 8, i, h % 8, 0]), 4) for h in range(16)], X=np.round(XR[sl], 4).tolist(), C=np.round(G[sl], 4).tolist(),
                            V=np.round(V[i], 3).tolist(), H=np.round(Hp[i], 3).tolist()))
-    return dict(tag=tag, agreement=a0, n_dev=n_dev, neurons=neurons, heads=heads, examples=ex, hists=HIST, fc=dict(W=FW.round(5).tolist(), b=FB.round(5).tolist()),
+    return dict(tag=tag, agreement=a0, n_dev=n_dev, neurons=neurons, heads=heads, classes=classes, logits=LG, examples=ex, hists=HIST, fc=dict(W=FW.round(5).tolist(), b=FB.round(5).tolist()),
                 pairs=int(sum(len(d['inputs']) for d in neurons)), terms=int((W[:, :11 * NV] != 0).sum()), r2_mean=float(np.mean([d['r2'] for d in neurons])))
 
 
@@ -259,8 +274,8 @@ def page(tag, outdir, device='mps', log=print):
         kpi = f'<span class="kpi">same class as ParT (test)<b>{pct(te["agreement"])}</b></span><span class="kpi">accuracy<b>{te["accuracy"]:.4f}</b><span class="cnt">ParT {te["part"]["accuracy"]:.4f}</span></span><span class="kpi">AUC<b>{te["auc"]:.4f}</b><span class="cnt">ParT {te["part"]["auc"]:.4f}</span></span>'
     else:
         metrics_html = ''; kpi = f'<span class="kpi">same class as ParT<b>{pct(an["agreement"])}</b><span class="cnt">balanced validation sample, {an["n_dev"]:,} jets (test pending)</span></span>'
-    act = [d for d in an['neurons'] if d['inputs']]
-    kpi += f'<span class="kpi">neurons with particle inputs<b>{len(act)} of 128</b><span class="cnt">the other {128 - len(act)} are constants (ParT’s last layer barely reads them)</span></span><span class="kpi">(neuron, input) pairs<b>{an["pairs"]}</b><span class="cnt">{an["terms"]} statements over the 16 heads</span></span><span class="kpi">mean R² to ParT’s neurons<b>{an["r2_mean"]:.2f}</b></span>'
+    act = [d for d in an['neurons'] if d['inputs']]; LG = an.get('logits', False); NL = (lambda n: f'{CLASSES[n]} score') if LG else (lambda n: f'Neuron {n + 1}')
+    kpi += f'<span class="kpi">{'class scores' if LG else 'neurons'} with particle inputs<b>{len(act)} of {len(an['neurons'])}</b><span class="cnt">the other {len(an['neurons']) - len(act)} are constants (ParT’s last layer barely reads them)</span></span><span class="kpi">(neuron, input) pairs<b>{an["pairs"]}</b><span class="cnt">{an["terms"]} statements over the 16 heads</span></span><span class="kpi">mean R² to ParT’s neurons<b>{an["r2_mean"]:.2f}</b></span>'
     imp_col = {'major': '#1d2433', 'moderate': '#98a2b3', 'minor': '#e4e7ec'}
     def bars(vals, lab, fmt, center=None):
         mx = max(abs(x - (center or 0)) for x in vals) or 1
@@ -318,7 +333,7 @@ def page(tag, outdir, device='mps', log=print):
     dd = ''; by_imp = sorted(an['neurons'], key=lambda d: -d['strength'])
     for d in by_imp:
         fcw = ', '.join(f'{CLASSES[c]} {d["fc"][c]:+.2f}' for c in np.argsort(-np.abs(d['fc']))[:3])
-        dd += f'''<details class="nd" id="neu{d["n"] + 1}"><summary><b>Neuron {d["n"] + 1}</b> — {html.escape(d["title"])} <span class="pill" style="background:{imp_col[d["importance"]]};color:{"#fff" if d["importance"] == "major" else "#1d2433"}">{d["importance"]}</span> <span class="cnt">{len(d["inputs"])} inputs · R² {d["r2"]:.2f}</span></summary>
+        dd += f'''<details class="nd" id="neu{d["n"] + 1}"><summary><b>{NL(d["n"])}</b> — {html.escape(d["title"])} <span class="pill" style="background:{imp_col[d["importance"]]};color:{"#fff" if d["importance"] == "major" else "#1d2433"}">{d["importance"]}</span> <span class="cnt">{len(d["inputs"])} inputs · R² {d["r2"]:.2f}</span></summary>
 <p style="margin:6px 0"><b>What it measures.</b> {html.escape(d["measures"])}</p><p style="margin:4px 0"><b>Role.</b> {html.escape(d["role"])} <span class="cnt">Scale: {html.escape(d["scale"])}.</span></p>
 <p style="margin:4px 0" class="cnt"><b>Which heads carry it:</b> {hpill(d)} (share of the neuron’s variation coming through each head’s weights). <b>In the last layer</b> it enters the class scores with weights {html.escape(fcw)}, …</p>
 <details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn; the neuron = b + Σ<sub>h</sub> [Σ<sub>i</sub> α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub>]; when the heads share a statement it is listed once with each head’s coefficient c<sub>h</sub>; open a statement for its details)</span></summary>{terms_html(d)}</details>
@@ -328,7 +343,18 @@ def page(tag, outdir, device='mps', log=print):
 <details><summary><b>By class</b></summary><div class="grid"><div><b>Mean value by true class</b>{bars(d["means"], "the neuron’s mean on jets of each true class", lambda v: f"{v:.2f}", center=float(np.mean(d["means"])))}</div>
 <div><b>Separation (AUC vs the rest)</b>{bars(d["auc"], "0.5 = no separation", lambda v: f"{v:.2f}", center=0.5)}</div><div><b>Weight in the class scores</b>{bars(d["effect"], "change of each class score when the neuron rises by one standard deviation (its last-layer weight × its spread)", lambda v: f"{v:+.2f}")}</div></div></details>
 </details>'''
-    idx = ''.join(f'<a class="nbtn" href="#neu{d["n"] + 1}" style="border-left:4px solid {imp_col[d["importance"]]};text-decoration:none;color:inherit" title="{html.escape(d["title"])}" onclick="document.getElementById(\'neu{d["n"] + 1}\').open=true">{d["n"] + 1}</a>' for d in by_imp)
+    idx = ''.join(f'<a class="nbtn" href="#neu{d["n"] + 1}" style="border-left:4px solid {imp_col[d["importance"]]};text-decoration:none;color:inherit" title="{html.escape(d["title"])}" onclick="document.getElementById(\'neu{d["n"] + 1}\').open=true">{CLASSES[d["n"]] if LG else d["n"] + 1}</a>' for d in by_imp)
+    # the classes: one tab per class score — which neurons go into it (links to their drop-downs), which inputs drive it
+    ctabs = cpan = ''
+    for i, cd in enumerate(an.get('classes', [])):
+        ctabs += f'<button class="tab cb{" on" if i == 0 else ""}" onclick="setCls({i})">{CLASSES[cd["c"]]}</button>'
+        nrows = ''.join(f'<tr><td><a href="#neu{x["n"] + 1}" onclick="document.getElementById(\'neu{x["n"] + 1}\').open=true">neuron {x["n"] + 1}</a></td><td>{html.escape(x["title"])}</td><td class="num">{x["w"]:+.3f}</td><td class="num">{x["spread"]:.3f}</td><td style="width:140px"><div class="bar" style="width:{120 * x["share"] / (cd["neurons"][0]["share"] or 1):.0f}px;background:{"#2f855a" if x["w"] > 0 else "#c05621"}"></div></td><td class="num">{100 * x["share"]:.0f} %</td></tr>' for x in cd['neurons'])
+        irows = ''.join(f'<tr><td>{html.escape(x["feature"])}</td><td class="cnt">{html.escape(WORDS.get(x["feature"], ""))}</td><td class="num">±{x["spread"]:.3f}</td><td class="num">{x["sign"]:+.2f}</td></tr>' for x in cd['inputs'])
+        cpan += f'''<div class="cpan{" on" if i == 0 else ""}"><p style="margin:0 0 6px"><b>{CLASSES[cd["c"]]} score</b> = {cd["bias"]:+.3f} + Σ<sub>n</sub> W<sub>{CLASSES[cd["c"]]},n</sub> · neuron<sub>n</sub> (ParT’s last layer). Its agreement with ParT on jets ParT calls {CLASSES[cd["c"]]}: {100 * cd["agree"]:.1f} %; separation of true {CLASSES[cd["c"]]} jets (AUC) {cd["auc"]:.3f}.</p>
+<div class="grid"><div style="grid-column:span 2"><b>The neurons that go into it</b> <span class="cnt">(95 % of how much the score moves across jets; weight W × the neuron’s spread; click a neuron to open its formulas below)</span><table><tr><th>neuron</th><th>what it is</th><th class="num">weight W</th><th class="num">W × spread</th><th></th><th class="num">share</th></tr>{nrows}</table></div>
+<div><b>The inputs that drive it</b> <span class="cnt">(through all its neurons and heads: spread of what each input adds to this score; correlation of that with the score)</span><table><tr><th>input</th><th>in words</th><th class="num">±</th><th class="num">corr.</th></tr>{irows}</table></div>
+<div><b>Mean {CLASSES[cd["c"]]} score by true class</b>{bars(cd["means"], "the score’s mean on jets of each true class", lambda v: f"{v:.2f}", center=float(np.mean(cd["means"])))}</div></div></div>'''
+    classes_html = (f'<h2>The 10 class scores</h2><div class="card"><p class="cnt" style="margin:0 0 6px">Each class score is ParT’s last layer applied to the neurons below: a weighted sum of them plus a bias. Pick a class to see which neurons go into it.</p><div>{ctabs}</div>{cpan}</div>') if ctabs else ''
     # the heads
     hrows = ''
     for i, hd in enumerate(an['heads']):
@@ -363,11 +389,12 @@ function drawJet(){const e=EX[JJ], c=e.C.map(r=>r[NEU]); let tot=0; c.forEach(v=
  s+='<table><tr><th>#</th><th class="num">pT share</th><th class="num">ΔR</th><th>type</th><th class="num">charge</th><th class="num">|d0|/σ</th><th class="num">mean α (16 heads)</th><th class="num">g<sub>i</sub> → neuron '+(NEU+1)+'</th><th></th></tr>';
  const mx=Math.max(...c.map(Math.abs))||1; e.particles.forEach((p,k)=>{s+='<tr class="p" onclick="showP('+k+')"><td>'+(k+1)+'</td><td class="num">'+p.z.toFixed(3)+'</td><td class="num">'+p.dr.toFixed(2)+'</td><td>'+p.type+'</td><td class="num">'+(p.q>0?'+':'')+p.q+'</td><td class="num">'+p.d0s.toFixed(1)+'</td><td class="num">'+abar[k].toFixed(3)+'</td><td class="num">'+c[k].toFixed(3)+'</td><td><span class="wbar" style="width:'+(120*Math.abs(c[k])/mx)+'px;background:'+(c[k]>=0?'#2f855a':'#c05621')+'"></span></td></tr>';});
  s+='</table><pre>neuron '+(NEU+1)+' = Σ_i g_i  +  Σ_h c_h · α_h,cls  +  b  =  '+tot.toFixed(3)+'  +  '+(e.V[NEU]-tot).toFixed(3)+'  =  '+e.V[NEU].toFixed(3)+'      (ParT’s own neuron '+(NEU+1)+' on this jet: '+e.H[NEU].toFixed(3)+')</pre>';
- let sc='<div class="cnt" style="margin-top:6px"><b>Class scores from the 128 neurons</b> (ParT’s last layer): score<sub>c</sub> = b<sub>c</sub> + Σ<sub>n</sub> W<sub>cn</sub> · neuron<sub>n</sub>. This jet: '+CL.map((nm,ci)=>{let v=FC.b[ci];for(let n=0;n<128;n++)v+=FC.W[ci][n]*e.V[n];return nm+' '+v.toFixed(2);}).join(' · ')+'.</div>';
+ let sc='<div class="cnt" style="margin-top:6px"><b>Class scores from the 128 neurons</b> (ParT’s last layer): score<sub>c</sub> = b<sub>c</sub> + Σ<sub>n</sub> W<sub>cn</sub> · neuron<sub>n</sub>. This jet: '+CL.map((nm,ci)=>{let v=FC.b[ci];for(let n=0;n<e.V.length;n++)v+=FC.W[ci][n]*e.V[n];return nm+' '+v.toFixed(2);}).join(' · ')+'.</div>';
  document.getElementById('jet').innerHTML=s+sc; document.getElementById('contrib').innerHTML='<span class="cnt">click a particle</span>';}
 function showP(k){const e=EX[JJ]; document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  let t='<div class="cnt">particle '+(k+1)+' — its weight α in each head (ParT’s), and its inputs x<sub>i</sub> (what the formulas are evaluated on):</div><table><tr>'+HNM.map(h=>'<th class="num">'+h+'</th>').join('')+'</tr><tr>'+e.A.map(a=>'<td class="num">'+a[k].toFixed(3)+'</td>').join('')+'</tr></table>';
  t+='<table style="margin-top:6px">'+NAMES.map((nm,f)=>'<tr><td>'+nm+'</td><td class="num">'+e.X[k][f].toPrecision(4)+'</td></tr>').join('')+'</table>'; document.getElementById('contrib').innerHTML=t;}
+function setCls(i){document.querySelectorAll('.cpan').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.cb').forEach((e,k)=>e.classList.toggle('on',k==i));}
 const NAMES=__NAMES__; setJet(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES)).replace('__HS__', json.dumps(an['hists'])).replace('__FC__', json.dumps(an['fc'])) \
         .replace('__TT__', json.dumps([d['title'] for d in an['neurons']])).replace('__HNM__', json.dumps([HN(h) for h in range(16)])).replace('__NAMES__', json.dumps((PFEAT + NBR)[:NV]))
     neusel = '<select id="neusel" onchange="setNeu(parseInt(this.value))">' + ''.join(f'<option value="{d["n"]}">neuron {d["n"] + 1} — {html.escape(d["title"])}</option>' for d in an['neurons']) + '</select>'
@@ -388,7 +415,7 @@ const NAMES=__NAMES__; setJet(0);""".replace('__EX__', json.dumps(an['examples']
         neuron[n]      = b_n + sum_h ( sum_i alpha[h, i] * f_hn(X[i, :]) + c_hn * alpha[h, cls] )           # FORMULAS: one f per head and neuron
                          f_hn(x) = sum over its inputs of w * t(x),  t(x) = x_f | max(0, x_f - θ) | max(0, θ - x_f)
     class scores       = FC_W @ neuron + FC_B                                                                 # ParT's last layer (fixed 10 x 128)"""
-    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
+    doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}.cpan{{display:none}}.cpan.on{{display:block}}</style></head><body><main>
 <p class="cnt"><a href="../../index.html">← all setups</a> · <a href="../../research/index.html">research log</a></p><h1>{html.escape(title)}</h1>
 <p class="cnt">ParT_full · JetClass. The 128 numbers ParT’s class token ends with — the neurons that its last layer turns into the class scores — each written directly as per-particle formulas: for every head, a formula of each particle’s physics, summed over the particles with that head’s attention weights. Nothing of ParT in between: no per-head values, no out-projection, no MLPs, no LayerNorms.</p>
 <div>{kpi}</div>
@@ -399,7 +426,7 @@ const NAMES=__NAMES__; setJet(0);""".replace('__EX__', json.dumps(an['examples']
 <p class="cnt">Exact formulation with the fitted coefficients: <a href="{tag}_formulas.py">{tag}_formulas.py</a> (+ <a href="{tag}_model.npz">{tag}_model.npz</a>). Every neuron is written out term by term below.</p></div>
 <h2>The 16 heads: who weights the particles</h2><div class="card"><p class="cnt" style="margin:0 0 6px">The attention weights are ParT’s (its particle blocks → embeddings → class-token query · keys → softmax); per head and per jet. What each head selects on average, and which neurons it carries:</p>{hrows}</div>
 <h2>A jet, step by step</h2><div class="card"><div class="cnt">jet (6 per ParT class; green border = this model agrees with ParT on it):</div><div>{jb}</div><div style="margin-top:6px"><span class="cnt">neuron to follow:</span> {neusel}</div></div><div class="card" id="jet"></div><div class="card" id="contrib"></div>
-<h2>The 128 neurons</h2><div class="card"><p style="margin:0 0 6px"><b>Only {len(act)} of the 128 neurons have particle inputs after pruning</b> (neurons {', '.join(str(d['n'] + 1) for d in act)}); the others are constants plus class-token terms that hardly vary, and ParT’s last layer gives them little weight (norm of its weights on the active neurons {float(np.linalg.norm(np.array(an['fc']['W'])[:, [d['n'] for d in act]])):.1f} vs {float(np.linalg.norm(np.delete(np.array(an['fc']['W']), [d['n'] for d in act], 1))):.1f} on the rest). <b>How to read a neuron:</b> neuron = b + Σ over the 16 heads h of [ Σ over <b>every particle i of the jet</b> of α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub> ]. f<sub>h</sub> is the formula written under “head b·h·” in the statements, evaluated on that particle’s inputs; α<sub>hi</sub> is head h’s weight for that particle in this jet. Importance: how much the neuron moves the class scores (its last-layer weights × its spread), ranked over the 128 — major = top 20 %, minor = bottom half. R²: how well the formula neuron tracks ParT’s own neuron across jets.</p>
+{classes_html}<h2>{'The 10 class scores, each written directly' if LG else 'The 128 neurons'}</h2><div class="card"><p style="margin:0 0 6px"><b>{len(act)} of the {len(an['neurons'])} {'class scores' if LG else 'neurons'} have particle inputs after pruning</b> (neurons {', '.join(str(d['n'] + 1) for d in act)}); the others are constants plus class-token terms that hardly vary, and ParT’s last layer gives them little weight (norm of its weights on the active neurons {float(np.linalg.norm(np.array(an['fc']['W'])[:, [d['n'] for d in act]])):.1f} vs {float(np.linalg.norm(np.delete(np.array(an['fc']['W']), [d['n'] for d in act], 1))):.1f} on the rest). <b>How to read a neuron:</b> neuron = b + Σ over the 16 heads h of [ Σ over <b>every particle i of the jet</b> of α<sub>hi</sub> · f<sub>h</sub>(particle i) + c<sub>h</sub> α<sub>h,cls</sub> ]. f<sub>h</sub> is the formula written under “head b·h·” in the statements, evaluated on that particle’s inputs; α<sub>hi</sub> is head h’s weight for that particle in this jet. Importance: how much the neuron moves the class scores (its last-layer weights × its spread), ranked over the 128 — major = top 20 %, minor = bottom half. R²: how well the formula neuron tracks ParT’s own neuron across jets.</p>
 <div style="margin:4px 0 8px"><span class="cnt">neurons, most important first (jump to):</span> {idx}</div>{dd}</div>
 {metrics_html}
 <h2>Definitions of the per-particle inputs</h2><div class="card"><table><tr><th>input</th><th>in words</th><th>definition (math)</th></tr>{defs_rows}</table><p class="cnt">Every input describes <b>one particle i</b> of the jet — the particle a head is summing over. “Nearest” always means nearest <b>to particle i</b>, among the <b>other particles of the same jet</b>, by the angle ΔR = √(Δη² + Δφ²).</p><p class="cnt">Code: jetdistill/part/clsfit.py (particle_features), jetdistill/research/nbr.py (nbr_features).</p></div>
