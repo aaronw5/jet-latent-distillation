@@ -145,3 +145,5 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   **90.6 %** after 100 epochs, still rising.
 - With ParT's own attention weights, the head values are sums over particles of per-particle physics formulas
   (JEDI-linear's structure) and reproduce ParT to > 90 %. The open part: the weights as formulas (S6).
+- S5c: 100k fitting jets, 500 epochs: least squares 82.7 % → 86.9 (10) / 91.5 (50) / 92.6 (100) / 92.9 (200) /
+  93.0 (300) / **93.2 % (400)** / 93.2 (500). The ceiling of per-head formula values with ParT's own weights ≈ 93 %.
