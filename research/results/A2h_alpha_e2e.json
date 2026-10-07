@@ -1,0 +1,17 @@
+{
+ "experiment": "A2h",
+ "source": "A1",
+ "n_fit": 20000,
+ "epochs": 0,
+ "lr": 0.0003,
+ "start": 0.97035,
+ "best": 0.97035,
+ "best_epoch": 0,
+ "path": [
+  [
+   0,
+   0.97035
+  ]
+ ],
+ "seconds": 112.49521112442017
+}
