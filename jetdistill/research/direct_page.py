@@ -23,6 +23,7 @@ INFO = {'S15p': ('The 128 neurons directly — per-particle formulas, ParT’s s
                  'Each of the 128 class-token neurons is a sum over the particles of formulas of each particle’s own physics, one formula per head, weighted by that head’s attention. Nothing else of ParT: no values, no out-projection, no MLPs, no LayerNorms. Pruned to the inputs each neuron needs and re-tuned toward ParT’s probabilities; at most one term per input per head and neuron.'),
         'S15o': ('The 128 neurons directly — per-particle formulas, ParT’s selection, one term per input', None, None)}
 INFO['S15o'] = (INFO['S15o'][0], INFO['S15p'][1], INFO['S15p'][2].replace(' Pruned to the inputs each neuron needs and re-tuned toward ParT’s probabilities;', ' Re-tuned toward ParT’s probabilities;'))
+INFO['S15q'] = ('The 128 neurons directly — per-particle formulas, ParT’s selection, statements pruned', INFO['S15p'][1], INFO['S15p'][2] + ' Then single statements removed, smallest first, within 0.1 pt, re-tuned.')
 HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 
 
