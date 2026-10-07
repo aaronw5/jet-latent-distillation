@@ -178,3 +178,10 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   dev jets (heads.rows_of_split, seed 0) everywhere; S5c, S7, S8b, S9/S10 rerun (suffix -bal).
 - S9 (skewed dev, for the record): least squares 67.9 % → tuned 75.8 % (score formulas R² 0.51–0.90).
 - GELU run finished and published (all_plus_gelu page).
+
+### all_plus_gelu — test results (clock 01:49)
+- 2M test jets: 869 terms 80.20 % agreement, accuracy 0.7536, AUC 0.9666; no-loss 1649 terms 80.34 % / 0.7546 /
+  0.9669; step-4 688 terms 80.09 % / 0.7525 / 0.9663. Hinges (all_plus): 80.09 % / 0.7526 with 1083 terms.
+  Same quality, ~20 % fewer terms. Page published.
+- Note: the wall-clock times written in this log before this entry were estimates and run a few hours ahead of the
+  machine's clock (logs/timing.log has the real times).
