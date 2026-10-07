@@ -1,0 +1,22 @@
+{
+ "experiment": "S3",
+ "n_fit": 200000,
+ "epochs": 40,
+ "results": {
+  "existing": {
+   "n_quantities": 572,
+   "agreement": 0.80538,
+   "accuracy": 0.75461
+  },
+  "pooled": {
+   "n_quantities": 986,
+   "agreement": 0.80502,
+   "accuracy": 0.75447
+  },
+  "both": {
+   "n_quantities": 1558,
+   "agreement": 0.82244,
+   "accuracy": 0.76916
+  }
+ }
+}

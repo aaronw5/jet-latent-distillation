@@ -99,3 +99,17 @@ research/results/S1_cls_attention.json (6k fitting jets for the score formulas, 
   broke, 9.64 %); not rerun: E1's MLP ceiling (81.2 %) already bounds any output-side operation on these quantities.
 - Conclusion: the final LN is not the limit. LN matters inside the attention (on the particle embeddings); the class
   fit already uses ParT's own LNs there.
+
+### S3 — quantities pooled like ParT's class attention (2026-10-07 02:50)
+- 986 jet quantities: means over particles (and means above 5 thresholds, pT-weighted means) of 126 per-particle
+  physics functions (own inputs, neighbourhood, ParT pair-kernel context) + the hardest charged, widest non-soft and
+  most displaced particle's features. Flexible-fit check (MLP, 200k jets): existing 80.5 %, pooled 80.5 %, both 82.2 %.
+- Conclusion: plain pooled jet quantities add only ~1.7 pt → not the way to close the gap by themselves.
+- User: no more MLP checks (they were only a quick "is the information there" test); work with formulas directly.
+  E5 (MLP with pair-kernel context) cancelled.
+
+## S4 — per-head formulas (user's idea, 02:55)
+Class-attention output = 2 blocks × 8 heads × 16 numbers; each head depends only on its own attention weights and the
+values it pools; the rest is a fixed chain of ParT operations (out_proj, per-head scale, LayerNorms, MLP, residuals,
+final LN, last layer). Targets: the 256 head outputs, fitted head by head (JEDI with per-head neurons), ParT's exact
+downstream kept. Steps: oracle (ParT's true weights) → formula weights → head-by-head agreement cost → all, tuned.
