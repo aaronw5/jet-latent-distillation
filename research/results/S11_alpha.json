@@ -1,0 +1,114 @@
+{
+ "n_fit": 2000,
+ "n_dev": 2000,
+ "n_jet": 5000,
+ "inputs": 138,
+ "heads": [
+  {
+   "block": 1,
+   "head": 1,
+   "tv_relative": 0.1025935485959053,
+   "r2_alpha_cls_logit": 0.877420158718111
+  },
+  {
+   "block": 1,
+   "head": 2,
+   "tv_relative": 0.19841329753398895,
+   "r2_alpha_cls_logit": 0.8119468049539484
+  },
+  {
+   "block": 1,
+   "head": 3,
+   "tv_relative": 0.05805540457367897,
+   "r2_alpha_cls_logit": 0.9694143174212633
+  },
+  {
+   "block": 1,
+   "head": 4,
+   "tv_relative": 0.10876292735338211,
+   "r2_alpha_cls_logit": 0.8479153990005004
+  },
+  {
+   "block": 1,
+   "head": 5,
+   "tv_relative": 0.16932763159275055,
+   "r2_alpha_cls_logit": 0.8686794965270133
+  },
+  {
+   "block": 1,
+   "head": 6,
+   "tv_relative": 0.1488420069217682,
+   "r2_alpha_cls_logit": 0.7750198023157471
+  },
+  {
+   "block": 1,
+   "head": 7,
+   "tv_relative": 0.08674624562263489,
+   "r2_alpha_cls_logit": 0.8857015552492864
+  },
+  {
+   "block": 1,
+   "head": 8,
+   "tv_relative": 0.21224445104599,
+   "r2_alpha_cls_logit": 0.7166926490084014
+  },
+  {
+   "block": 2,
+   "head": 1,
+   "tv_relative": 0.39898204803466797,
+   "r2_alpha_cls_logit": 0.8184509153645682
+  },
+  {
+   "block": 2,
+   "head": 2,
+   "tv_relative": 0.5064427852630615,
+   "r2_alpha_cls_logit": 0.38096705154304855
+  },
+  {
+   "block": 2,
+   "head": 3,
+   "tv_relative": 0.4674260914325714,
+   "r2_alpha_cls_logit": 0.4454311624397178
+  },
+  {
+   "block": 2,
+   "head": 4,
+   "tv_relative": 0.40328189730644226,
+   "r2_alpha_cls_logit": 0.2761281127370415
+  },
+  {
+   "block": 2,
+   "head": 5,
+   "tv_relative": 0.6259406805038452,
+   "r2_alpha_cls_logit": 0.40517764651592536
+  },
+  {
+   "block": 2,
+   "head": 6,
+   "tv_relative": 0.6240394115447998,
+   "r2_alpha_cls_logit": 0.22412832323446108
+  },
+  {
+   "block": 2,
+   "head": 7,
+   "tv_relative": 0.4016345143318176,
+   "r2_alpha_cls_logit": 0.7468489797947834
+  },
+  {
+   "block": 2,
+   "head": 8,
+   "tv_relative": 0.3906117081642151,
+   "r2_alpha_cls_logit": 0.4453996836212466
+  }
+ ],
+ "agreement": {
+  "part_values_formula_rel_block1": 0.97,
+  "part_values_formula_rel_and_cls_block1": 0.968,
+  "part_values_formula_all_blocks": 0.9595,
+  "s5_values_part_alpha": 0.939,
+  "s5_values_formula_alpha_block1": 0.8285,
+  "s5_values_formula_alpha_both": 0.7465,
+  "s5_values_formula_rel_part_cls_block1": 0.919
+ },
+ "seconds": 29.106044054031372
+}

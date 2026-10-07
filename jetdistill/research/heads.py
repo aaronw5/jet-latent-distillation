@@ -119,6 +119,9 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
     ref = Ld.argmax(1); res = dict(n_fit=n_fit, n_dev=n_dev, downstream_check=float((Ldd.argmax(1) == ref).mean()))
     log(f'  downstream from ParT\'s own head outputs: same class {100 * res["downstream_check"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rows_f, rows_d = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev); n_fit, n_dev = len(rows_f), len(rows_d)
+    if weights == 'S11':                                                     # S12: both blocks' weights from the S11 formulas (ranking × jet-level class-token share)
+        Af = np.load(OUT / 'S11_alpha_fit.npy')[:, :n_fit].astype(np.float32); Ad = np.load(OUT / 'S11_alpha_dev.npy')[:, :n_dev].astype(np.float32); res['weights'] = 'S11'
+        log(f'  weights: the S11 formulas, both blocks, {time.time() - t0:.0f} s')
     if weights == 'formula':                                                 # S9: block-1 weights from score formulas, block 2 uniform
         Af[0], prm = formula_weights(model, Jf, rows_f, Af[0], Mf, log=log); Ad[0], _ = formula_weights(model, Jd, rows_d, None, Md, params=prm)
         uniform = '2'; res['weights'] = 'formula'; res['score_r2'] = [float(v) for v in prm['r2']]
@@ -168,7 +171,7 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
             with torch.no_grad():
                 return float((torch.cat([downstream(model, *heads_of(Pdt[a:a + 5000]).split(8, 1)).argmax(1) for a in range(0, n_dev, 5000)]).cpu().numpy() == ref).mean())
         best = (agree_t(), 0); path = [best]; bestW = W.detach().clone()
-        tag = ('S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5') + os.environ.get('HEADS_TAG', '')
+        tag = ('S12' if weights == 'S11' else 'S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5') + os.environ.get('HEADS_TAG', '')
         def save(Wb):
             extra = dict(score_W=prm['W'], score_kn=prm['kn'], score_mu=prm['mu'], score_sd=prm['sd']) if weights == 'formula' else {}
             Wp = torch.einsum('hkj,hjo->hko', Mt, Wb).cpu().numpy(); Wp[dead] = 0
@@ -193,4 +196,4 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
 
 if __name__ == '__main__':
     a = [int(v) for v in sys.argv[1:4]]; r = run(*a, uniform=sys.argv[4] if len(sys.argv) > 4 else '', weights=sys.argv[5] if len(sys.argv) > 5 else ''); OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / ('S9_heads_formula.json' if r.get('weights') else f'S8_heads_uniform{r["uniform_blocks"]}.json' if r['uniform_blocks'] else 'S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))
+    (OUT / ('S12_heads_S11.json' if r.get('weights') == 'S11' else 'S9_heads_formula.json' if r.get('weights') else f'S8_heads_uniform{r["uniform_blocks"]}.json' if r['uniform_blocks'] else 'S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))

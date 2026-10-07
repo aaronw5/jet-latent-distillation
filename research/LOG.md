@@ -236,3 +236,12 @@ explorer does not apply to these models.
 ### S5 and S8b on the 2M test jets (clock ~03:25)
 - S5 (per-head formula values, ParT's attention weights): **93.16 %** same class as ParT, accuracy 0.8427, AUC 0.9845
   (ParT 0.8603 / 0.9877). S8b (block 2 a plain average): 91.50 %, 0.8344, 0.9831. Validation and test agree.
+
+### S11 — α as formulas on top of S5 (the user's idea: α is a selection heuristic; clock ~03:15)
+- α_i = (1 − α_cls)·softmax_i(g(x_i)) per head: g a per-particle score formula (own + neighbourhood + pair-kernel
+  context + within-jet relative inputs: rank, x − jet max, standardized), least squares to ParT's log(α_i/α_cls)
+  centred within each jet and weighted by ParT's α; α_cls a jet-level ridge formula of the jet quantities (+ ln n).
+- Smoke test (2k fitting jets): with ParT's values — formula ranking + ParT α_cls (block 1) 97.0 %, + formula α_cls
+  96.8 %, both blocks all formula 95.95 %. With S5's value formulas — ParT's α 93.9 %, formula ranking + ParT α_cls
+  91.9 %, block 1 all formula 82.9 %: S5's values lean on the class-token term c·α_cls (large c), so α_cls errors are
+  amplified → S12: re-tune S5's values on the formula α (stagewise).
