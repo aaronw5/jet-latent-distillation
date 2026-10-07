@@ -75,18 +75,50 @@ def phi_pooled(J, n, A, kn=None, chunk=2000):
     return out, kn
 
 
-def run(n_fit=40000, n_dev=20000, steps=0, uniform='', lr=3e-4, lam=0.01, device='mps', log=print):
+def formula_weights(model, J, n, A_true, M, params=None, n_score_fit=20000, chunk=2000, log=print):
+    """S9: block-1 attention weights from per-particle score formulas. Per head h: s_i = φ(particle i)·w_h with φ the
+    hinge terms of its own inputs, neighbourhood and ParT pair-kernel context; the class token's own score is 0 (in
+    block 1 it is a constant, absorbed by the formula's intercept); α = softmax over [0, s_1, …, s_n]. Least squares on
+    the first n_score_fit jets to ParT's log(α_i / α_self). Returns A (n, 8, 129) and the formula's parameters."""
+    from .nbr import nbr_features, pk_features
+    def feats_rows(r):
+        F, ok = particle_features(J, r, ctx=[])
+        return np.concatenate([F, nbr_features(J['x'][r], J['ext'][r], J['jet'][r]), pk_features(J['x'][r], J['ext'][r], J['jet'][r], model)], -1), ok
+    if params is None:
+        F, ok = feats_rows(np.arange(n_score_fit)); kn = np.quantile(F[ok][::7], np.linspace(.15, .85, 5), axis=0).astype(np.float32); mu, sd = F[ok].mean(0), F[ok].std(0) + 1e-6
+        params = dict(kn=kn, mu=mu, sd=sd)
+        phi = lambda F: np.concatenate([np.ones(F.shape[:-1] + (1,), np.float32), (F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
+        B = phi(F[ok]).astype(np.float64); al = A_true[:n_score_fit]
+        Y = (np.log(np.maximum(al[..., 1:], 1e-12)) - np.log(np.maximum(al[..., :1], 1e-12))).transpose(0, 2, 1)[ok]       # (particles, 8)
+        G = B.T @ B; d = np.sqrt(np.maximum(np.diag(G), 1e-12)); W = np.linalg.solve(G / d[:, None] / d[None] + 1e-6 * np.eye(len(d)), (B.T @ Y) / d[:, None]) / d[:, None]
+        params['W'] = W.astype(np.float32); params['r2'] = 1 - ((B @ W - Y) ** 2).mean(0) / Y.var(0)
+        log(f'  block-1 score formulas: {B.shape[1]} terms per particle, R² per head ' + ' '.join(f'{v:.2f}' for v in params['r2']))
+    kn, mu, sd, W = params['kn'], params['mu'], params['sd'], params['W']
+    phi = lambda F: np.concatenate([np.ones(F.shape[:-1] + (1,), np.float32), (F - mu) / sd] + [np.maximum(0, F - t) / sd for t in kn], -1)
+    A = np.zeros((n, 8, 129), np.float32)
+    for a in range(0, n, chunk):
+        r = np.arange(a, min(a + chunk, n)); F, ok = feats_rows(r); s = (phi(F) @ W).transpose(0, 2, 1)                  # (c, 8, 128)
+        S = np.concatenate([np.zeros((len(r), 8, 1), np.float32), np.where(ok[:, None], s, -np.inf)], -1)
+        e = np.exp(S - S.max(-1, keepdims=True)); A[r] = e / e.sum(-1, keepdims=True)
+    return A, params
+
+
+def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=0.01, device='mps', log=print):
     import torch
     t0 = time.time(); model = ParTNetwork('full').model; model.eval()
     for p in model.parameters(): p.requires_grad_(False)
     Of, Af, Mf, Lf, Lfd = extract(model, 'fit', n_fit, device); Od, Ad, Md, Ld, Ldd = extract(model, 'dev', n_dev, device)
     ref = Ld.argmax(1); res = dict(n_fit=n_fit, n_dev=n_dev, downstream_check=float((Ldd.argmax(1) == ref).mean()))
     log(f'  downstream from ParT\'s own head outputs: same class {100 * res["downstream_check"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
+    Jf, Jd = jets('full', 'fit'), jets('full', 'dev')
+    if weights == 'formula':                                                 # S9: block-1 weights from score formulas, block 2 uniform
+        Af[0], prm = formula_weights(model, Jf, n_fit, Af[0], Mf, log=log); Ad[0], _ = formula_weights(model, Jd, n_dev, None, Md, params=prm)
+        uniform = '2'; res['weights'] = 'formula'; res['score_r2'] = [float(v) for v in prm['r2']]
+        log(f'  block-1 weights from the score formulas, block 2 uniform, {time.time() - t0:.0f} s')
     for b in (int(c) - 1 for c in uniform):                                 # S8: these blocks' weights uniform over [class token, particles]
         for A_, M_ in ((Af, Mf), (Ad, Md)):
             okm = np.concatenate([np.ones((len(M_), 1), bool), M_], 1); A_[b] = (okm / okm.sum(1, keepdims=True))[:, None, :]
     res['uniform_blocks'] = uniform
-    Jf, Jd = jets('full', 'fit'), jets('full', 'dev')
     Pf, kn = phi_pooled(Jf, n_fit, Af); Pd, _ = phi_pooled(Jd, n_dev, Ad, kn); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
     Of_, Od_ = Of.transpose(1, 0, 2, 3).reshape(n_fit, 16, 16), Od.transpose(1, 0, 2, 3).reshape(n_dev, 16, 16)
     pred = np.zeros_like(Od_); r2 = np.zeros((16, 16))
@@ -132,5 +164,5 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', lr=3e-4, lam=0.01, device
 
 
 if __name__ == '__main__':
-    a = [int(v) for v in sys.argv[1:4]]; r = run(*a, uniform=sys.argv[4] if len(sys.argv) > 4 else ''); OUT.mkdir(parents=True, exist_ok=True)
-    (OUT / (f'S8_heads_uniform{r["uniform_blocks"]}.json' if r['uniform_blocks'] else 'S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))
+    a = [int(v) for v in sys.argv[1:4]]; r = run(*a, uniform=sys.argv[4] if len(sys.argv) > 4 else '', weights=sys.argv[5] if len(sys.argv) > 5 else ''); OUT.mkdir(parents=True, exist_ok=True)
+    (OUT / ('S9_heads_formula.json' if r.get('weights') else f'S8_heads_uniform{r["uniform_blocks"]}.json' if r['uniform_blocks'] else 'S5_heads_tuned.json' if r.get('tuned') else 'S4_heads_oracle.json')).write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps({k: v for k, v in r.items() if k != 'heads'}))

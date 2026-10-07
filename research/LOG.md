@@ -160,3 +160,12 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   at all). Reading of S6: wrong-but-peaked formula weights hurt far more than uniform ones.
 - Next S8: S5 (per-head formula values) with uniform weights — means over particles of per-particle physics functions,
   ParT's exact downstream: JEDI-linear's structure.
+- S7 (continued): ParT's values with weights from per-particle score formulas (hinge terms of own + neighbourhood +
+  pair-kernel context, within-jet least squares, ParT's per-jet mean score kept): block 1 **95.8 %**, block 2 99.4 %.
+
+### S8 — per-head formula values with uniform weights (2026-10-07 04:40)
+- Both blocks uniform: least squares 62.1 % → tuned **67.8 %** (300 epochs, 100k jets). Block 2 uniform, block 1
+  ParT's weights: **91.2 %**.
+- Reading: with ParT's values the weights hardly matter (S7), with formula values they matter a lot — ParT's values
+  carry each particle's context, formula values only its own physics, so the selection must do the work. Block 2 can
+  stay a plain average (−2 pt); block 1's weights must be formulas (S9).
