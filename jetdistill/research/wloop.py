@@ -150,7 +150,53 @@ def _agree_on(net, Wc, Wz, idx, bs=500):
     return float((pred == net.S['ref'][od]).mean())
 
 
+def test(tag='W1p', chunk=5000, device='mps', log=print):
+    """the formula-selection model on the 2,000,000 test jets: ParT's particle blocks once per file (values + the alignment check),
+    the selection from the formulas, the paper's metrics; writes {tag}_metrics_full_test.json"""
+    import torch
+    from ..config import DATA
+    from ..metrics import softmax, paper_metrics
+    from .heads_eval import weights_from_files
+    from .ceiling_jet import matrix
+    from sklearn.preprocessing import QuantileTransformer
+    t0 = time.time(); net = ParTNetwork('full'); model = net.model; model.eval()
+    for p in model.parameters(): p.requires_grad_(False)
+    PA = np.load(OUT / f'{tag}_alpha.npz'); T = lambda a, dt=torch.float32: torch.from_numpy(np.ascontiguousarray(a)).to(device, dt)
+    Wc, Wz, knt, mut, sdt = T(PA['W']), T(PA['cz'].T), T(PA['kn']), T(PA['mu']), T(PA['sd']); K = PA['kn'].shape[0]
+    Jf = jets('full', 'fit'); _, _, Mf, _, _ = extract(model, 'fit', 100000, device); keys = [k for k in Jf['Q']]; Q100 = matrix(Jf, keys)[:100000]; okq = np.isfinite(Q100).all(0) & (Q100.std(0) > 0)
+    qt = QuantileTransformer(n_quantiles=500, output_distribution='normal', subsample=50000, random_state=0).fit(Q100[:, okq])
+    Zof = lambda Q, M: np.concatenate([np.clip(qt.transform(Q[:, okq]), -5, 5), np.log(M.sum(1, keepdims=True)), np.ones((len(M), 1))], 1).astype(np.float32)
+    def phi(F): return torch.cat([torch.ones_like(F[..., :1]), (F - mut) / sdt] + [torch.clamp(F - knt[k], min=0) / sdt for k in range(K)] + [torch.clamp(knt[k] - F, min=0) / sdt for k in range(K)], -1)
+    def logits(F, ok, Z, V):
+        n = F.shape[0]; P = int(ok.sum(1).max()); F, ok, V = F[:, :P].float(), ok[:, :P], V[:, :, :1 + P]
+        s = (phi(F) @ Wc).masked_fill(~ok[..., None], -1e9); rel = torch.softmax(s, 1); acls = torch.sigmoid(-(Z @ Wz)); cls = model.cls_token[0, 0].expand(n, -1)
+        for b, blk in enumerate(model.cls_blocks):
+            a = torch.cat([acls[:, 8 * b:8 * b + 8, None], (1 - acls[:, 8 * b:8 * b + 8, None]) * rel[:, :, 8 * b:8 * b + 8].permute(0, 2, 1)], 2)
+            cls = after(blk, torch.einsum('nhp,nphd->nhd', a, V[:, b].float()), cls)
+        return model.fc(model.norm(cls))
+    J = jets('full', 'full_test'); rows = np.arange(min(len(J['y']), int(os.environ.get('TEST_MAX', 10 ** 12)))); L = np.empty((len(rows), 10), np.float32); Lp = np.empty((len(rows), 10), np.float32)
+    from ..part.data import read_root
+    files = json.loads((DATA / 'test' / 'files.json').read_text()); off = np.cumsum([0] + [f['jets'] for f in files])
+    for a in range(0, len(rows), chunk):
+        r = rows[a:a + chunk]; fi = int(np.searchsorted(off, r[0], side='right') - 1); Jr = read_root(files[fi]['file'], start=int(r[0] - off[fi]), stop=int(r[-1] - off[fi] + 1))
+        R = net.run_internals(Jr); X, M = R['x'], R['mask']; Lp[r] = R['logits']; _, V = internals(model, X, M, device)
+        F, ok = feats(J, r, model); F = np.concatenate([F, rel_feats(F, ok)], -1); Z = Zof(matrix(J, keys)[r], M)
+        Ft, okt, Zt, Vt = T(F, torch.float16), T(ok, torch.bool), T(Z), T(V.transpose(1, 0, 2, 3, 4), torch.float16); od = np.argsort(ok.sum(1))
+        with torch.no_grad():
+            for c0 in range(0, len(r), 500):
+                i = torch.from_numpy(od[c0:c0 + 500]).to(device); L[r[od[c0:c0 + 500]]] = logits(Ft[i], okt[i], Zt[i], Vt[i]).cpu().numpy()
+        if device == 'mps': torch.mps.empty_cache()
+        if a % 100000 == 0: log(f'  {tag} on full_test: {a + len(r)} of {len(rows)} jets; ParT from the files vs stored: same class {100 * (Lp[:a + len(r)].argmax(1) == J["net"][:a + len(r)]).mean():.2f}%, {time.time() - t0:.0f} s')
+    netc, y = J['net'][rows], J['y'][rows]; agree_check = float((Lp.argmax(1) == netc).mean()); assert agree_check > .999, agree_check
+    Pr = softmax(L.astype(np.float64)); pred = Pr.argmax(1)
+    r = dict(model=tag, which='full_test', n=len(pred), agreement=float((pred == netc).mean()), **paper_metrics(Pr, y)); r['part'] = paper_metrics(J['P'][rows], y)
+    r['per_class'] = [dict(c=int(c), agreement=float((pred[netc == c] == c).mean()), accuracy=float((pred[y == c] == c).mean())) for c in range(10)]
+    np.save(OUT / f'{tag}_test_logits.npy', L.astype(np.float16)); (OUT / f'{tag}_metrics_full_test.json').write_text(json.dumps(r, indent=1))
+    log(f'{tag} on full_test ({len(pred)} jets): same class as ParT {100 * r["agreement"]:.2f}%, accuracy {100 * r["accuracy"]:.2f}%, AUC {r["auc"]:.4f}, {time.time() - t0:.0f} s'); return r
+
+
 if __name__ == '__main__':
     cmd, *a = sys.argv[1:]
     if cmd == 'one_term': one_term(*(int(v) for v in a))
+    elif cmd == 'test': test(*a)
     else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
