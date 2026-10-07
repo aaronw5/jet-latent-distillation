@@ -508,3 +508,4 @@ functionally right for ParT's values but different in detail; formula neurons ar
 - C2: from C1q (5,355 statements), selection + neuron formulas tuned together (30k jets): 70.1 → 74.6 % after 10 epochs, running.
 - C3: the combined fit with 100k jets (C1 had 30k for ~860k coefficients) and 60 joint epochs, dense — the ceiling of the
   combined structure; then the loop (one term, prune, statements) with joint re-tuning at each step; then the 2M test.
+- **C2** (from C1q, selection + neuron formulas tuned together, 30k jets): 70.06 → **75.18 %** with 5,355 statements.
