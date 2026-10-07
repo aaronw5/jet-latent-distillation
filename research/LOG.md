@@ -536,3 +536,7 @@ functionally right for ParT's values but different in detail; formula neurons ar
 - **C3j** (the one-term chain: C3 → one term 68.97 → pairs 66.55 → statements 74.05 → both halves re-tuned together):
   **78.83 %** with 4,504 statements, one term per input. 2M test queued in its chain. The no-limit chain (C6) keeps ≈ 82.5 %
   with 57,010 statements; the joint re-tune (C6j) and L1 sparsification (C6s) are next.
+- **C6j** (joint re-tune of the pruned C6): 82.53 % — no gain; 2M test running. C6s's first run had a bug (the L1-penalized
+  weights were discarded for the best-agreement checkpoint, i.e. the start) → only the size threshold acted (57,010 → 46,959
+  statements, 82.55 %); fixed and rerunning. The 2M tests of the unpruned C3 and of the buggy C6s were stopped (superseded,
+  machine load); running: C6j and C3j tests.
