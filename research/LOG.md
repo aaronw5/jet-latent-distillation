@@ -381,3 +381,11 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
 - A10 (A2h start, coefficients + thresholds learnable, 100k jets, 60 epochs, one-cycle): 82.51 → **84.05 %** (epoch 32);
   thresholds moved 0.15 σ (scores), 0.02 (values). The best all-formula number, still ≈ 11 pt under the ParT-α models.
 - A9 end to end (ranker α, values re-tuned): 82.15 %.
+
+### S15 — the 128 class-token neurons predicted directly (user's question; clock ~11:25)
+- Each of the 128 neurons = Σ over the 16 heads' pooled per-particle terms (ParT's α) · coefficients + α_cls terms +
+  bias → ParT's last layer; no out-projection, per-head scale, LayerNorms or MLP. Targets after the final LN:
+  least squares **91.22 %**, tuned **93.29 %** (balanced dev; the head models: 93.2–93.4 %). Simpler and as good: the
+  downstream MLP is not needed once the pooled terms are there. 'pre' variant (class token before the final LN,
+  ParT's LN applied) running. If it holds: this is the cleanest ≥ 90 % model — per-particle formulas → 128 jet-level
+  neurons → a linear layer — and goes through the full loop (one term per input, prune, 2M test, page).
