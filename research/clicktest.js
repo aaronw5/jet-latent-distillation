@@ -11,3 +11,4 @@ console.log('errors:', errs.length ? errs : 'none');
 const nn = d.querySelectorAll('.nnb'); if (nn.length) { nn[2].click(); console.log('worked example after neuron 3:', d.querySelector('#jet pre').textContent.replace(/\s+/g, ' ').slice(0, 140)); }
 console.log('jet picture circles:', d.querySelectorAll('#jet svg circle').length, '| core rows:', d.querySelectorAll('#jet tr.p.core').length);
 d.querySelectorAll('#jet tr.p')[1].click(); console.log('particle 2 inputs shown:', d.getElementById('contrib').querySelectorAll('tr').length, 'rows');
+const xt = d.querySelectorAll('details.xterm'); if (xt.length) { xt[0].open = true; xt[0].dispatchEvent(new dom.window.Event('toggle', { bubbles: true })); console.log('statement drop-downs:', xt.length, '| histogram drawn on open:', xt[0].querySelector('.hh svg') !== null); }

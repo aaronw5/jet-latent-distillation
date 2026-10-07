@@ -28,7 +28,7 @@ th{font-weight:600;background:#f2f4f7}.num{text-align:right;font-variant-numeric
 .pill{display:inline-block;border-radius:10px;padding:0 7px;font-size:11.5px;color:#fff;background:#667}.wbar{display:inline-block;height:10px;background:var(--acc);border-radius:2px;vertical-align:middle}
 tr.p{cursor:pointer}tr.p:hover{background:#f2f6fb}tr.p.on{background:#e8f0fa}tr.p.core td:first-child{border-left:3px solid #c05621;font-weight:600}tr.cls td{background:#fffaf0;font-style:italic}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px}.bars td{padding:2px 8px}.bar{height:10px;background:var(--acc);border-radius:3px}
-.head{display:none}.head.on{display:block}details.nd{border-top:1px solid var(--line);padding:6px 0}details.nd>summary{cursor:pointer;font-size:14px}details details{margin:4px 0 4px 14px}details details>summary{cursor:pointer}#bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:6px 0 8px;margin-bottom:8px}.tab{border:none;background:none;padding:6px 10px;font:inherit;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}.tab.on{color:var(--acc);border-bottom-color:var(--acc)}.tab small{font-weight:400}.nbtn{display:inline-block;border:1px solid #c9ced6;border-radius:6px;padding:1px 6px;margin:2px;cursor:pointer;background:#fff;font-size:12px}.nbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}.neu{display:none}.neu.on{display:block}
+.head{display:none}.head.on{display:block}details.nd{border-top:1px solid var(--line);padding:6px 0}details.xterm{border-top:1px dashed var(--line);padding:3px 0;margin-left:10px}details.xterm>summary{cursor:pointer}details.xterm code{font:12px ui-monospace,Menlo,monospace;background:#f3f5f8;padding:1px 4px;border-radius:4px}details.nd>summary{cursor:pointer;font-size:14px}details details{margin:4px 0 4px 14px}details details>summary{cursor:pointer}#bar{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line);padding:6px 0 8px;margin-bottom:8px}.tab{border:none;background:none;padding:6px 10px;font:inherit;font-weight:600;color:var(--mut);cursor:pointer;border-bottom:3px solid transparent}.tab.on{color:var(--acc);border-bottom-color:var(--acc)}.tab small{font-weight:400}.nbtn{display:inline-block;border:1px solid #c9ced6;border-radius:6px;padding:1px 6px;margin:2px;cursor:pointer;background:#fff;font-size:12px}.nbtn.on{background:var(--acc);color:#fff;border-color:var(--acc)}.neu{display:none}.neu.on{display:block}
 pre{font:12px/1.55 ui-monospace,Menlo,monospace;background:#f6f8fa;border:1px solid var(--line);border-radius:8px;padding:8px 10px;overflow-x:auto;white-space:pre-wrap;margin:4px 0}#contrib{min-height:60px}"""
 
 INFO = {
@@ -85,7 +85,15 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
         with torch.no_grad(): return np.concatenate([downstream(model, *T(o[a:a + 5000]).split(8, 1)).cpu().numpy() for a in range(0, n_dev, 5000)])
     Lm = logits(O); pred = Lm.argmax(1); a0 = float((pred == ref).mean()); heads = []
     d0s = np.abs(np.asarray(J['ext'][rows][..., 3], np.float32)) / np.maximum(np.asarray(J['ext'][rows][..., 4], np.float32), 1e-6)
-    npart = ok.sum(1)
+    npart = ok.sum(1); ytrue = J['y'][rows]
+    if m['kind'] == 'heads':                                                 # every real particle of the dev jets once: inputs, terms, weights, kind, jet class
+        XR = np.concatenate([F0, Fn], -1)[..., :nv][ok]; TR = np.concatenate([XR] + [np.maximum(0, XR - kn[k][:nv]) for k in range(5)], -1)
+        AR = [A[b_][:, :, 1:].transpose(0, 2, 1)[ok] for b_ in range(2)]; YR = np.repeat(ytrue, ok.sum(1)); nmean = ok.sum(1).mean()
+        tp = F0[..., 8:13][ok]; KR = {'charged hadron': tp[:, 0], 'neutral hadron': tp[:, 1], 'photon': tp[:, 2], 'lepton': tp[:, 3] + tp[:, 4]}; ZR = (np.exp(F0[..., 2][ok]) > .05).astype(float)
+        HIST = []
+        for f in range(nv):                                                 # histogram of each input over the real particles (1–99 % range)
+            lo_, hi_ = np.quantile(XR[:, f], [.01, .99]); hi_ = hi_ if hi_ > lo_ else lo_ + 1; cnts, edges = np.histogram(np.clip(XR[:, f], lo_, hi_), bins=30, range=(lo_, hi_))
+            HIST.append(dict(edges=[round(float(e), 5) for e in edges], counts=[int(c) for c in cnts]))
     for h in range(16):
         o = O.copy(); o[:, h] = O[:, h].mean(0); drop = a0 - float((logits(o).argmax(1) == ref).mean())
         imp_t = np.abs(Wv[h]) * Pv[:, h].std(0)[:, None]; imp_f = np.zeros(nv)
@@ -109,7 +117,16 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                 else:
                     terms = ([(float(w[f]), 'lin', None)] if w[f] else []) + [(float(w[nv + k * nv + f]), 'gt', float(kn[k, f])) for k in range(len(kn)) if w[nv + k * nv + f]]
                 if not terms: continue
-                ins.append(dict(feature=vnames[f], importance=float((Pv[:, h, cols] @ w[cols]).std()), terms=terms))
+                stats = []
+                if m['kind'] == 'heads':
+                    xf = XR[:, f]; awt = AR[h // 8][:, h % 8]
+                    for cf, k_, t_ in terms:
+                        fire = np.ones(len(xf), bool) if k_ == 'lin' else (xf > t_) if k_ == 'gt' else (xf < t_)
+                        val = cf * (xf if k_ == 'lin' else np.maximum(0, xf - t_) if k_ == 'gt' else np.maximum(0, t_ - xf)); con = awt * val
+                        byc = [float(con[YR == c].sum() / max((ytrue == c).sum(), 1)) for c in range(10)]
+                        stats.append(dict(fires=float(fire.mean()), kinds={k2: float(v2[fire].mean()) if fire.any() else 0.0 for k2, v2 in KR.items()}, hard=float(ZR[fire].mean()) if fire.any() else 0.0, by_class=byc,
+                                          hist=HIST[f], thr=None if k_ == 'lin' else float(t_)))
+                ins.append(dict(feature=vnames[f], importance=float((Pv[:, h, cols] @ w[cols]).std()), terms=terms, stats=stats))
             ins.sort(key=lambda d: -d['importance']); neurons.append(ins)
         b = h // 8; al = A[b, :, h % 8, 1:]; rel = al * npart[:, None]; sel = {}
         for name, v, bins in (('ln pT/pT_jet', F0[..., 2], np.linspace(-7, -0.5, 9)), ('ΔR', F0[..., 4], np.linspace(0, 0.8, 9)), ('|d0|/σ', d0s, np.array([0, .5, 1, 2, 3, 5, 10, 1e9]))):
@@ -132,10 +149,6 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
     # per value neuron, facts in the style of the JEDI-linear explorer
     from sklearn.metrics import roc_auc_score
     ytrue = J['y'][rows]; Lm_ = Lm
-    if m['kind'] == 'heads':                                                 # every real particle of the dev jets once: inputs, terms, weights, kind, jet class
-        XR = np.concatenate([F0, Fn], -1)[..., :nv][ok]; TR = np.concatenate([XR] + [np.maximum(0, XR - kn[k][:nv]) for k in range(5)], -1)
-        AR = [A[b_][:, :, 1:].transpose(0, 2, 1)[ok] for b_ in range(2)]; YR = np.repeat(ytrue, ok.sum(1)); nmean = ok.sum(1).mean()
-        tp = F0[..., 8:13][ok]; KR = {'charged hadron': tp[:, 0], 'neutral hadron': tp[:, 1], 'photon': tp[:, 2], 'lepton': tp[:, 3] + tp[:, 4]}; ZR = (np.exp(F0[..., 2][ok]) > .05).astype(float)
     def head_sel_phrase(hd):
         sel = hd['selection']; out = []
         w = [v for v in sel['ln pT/pT_jet']['weight'] if v is not None]
@@ -236,7 +249,12 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             xin = np.round(F[i, ps][:, :nv], 5).tolist() if m['kind'] == 'heads' else None
             ex.append(dict(X=xin, part=int(ref[i]), truth=int(J['y'][rows[i]]), model=int(pred[i]), p_model=sm.round(3).tolist(), p_part=sp.round(3).tolist(), n=int(npart[i]), particles=parts, heads=hs))
     model_js = dict(W=np.round(m['W'], 6).tolist(), kn=np.round(m['kn'][:, :nv], 6).tolist(), nv=nv, names=vnames) if m['kind'] == 'heads' else None
-    return dict(tag=tag, agreement=a0, heads=heads, examples=ex, model_js=model_js)
+    hists = {vnames[f]: HIST[f] for f in range(nv)} if m['kind'] == 'heads' else {}
+    for hd in heads:
+        for ins_ in hd['neurons']:
+            for d in ins_:
+                for st in d.get('stats', []): st.pop('hist', None)
+    return dict(tag=tag, agreement=a0, heads=heads, examples=ex, model_js=model_js, hists=hists)
 
 
 def svg_lines(x, Y, w=250, h=100, color='#1f4e79', op=.45):
@@ -273,6 +291,32 @@ def page(tag, outdir, device='mps', log=print):
     hb = ''.join(f'<button class="tab hb{" on" if i == 0 else ""}" title="{html.escape(hd["summary"]["title"])}" onclick="setHead({i})">block {hd["block"]} · head {hd["head"]} <small>−{100 * hd["drop"]:.1f}</small></button>' for i, hd in enumerate(an['heads']))
     jb = ''.join(f'<span class="btn jb{" on" if i == 0 else ""}" onclick="setJet({i})" style="border-color:{"#2f855a" if e["model"] == e["part"] else "#c05621"}">{CLASSES[e["part"]]} <small>{e["n"]}p</small></span>' for i, e in enumerate(an['examples']))
     panels = ''
+    def hist_svg(hs, thr, w=260, h=70):
+        e, c = hs['edges'], hs['counts']; mx = max(c) or 1; n = len(c); bw = (w - 20) / n
+        X = lambda v: 10 + (w - 20) * (v - e[0]) / (e[-1] - e[0] + 1e-12)
+        bars = ''.join(f'<rect x="{10 + i * bw:.1f}" y="{h - 14 - (h - 22) * v / mx:.1f}" width="{bw - 1:.1f}" height="{(h - 22) * v / mx:.1f}" fill="#c9d4e3"/>' for i, v in enumerate(c))
+        mark = '' if thr is None else f'<line x1="{X(thr):.1f}" x2="{X(thr):.1f}" y1="4" y2="{h - 12}" stroke="#c05621" stroke-width="2"/><text x="{X(thr) + 3:.1f}" y="12" font-size="10" fill="#c05621">{thr:.3g}</text>'
+        return f'<svg viewBox="0 0 {w} {h}" style="width:100%;max-width:{w}px">{bars}{mark}<text x="10" y="{h - 2}" font-size="9" fill="#667">{e[0]:.3g}</text><text x="{w - 10}" y="{h - 2}" font-size="9" text-anchor="end" fill="#667">{e[-1]:.3g}</text></svg>'
+    def terms_html(inputs, share=.99):
+        tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, []
+        for d in inputs:
+            if acc >= share * tot and len(out) >= 3: break
+            acc += d['importance']
+            for (c, k, t), st in zip(d['terms'], d['stats'] if d.get('stats') else [None] * len(d['terms'])):
+                v = f'particle["{d["feature"]}"]'
+                line = f'add {c:+.4g} · {v}' if k == 'lin' else f'if {v} > {t:.4g}:  add {c:+.4g} · ({v} − {t:.4g})' if k == 'gt' else f'if {v} < {t:.4g}:  add {c:+.4g} · ({t:.4g} − {v})'
+                if st is None: out.append(f'<details class="xterm"><summary><code>{html.escape(line)}</code> <span class="cnt">±{d["importance"]:.3g}</span></summary></details>'); continue
+                kinds = ', '.join(f'{k2} {100 * v2:.0f} %' for k2, v2 in sorted(st['kinds'].items(), key=lambda q: -q[1]) if v2 > .05)
+                byc = sorted(enumerate(st['by_class']), key=lambda q: -abs(q[1]))[:4]; mxc = max(abs(v2) for _, v2 in byc) or 1
+                cls = ''.join(f'<tr><td>{CLASSES[ci]}</td><td style="width:120px"><div class="bar" style="width:{100 * abs(v2) / mxc:.0f}px;background:{"#2f855a" if v2 >= 0 else "#c05621"}"></div></td><td class="num">{v2:+.3g}</td></tr>' for ci, v2 in byc)
+                when = 'always (a linear term)' if k == 'lin' else f'for {100 * st["fires"]:.0f} % of all particles'
+                out.append(f'''<details class="xterm"><summary><code>{html.escape(line)}</code> <span class="cnt">typical contribution ±{d["importance"]:.3g}</span></summary>
+<div class="grid" style="margin:6px 0 4px 10px"><div><div><b>{html.escape(d["feature"])}</b>: {html.escape(WORDS.get(d["feature"], ""))} <span class="cnt">({html.escape(DEFS.get(d["feature"], ""))})</span></div>
+<div style="margin-top:4px">Fires {when}{"" if k == "lin" else f"; those are {kinds}; hard (pT share > 5 %) {100 * st['hard']:.0f} %"}. The amount added grows with the distance from the threshold.</div></div>
+<div><div class="cnt">distribution of this input over the particles (threshold in orange)</div><div class="hh" data-f="{html.escape(d["feature"])}" data-thr="{'' if st['thr'] is None else st['thr']}"></div></div>
+<div><div class="cnt">what this statement adds to the neuron, per jet, by true class (α-weighted)</div><table class="bars">{cls}</table></div></div></details>''')
+        rest = max(0, sum(len(d['terms']) for d in inputs) - sum(1 for _ in out)); out.append(f'<div class="cnt" style="margin-left:10px">… {rest} smaller statements (exact: the Python code below)</div>' if rest else '')
+        return ''.join(out)
     def groups_html(gs):
         if not gs: return '<p class="cnt">no groups</p>'
         top_cls = lambda g: ', '.join(f'{CLASSES[c]} {v:+.2f}' for c, v in sorted(enumerate(g['by_class']), key=lambda t: -abs(t[1]))[:3])
@@ -310,7 +354,7 @@ def page(tag, outdir, device='mps', log=print):
 <div><b>Effect on the class scores</b>{bars(fa["effect"], "average change of each class score caused by this neuron (vs its mean)", lambda v: f"{v:+.2f}")}</div></div></div>''' for j, fa in enumerate(hd['facts']))
         dd = ''.join(f'''<details class="nd"><summary><b>Neuron {j + 1}</b> — {html.escape(fa["title"])} <span class="pill" style="background:{imp_col[fa["importance"]]};color:{"#fff" if fa["importance"] == "major" else "#1d2433"}">{fa["importance"]}</span></summary>
 <p style="margin:6px 0"><b>What it measures.</b> {html.escape(fa["measures"])}</p><p style="margin:4px 0"><b>Role.</b> {html.escape(fa["role"])} <span class="cnt">Scale: {html.escape(fa["scale"])}.</span></p>
-<details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn; the neuron = Σ over the particles of α<sub>i</sub> · f(particle i) + c·α<sub>cls</sub> + b)</span></summary><pre>{html.escape(chr(10).join(fa["ifs"]))}</pre></details>
+<details open><summary><b>If-statements</b> <span class="cnt">(applied to each particle of the jet in turn; the neuron = Σ over the particles of α<sub>i</sub> · f(particle i) + c·α<sub>cls</sub> + b; open a statement for its details)</span></summary>{terms_html(hd["neurons"][j])}</details>
 <details><summary><b>Formula</b></summary><pre>{html.escape(neuron_snippet(tag, hd["block"], hd["head"], j, hd["neurons"][j]))}</pre></details>
 <details><summary><b>Python code</b> <span class="cnt">(complete, every term)</span></summary><pre>{html.escape(neuron_python(hd["block"], hd["head"], j, hd["neurons"][j], *hd["cb"][j]))}</pre></details>
 <details><summary><b>Particle groups</b> <span class="cnt">(this neuron as a particle tagger: its top inputs cut at their thresholds)</span></summary>{groups_html(fa["groups"])}</details>
@@ -328,7 +372,12 @@ def page(tag, outdir, device='mps', log=print):
 <p class="cnt" style="margin-top:8px"><b>How the 8 heads of block {hd["block"]} are added together:</b> the 8 heads’ 128-number contributions are summed (u = Σ<sub>h</sub> c<sub>h</sub> · Σ<sub>m</sub> o<sub>hm</sub> W<sub>o</sub>[:, hm]), LayerNorm-ed, and <b>added to the class token</b>; then the block’s MLP (LayerNorm → 512 GELU → LayerNorm → 128) is added on top. Size of each head in the sum (c<sub>h</sub> · ‖its W<sub>o</sub> columns‖): {", ".join(f"h{k + 1} {c * n:.2f}" for k, (c, n) in enumerate(zip(hd["combine"]["heads_c"], hd["combine"]["heads_total"])))}. {"Block 2 adds its result to block 1’s class token; the final LayerNorm then gives the 128 neurons and the last layer the class scores." if hd["block"] == 2 else "Block 2 then reads the same particles again with this updated class token."}</p></div>
 {rule}<h3>The rule applied to a jet</h3><div class="slot"></div><h3>What the selection does on average</h3><div class="card"><div class="grid">{prof}</div><div class="cnt">{flags}</div></div>
 <h3>What it sums over the selected particles: the 16 value neurons</h3><div class="card"><p style="margin:0 0 8px"><b>How to read a neuron:</b> neuron = Σ over <b>every particle i of the jet</b> of α<sub>i</sub> · f(particle i) + c · α<sub>cls</sub> + b. f is the function written below, evaluated on that particle’s inputs; α<sub>i</sub> is this head’s weight for that particle in this jet (the weights of all particles and the class token sum to 1, so it is a weighted average). All 16 neurons of a head share the same weights α and differ in f: 16 properties averaged over the same selection.</p><span class="cnt">inputs by total weight:</span>{fb}<div class="grid">{cv}</div><div style="margin-top:8px"><span class="cnt">neuron:</span> {nb}</div>{np_}</div></div>'''
-    js = """const EX=__EX__, CL=__CL__, MJ=__MJ__; let H=0, JJ=0;
+    js = """const EX=__EX__, CL=__CL__, MJ=__MJ__, HS=__HS__; let H=0, JJ=0;
+function histSVG(hs,thr){const w=260,h=70,e=hs.edges,c=hs.counts,mx=Math.max(...c)||1,n=c.length,bw=(w-20)/n,X=v=>10+(w-20)*(v-e[0])/(e[e.length-1]-e[0]+1e-12);
+ let g='';c.forEach((v,i)=>{g+='<rect x="'+(10+i*bw).toFixed(1)+'" y="'+(h-14-(h-22)*v/mx).toFixed(1)+'" width="'+(bw-1).toFixed(1)+'" height="'+((h-22)*v/mx).toFixed(1)+'" fill="#c9d4e3"/>';});
+ if(thr!==''){const t=parseFloat(thr);g+='<line x1="'+X(t).toFixed(1)+'" x2="'+X(t).toFixed(1)+'" y1="4" y2="'+(h-12)+'" stroke="#c05621" stroke-width="2"/><text x="'+(X(t)+3).toFixed(1)+'" y="12" font-size="10" fill="#c05621">'+t.toPrecision(3)+'</text>';}
+ return '<svg viewBox="0 0 '+w+' '+h+'" style="width:100%;max-width:'+w+'px">'+g+'<text x="10" y="'+(h-2)+'" font-size="9" fill="#667">'+e[0].toPrecision(3)+'</text><text x="'+(w-10)+'" y="'+(h-2)+'" font-size="9" text-anchor="end" fill="#667">'+e[e.length-1].toPrecision(3)+'</text></svg>';}
+document.addEventListener('toggle',ev=>{const d=ev.target; if(!d.classList||!d.classList.contains('xterm')||!d.open) return; d.querySelectorAll('.hh').forEach(x=>{if(!x.dataset.done){x.innerHTML=histSVG(HS[x.dataset.f],x.dataset.thr);x.dataset.done=1;}});},true);
 function setHead(i){H=i;document.querySelectorAll('.head').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.hb').forEach((e,k)=>e.classList.toggle('on',k==i));document.querySelectorAll('.head')[i].querySelector('.slot').appendChild(document.getElementById('jetbox'));drawJet();}
 function setJet(i){JJ=i;document.querySelectorAll('.jb').forEach((e,k)=>e.classList.toggle('on',k==i));drawJet();}
 let NN=0; function setNN(j){NN=j;document.querySelectorAll('.nnb').forEach((e,k)=>e.classList.toggle('on',k==j));drawJet();}
@@ -361,11 +410,11 @@ function showP(k){const e=EX[JJ], h=e.heads[H]; document.querySelectorAll('#jet 
  if(MJ&&e.X){t+='<table>'+MJ.names.map((nm,f)=>'<tr><td>'+nm+'</td><td class="num">'+e.X[k][f].toPrecision(4)+'</td></tr>').join('')+'</table>';}
  if(h.top===undefined){document.getElementById('contrib').innerHTML=t; return;} document.querySelectorAll('#jet tr.p').forEach((r,i)=>r.classList.toggle('on',i==k));
  document.getElementById('contrib').innerHTML='<div class="cnt">particle '+(k+1)+': score '+h.s[k].toFixed(2)+' = intercept + the largest net contributions by input:</div><pre>'+h.top[k].map(t=>(t[1]>=0?'+':'')+t[1].toFixed(2)+'  '+t[0]).join('\\n')+'\\n  + smaller terms</pre>';}
-setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES)).replace('__MJ__', json.dumps(an['model_js']))
+setHead(0);""".replace('__EX__', json.dumps(an['examples'])).replace('__CL__', json.dumps(CLASSES)).replace('__MJ__', json.dumps(an['model_js'])).replace('__HS__', json.dumps(an.get('hists', {})))
     notation_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(v)}</td></tr>' for k, v in NOTATION)
     defs_rows = ''.join(f'<tr><td><b>{html.escape(k)}</b></td><td>{html.escape(WORDS.get(k, ""))}</td><td class="cnt">{html.escape(v)}</td></tr>' for k, v in DEFS.items()); m = load_model(tag); py = python_export(tag, m)
     if py: (outdir / f'{tag}_formulas.py').write_text(py)
-    shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k not in ('examples', 'model_js')}))
+    shutil.copy(OUT / f'{tag}_model.npz', outdir / f'{tag}_model.npz'); (outdir / 'analysis.json').write_text(json.dumps({k: v for k, v in an.items() if k not in ('examples', 'model_js', 'hists')}))
     doc = f"""<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{html.escape(title)}</title><style>{CSS}</style></head><body><main>
 <p class="cnt"><a href="../../index.html">← all setups</a> · <a href="../../research/index.html">research log</a></p><h1>{html.escape(title)}</h1>
 <p class="cnt">ParT_full · JetClass · ParT’s class attention written per head. A head applies one rule to every jet: a score for each particle → attention weights by softmax (with the class token’s own share) → a sum over the particles of a formula of each particle’s physics (16 value neurons). ParT’s fixed arithmetic after the heads turns the 256 head outputs into the class scores.</p>
