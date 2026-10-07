@@ -196,3 +196,5 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   score kept): block 1 **96.0 %**, block 2 98.2 %. The relative weighting is formula-shaped; the per-jet level of the
   scores (the self-weight balance; in block 1 the self score is a constant, so the level is the formula's job) is what
   S9 lacked (its self score was fixed at 0 with a least-squares intercept) — S10 tunes it.
+- S8b-bal (formula values, ParT's block-1 weights, block 2 uniform): 80.6 % → **91.6 %** (300 epochs). A plain
+  average in block 2 costs ~1.6 pt against ParT's block-2 weights (93.2 %).
