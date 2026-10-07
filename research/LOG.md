@@ -31,3 +31,34 @@ Known ceilings: ParT's class blocks fed with its own embeddings cut to the top 3
 - Conclusion: the formula method recovers ~99 % of what these quantities allow. The gap to ParT is **missing physics**
   in the quantities, not the method (as in JEDI-linear, where the method recovered the network once the right inputs were
   there). Next: find from ParT's weights what it computes that the quantities lack.
+
+### B1 — the physics in ParT's pair-interaction weights (2026-10-07 01:05)
+- ParT adds to every particle-attention logit a learned bias U_h = f_h(ln kT, ln z, ln ΔR, ln m²), one per head, shared
+  by the 8 particle blocks. Measured on 1.3M real pairs (3000 jets): research/results/B1_pair_weights.json.
+- Size: U_h's spread (1.3–3.6) is 2–3× the content part q·k/√d of block 1 (0.4–1.5) → **block-1 attention is mostly
+  a learned physics kernel**. By block 8 the content part (1.4–2.0) is comparable.
+- Simplicity: U_h is additive in the four pair variables to R² 0.85–0.99 (0.90–0.996 with pairwise products).
+- Shapes (additive parts): heads 3, 5 favour collinear low-mass pairs (clustering); head 4 favours wide-angle pairs;
+  head 8 intermediate ΔR ≈ 0.25 and harder kT; head 7 soft (low kT) high-mass pairs; heads 1, 2, 6 mixtures.
+- Consequence: the particle context ParT builds can be written with ParT's own kernels (E5), instead of guessed
+  neighbourhood features (E3).
+
+### User's challenge (01:10): could be the method, not missing physics
+- Correct reading of E1: no function of the *existing jet-level numbers* beats 81 %; methods that act before the
+  summary into jet numbers (attention over particles, LayerNorm) are not ruled out. Tests: E4 (LayerNorm), E5 (attention
+  with ParT's kernels), then ParT's extra class-attention operations (token LN, residual, MLP) in the attention fit.
+
+### E2 — ceiling of the per-particle route with own inputs (2026-10-07 01:25)
+- Per-particle MLP (38 own inputs + jet quantities) → ParT's frozen class blocks, 200k jets, 8 epochs: **81.8 %**
+  (accuracy 76.7 %), above the jet-level ceiling (81.2 %): keeping ParT's class attention gains on its own.
+- The pair-kernel reconstruction for E5 checked against B1 (per-head means/spreads agree within ~0.3).
+
+## The plan (restated 01:30, after the user's question)
+Goal: reproduce ParT — a formula model with ParT's structure making the same decisions (agreement → 100 %).
+Method: replace ParT's components one at a time by formula versions, keep the rest of ParT, measure the agreement
+drop (and the match of ParT's internal activations). Known: class blocks + last layer with ParT's embeddings (top 32
+directions) 96.6 %; embeddings from each particle's own inputs ≤ 81.8 %. The loss is in the 8 particle-attention
+blocks (context from other particles); block-1 attention is mostly the pair-physics kernel (B1).
+Steps: (1) block 1 as formulas (attention = softmax(formula pair kernel + content), values/MLP as per-particle
+formulas, ParT's LayerNorms as fixed operations), blocks 2–8 kept; (2) blocks 1–2, 1–3, … each checked; (3) all of ParT.
+E3/E5 (context from hand-made neighbourhoods / from ParT's kernels) and E4 (final LayerNorm) are quick side checks.
