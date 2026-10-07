@@ -9,7 +9,8 @@ Measured on ParT's exact downstream (balanced dev jets): ParT's values with (for
 Saves the formulas (research/results/S11_alpha.npz) for S12 (S5's values re-tuned on top).
 
   python -m jetdistill.research.alpha_fit [n_fit n_dev]"""
-import json, sys, time
+import json, os, sys, time
+TAG = os.environ.get('ALPHA_TAG', 'S11')
 import numpy as np
 from ..pipeline import jets
 from ..part.network import ParTNetwork
@@ -71,7 +72,7 @@ def run(n_fit=20000, n_dev=20000, n_jet=100000, device='mps', log=print):
             tv = 0.5 * np.abs(Arel[b, :, h, 1:] - Ad[b, :, h, 1:]).sum(1).mean()                           # how far the formula's weights are from ParT's (total variation)
             res['heads'].append(dict(block=b + 1, head=h + 1, tv_relative=float(tv), r2_alpha_cls_logit=float(r2u)))
             log(f'  block {b + 1} head {h + 1}: weights off ParT’s by {100 * tv:.1f} % (total variation); α_cls logit R² {r2u:.3f}, {time.time() - t0:.0f} s')
-    np.savez(OUT / 'S11_alpha.npz', kn=kn, mu=mu, sd=sd, coef=COEF, cz=CZ)
+    np.savez(OUT / f'{TAG}_alpha.npz', kn=kn, mu=mu, sd=sd, coef=COEF, cz=CZ)
     def alpha_of(J, rows, Z, chunk=4000):                                   # the formula α (2, n, 8, 129) of the jets `rows`
         A = np.zeros((2, len(rows), 8, 129), np.float16)
         for a in range(0, len(rows), chunk):
@@ -80,7 +81,7 @@ def run(n_fit=20000, n_dev=20000, n_jet=100000, device='mps', log=print):
                 g = np.full((len(r), 128), -np.inf, np.float32); g[ok] = Bp @ COEF[hh]; rel = np.exp(g - g.max(1, keepdims=True)); rel /= rel.sum(1, keepdims=True)
                 A[hh // 8, a:a + len(r), hh % 8, 0] = acls[:, hh]; A[hh // 8, a:a + len(r), hh % 8, 1:] = (1 - acls[:, hh:hh + 1]) * rel
         return A
-    np.save(OUT / 'S11_alpha_fit.npy', alpha_of(Jf, rows_of_split('fit', n_jet), Zf)); np.save(OUT / 'S11_alpha_dev.npy', alpha_of(Jd, rd, Zd)); log(f'  formula α of {n_jet} fit + {n_dev} dev jets saved, {time.time() - t0:.0f} s')
+    np.save(OUT / f'{TAG}_alpha_fit.npy', alpha_of(Jf, rows_of_split('fit', n_jet), Zf)); np.save(OUT / f'{TAG}_alpha_dev.npy', alpha_of(Jd, rd, Zd)); log(f'  formula α of {n_jet} fit + {n_dev} dev jets saved, {time.time() - t0:.0f} s')
     # the agreements: ParT's values with formula weights, S5's formula values with formula weights
     S, V = internals(model, *(np.load((__import__('jetdistill.config', fromlist=['RESULTS']).RESULTS / '_cls' / 'full' / 'dev' / f), mmap_mode='r')[rd] for f in ('x_f16.npy', 'mask.npy')), device)
     toS = lambda A: np.where(A > 0, np.log(np.maximum(A, 1e-30)), -np.inf).astype(np.float32)
@@ -101,4 +102,4 @@ def run(n_fit=20000, n_dev=20000, n_jet=100000, device='mps', log=print):
 
 
 if __name__ == '__main__':
-    a = [int(v) for v in sys.argv[1:]]; r = run(*a); (OUT / 'S11_alpha.json').write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps(r['agreement']))
+    a = [int(v) for v in sys.argv[1:]]; r = run(*a); (OUT / f'{TAG}_alpha.json').write_text(json.dumps(r, indent=1)); print('RESULT', json.dumps(r['agreement']))

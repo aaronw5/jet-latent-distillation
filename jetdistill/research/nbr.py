@@ -55,14 +55,15 @@ def _chunk(x, e, jet):
 # ---------------------------------------------------------------- E5: context from ParT's own pair kernels
 PK_PROPS = ['ln pT/pT_jet', 'charge', 'charged hadron', 'neutral hadron', 'photon', 'electron', 'muon', 'tanh d0', 'd0 significance>3', 'ΔR to axis', 'ln ΔR to i']
 PK = [f'h{h + 1}: {p}' for h in range(8) for p in PK_PROPS]
+PK2 = [f'h{h + 1} 2-hop: {p}' for h in range(8) for p in PK_PROPS] + [f'h{h + 1} pT-weighted: {p}' for h in range(8) for p in PK_PROPS]
 
 
-def pk_features(x, ext, jet, model, device='mps', chunk=250):
+def pk_features(x, ext, jet, model, device='mps', chunk=250, hops=False):
     """(J, 128, 8·11): for each particle i and head h, the average of the other particles' properties weighted by
     softmax_j U_h(i, j), ParT's pair bias (its pair_embed on ln kT, ln z, ln ΔR, ln m²; massless 4-vectors in jet
     coordinates) — the block-1 attention as far as the physics kernel sets it"""
     import torch
-    out = np.zeros(x.shape[:2] + (len(PK),), np.float32); emb = model.pair_embed.embed
+    out = np.zeros(x.shape[:2] + (len(PK) * (3 if hops else 1),), np.float32); emb = model.pair_embed.embed
     for a in range(0, len(x), chunk):
         xx = np.asarray(x[a:a + chunk], np.float32); ee = np.asarray(ext[a:a + chunk], np.float32); jj = np.asarray(jet[a:a + chunk], np.float32)
         ok = xx[..., 0] > 0; P = int(ok.sum(1).max()); n = len(xx)
@@ -82,6 +83,12 @@ def pk_features(x, ext, jet, model, device='mps', chunk=250):
                                 + [torch.tanh(d0), ((d0.abs() / d0e.clamp(min=1e-6)) > 3).float() * (q != 0).float(), torch.sqrt(eta ** 2 + phi ** 2)], -1)   # (n, P, 10)
             ctx = torch.einsum('nhij,njp->nihp', w, props)                     # (n, i, 8, 10)
             ldr = torch.einsum('nhij,nij->nih', w, torch.log(dR))[..., None]  # how far the head looks
-            o = torch.cat([ctx, ldr], -1).reshape(n, P, -1) * m[..., None]
+            o = torch.cat([ctx, ldr], -1)                                          # (n, P, 8, 11)
+            if hops:                                                                # A1: the context of the context (2nd hop) and pT-weighted context
+                c2 = torch.einsum('nhij,njhp->nihp', w, o)                          # (n, P, 8, 11): each head's context averaged with its own kernel again
+                wp = w * pt[:, None, None, :]; wp = wp / wp.sum(-1, keepdim=True).clamp(min=1e-12)
+                cp = torch.cat([torch.einsum('nhij,njp->nihp', wp, props), torch.einsum('nhij,nij->nih', wp, torch.log(dR))[..., None]], -1)
+                o = torch.cat([o, c2, cp], -1)
+            o = o.reshape(n, P, -1) * m[..., None]
         out[a:a + chunk, :P] = o.cpu().numpy()
     return out

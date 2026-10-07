@@ -120,7 +120,7 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
     log(f'  downstream from ParT\'s own head outputs: same class {100 * res["downstream_check"]:.2f}% (must be 100), {time.time() - t0:.0f} s')
     Jf, Jd = jets('full', 'fit'), jets('full', 'dev'); rows_f, rows_d = rows_of_split('fit', n_fit), rows_of_split('dev', n_dev); n_fit, n_dev = len(rows_f), len(rows_d)
     if weights == 'S11':                                                     # S12: both blocks' weights from the S11 formulas (ranking × jet-level class-token share)
-        Af = np.load(OUT / 'S11_alpha_fit.npy')[:, :n_fit].astype(np.float32); Ad = np.load(OUT / 'S11_alpha_dev.npy')[:, :n_dev].astype(np.float32); res['weights'] = 'S11'
+        at = os.environ.get('ALPHA_TAG', 'S11'); Af = np.load(OUT / f'{at}_alpha_fit.npy')[:, :n_fit].astype(np.float32); Ad = np.load(OUT / f'{at}_alpha_dev.npy')[:, :n_dev].astype(np.float32); res['weights'] = 'S11'; res['alpha_tag'] = at
         log(f'  weights: the S11 formulas, both blocks, {time.time() - t0:.0f} s')
     if weights == 'formula':                                                 # S9: block-1 weights from score formulas, block 2 uniform
         Af[0], prm = formula_weights(model, Jf, rows_f, Af[0], Mf, log=log); Ad[0], _ = formula_weights(model, Jd, rows_d, None, Md, params=prm)

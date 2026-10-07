@@ -35,7 +35,8 @@ def kv_true(model, X, M, device='mps'):
 def feats(J, rows, model):
     if np.isscalar(rows): rows = np.arange(rows)
     F, ok = particle_features(J, rows, ctx=[])
-    F = np.concatenate([F, nbr_features(J['x'][rows], J['ext'][rows], J['jet'][rows]), pk_features(J['x'][rows], J['ext'][rows], J['jet'][rows], model)], -1)
+    import os
+    F = np.concatenate([F, nbr_features(J['x'][rows], J['ext'][rows], J['jet'][rows]), pk_features(J['x'][rows], J['ext'][rows], J['jet'][rows], model, hops=os.environ.get('CTX_HOPS') == '1')], -1)
     return F, ok
 
 
