@@ -104,19 +104,22 @@ def python_export(tag, m):
     return HEADS_PY.format(tag=tag, nv=nv, nv6=6 * nv, nterms=m['W'].shape[1], uniform_note=note, feats=feats)
 
 
+def term_math(coef, kind, th, name):
+    v = name if ' ' not in name else f'[{name}]'
+    body = v if kind == 'lin' else (f'max(0, {v} − {th:.4g})' if kind == 'gt' else f'max(0, {th:.4g} − {v})')
+    return f'{"−" if coef < 0 else "+"} {abs(coef):.4g}·{body}'
+
+
 def neuron_snippet(tag, block, head, o, inputs, share=.99):
-    """one value neuron, an input per line: its piece as slopes per segment (a hinge coefficient is a change of slope, so
-    the piece is shown as the slope on each interval between its kinks) and its net typical contribution"""
+    """one value neuron as symbolic math: f(x) = Σ over inputs of its term(s), largest first; the typical contribution of
+    each input (how much it moves the neuron across jets) as a side note"""
     tot = sum(d['importance'] for d in inputs) or 1.0; acc, lines = 0.0, []
     for d in inputs:
         if acc >= share * tot and len(lines) >= 3: break
-        acc += d['importance']; k, s = d['knots'], d['slopes']
-        if not k: seg = f'slope {s[0]:+.3g}'
-        else: seg = ', '.join([f'slope {s[0]:+.3g} below {k[0]:.3g}'] + [f'{s[i + 1]:+.3g} from {k[i]:.3g}' for i in range(len(k))])
-        lines.append(f'  {d["feature"]:<24s} {seg:<70s} # typical contribution ±{d["importance"]:.3g}')
-    return (f'# value neuron {o + 1} of block {block}, head {head}:  sum over the particles i of alpha_i * f(x_i)   (+ c * alpha_cls + bias)\n'
-            f'# f(x) = sum of one piecewise-linear piece per input (the slope on each interval between kinks); typical contribution = how much that input moves the neuron across jets\n'
-            f'f(x) =\n' + '\n'.join(lines) + f'\n  # ... {max(0, len(inputs) - len(lines))} smaller inputs; exact: {tag}_formulas.py')
+        acc += d['importance']; expr = ' '.join(term_math(c, k, t, d['feature']) for c, k, t in d['terms'])
+        lines.append(f'      {expr:<62s}  # ±{d["importance"]:.3g}')
+    return (f'# neuron {o + 1} of block {block}, head {head} = Σ_i α_i · f(x_i) + c·α_cls + b,   x_i = the inputs of particle i\n'
+            f'f(x) =\n' + '\n'.join(lines) + f'\n      # … {max(0, len(inputs) - len(lines))} smaller inputs (exact: {tag}_formulas.py);  # ±: how much the input moves the neuron across jets')
 
 
 NOTATION = [

@@ -39,10 +39,11 @@ def weights_from_files(net, model, rows, J, device, log, t0):
 def evaluate(tags='S5', which='full_test', device='mps', chunk=5000, log=print):
     """tags: comma-separated model tags, evaluated together (one ParT pass)"""
     import torch
-    t0 = time.time(); tags = tags.split(','); Ms = {t: np.load(OUT / f'{t}_model.npz') for t in tags}
+    t0 = time.time(); tags = tags.split(','); Ms = {t: dict(np.load(OUT / f'{t}_model.npz')) for t in tags}
     net = ParTNetwork('full'); model = net.model; model.eval(); T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device)
     for p_ in model.parameters(): p_.requires_grad_(False)
-    Wt = {t: T(Ms[t]['W']) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] for t in tags}
+    from .one_term import to_standard
+    Wt = {t: T(to_standard(Ms[t]['W'], Ms[t]['knv'], int(Ms[t]['nv'])) if str(Ms[t].get('basis', '')) == 'extended' else Ms[t]['W']) for t in tags}; kn = {t: Ms[t]['kn'] for t in tags}; blocks = {t: [int(c) - 1 for c in str(Ms[t]['uniform'])] for t in tags}
     J = jets('full', which)
     def logits_of(A, M, r):
         out = {}

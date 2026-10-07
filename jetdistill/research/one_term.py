@@ -21,6 +21,16 @@ def extend(P, kn, nv):
     return np.concatenate([lin, gt, lt, acls, one], -1).astype(np.float32)
 
 
+def to_standard(We, knv, nv):
+    """the same model in the standard basis [x, x > θ_k, α_cls, 1] (exact): c·max(0, θ − x) = c·θ − c·θ·α_cls − c·x + c·max(0, x − θ) pooled"""
+    Ws = np.zeros((We.shape[0], 6 * nv + 2, We.shape[2]), np.float64); Ws[:, :6 * nv] = We[:, :6 * nv]; Ws[:, 6 * nv] = We[:, 11 * nv]; Ws[:, 6 * nv + 1] = We[:, 11 * nv + 1]
+    for k in range(5):
+        for f in range(nv):
+            c = We[:, 6 * nv + k * nv + f].astype(np.float64); th = float(knv[k, f])
+            Ws[:, f] -= c; Ws[:, nv + k * nv + f] += c; Ws[:, 6 * nv] -= c * th; Ws[:, 6 * nv + 1] += c * th
+    return Ws.astype(np.float32)
+
+
 def cols_of(f, nv):
     return [f] + [nv + k * nv + f for k in range(5)] + [6 * nv + k * nv + f for k in range(5)]
 

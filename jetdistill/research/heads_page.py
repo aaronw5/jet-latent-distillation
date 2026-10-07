@@ -41,6 +41,7 @@ INFO = {
 INFO['S10b'] = INFO['S10']
 INFO['S5rp'] = ('Per-head formulas, pruned — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Pruned: each head keeps only the inputs it needs (17–29 of 38), re-tuned.')
 INFO['S5r'] = INFO['S5']
+INFO['S5rpc1'] = ('Per-head formulas, one term per input — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Every input enters each value neuron through at most one term (x, max(0, x − θ) or max(0, θ − x)), re-tuned.')
 INFO['S5rpc'] = ('Per-head formulas, pruned, low cancellation — ParT’s selection kept', INFO['S5'][1], INFO['S5'][2] + ' Pruned and re-tuned so that inputs do not offset each other.')
 DOWN = 'Kept in every model: ParT’s fixed arithmetic after the heads — out-projection, per-head scale, LayerNorms, the 128→512→128 MLP with residuals in both class blocks, the final LayerNorm and the last layer. Not fitted, no physics content: a smooth map from the 256 head outputs to the 10 class scores.'
 TYPES = ['ch. hadron', 'n. hadron', 'photon', 'electron', 'muon']
@@ -51,6 +52,9 @@ def load_model(tag):
     if tag.startswith('S10'):
         nv = Pz['Wv'].shape[1] // 6
         return dict(kind='joint', names=names, nv=nv, **{k: Pz[k] for k in ('Ws', 'Wv', 'cself', 'bias', 'kns', 'knv', 'mus', 'sds', 'muv', 'sdv')})
+    if str(Pz.get('basis', '')) == 'extended':
+        from .one_term import to_standard
+        nv = int(Pz['nv']); return dict(kind='heads', W=to_standard(Pz['W'], Pz['knv'], nv), Wext=Pz['W'], knv=Pz['knv'], kn=Pz['kn'], uniform=str(Pz['uniform']), names=names, nv=nv)
     return dict(kind='heads', W=Pz['W'], kn=Pz['kn'], uniform=str(Pz['uniform']), names=names, nv=38)
 
 
@@ -92,19 +96,20 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
             basis = np.stack([xs] + [np.maximum(0, x - kn[k, f]) / sd[f] for k in range(len(kn))], 1); cols = [f] + [nv + k * nv + f for k in range(len(kn))]
             y = basis @ Wv[h][cols]; y -= y.mean(0); curves[vnames[f]] = dict(x=x.round(4).tolist(), y=y.round(4).T.tolist())
         neurons = []
-        for o_ in range(16):                                                    # per input: a piecewise-linear piece, slopes per segment, its net typical contribution
+        for o_ in range(16):                                                    # per input: its terms (symbolic), its net typical contribution
             w = Wv[h][:, o_]; ins = []
             for f in range(nv):
                 cols = [f] + [nv + k * nv + f for k in range(len(kn))]
-                if not np.any(w[cols]): continue
-                net_sd = float((Pv[:, h, cols] @ w[cols]).std())
-                kk = {}
-                for k in range(len(kn)):
-                    if w[nv + k * nv + f]: kk[round(float(kn[k, f]), 6)] = kk.get(round(float(kn[k, f]), 6), 0.0) + float(w[nv + k * nv + f])
-                th = sorted(kk); sl = [float(w[f])]
-                for t in th: sl.append(sl[-1] + kk[t])
-                scale = 1.0 / sd[f] if m['kind'] != 'heads' else 1.0
-                ins.append(dict(feature=vnames[f], importance=net_sd, knots=th, slopes=[v * scale for v in sl]))
+                if 'Wext' in m:                                                 # one-term model: the single term as stored
+                    we = m['Wext'][h][:, o_]; terms = []
+                    if we[f]: terms.append((float(we[f]), 'lin', None))
+                    for k in range(5):
+                        if we[nv + k * nv + f]: terms.append((float(we[nv + k * nv + f]), 'gt', float(m['knv'][k, f])))
+                        if we[6 * nv + k * nv + f]: terms.append((float(we[6 * nv + k * nv + f]), 'lt', float(m['knv'][k, f])))
+                else:
+                    terms = ([(float(w[f]), 'lin', None)] if w[f] else []) + [(float(w[nv + k * nv + f]), 'gt', float(kn[k, f])) for k in range(len(kn)) if w[nv + k * nv + f]]
+                if not terms: continue
+                ins.append(dict(feature=vnames[f], importance=float((Pv[:, h, cols] @ w[cols]).std()), terms=terms))
             ins.sort(key=lambda d: -d['importance']); neurons.append(ins)
         b = h // 8; al = A[b, :, h % 8, 1:]; rel = al * npart[:, None]; sel = {}
         for name, v, bins in (('ln pT/pT_jet', F0[..., 2], np.linspace(-7, -0.5, 9)), ('ΔR', F0[..., 4], np.linspace(0, 0.8, 9)), ('|d0|/σ', d0s, np.array([0, .5, 1, 2, 3, 5, 10, 1e9]))):
