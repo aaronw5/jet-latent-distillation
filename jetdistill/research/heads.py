@@ -127,7 +127,16 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
         for A_, M_ in ((Af, Mf), (Ad, Md)):
             okm = np.concatenate([np.ones((len(M_), 1), bool), M_], 1); A_[b] = (okm / okm.sum(1, keepdims=True))[:, None, :]
     res['uniform_blocks'] = uniform
-    Pf, kn = phi_pooled(Jf, rows_f, Af); Pd, _ = phi_pooled(Jd, rows_d, Ad, kn); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
+    Pf, kn = phi_pooled(Jf, rows_f, Af); Pd, _ = phi_pooled(Jd, rows_d, Ad, kn)
+    dead = np.zeros(Pf.shape[1:], bool)                                      # per head: constant columns and duplicates (coinciding thresholds) → zeroed, their coefficients 0
+    for h in range(16):
+        B = Pf[:, h]; dead[h] = B.std(0) < 1e-9; seen = {}
+        for j in np.flatnonzero(~dead[h]):
+            key = B[:3000, j].round(5).tobytes()
+            if key in seen and np.allclose(B[:, j], B[:, seen[key]]): dead[h, j] = True
+            else: seen[key] = j
+        Pf[:, h, dead[h]] = 0; Pd[:, h, dead[h]] = 0
+    log(f'  pooled terms: {int((~dead).sum())} live of {dead.size} ({int(dead.sum())} constant or duplicate columns zeroed)'); log(f'  pooled terms per head: {Pf.shape[-1]}, {time.time() - t0:.0f} s')
     Of_, Od_ = Of.transpose(1, 0, 2, 3).reshape(n_fit, 16, 16), Od.transpose(1, 0, 2, 3).reshape(n_dev, 16, 16)
     pred = np.zeros_like(Od_); r2 = np.zeros((16, 16))
     for h in range(16):
@@ -162,7 +171,8 @@ def run(n_fit=40000, n_dev=20000, steps=0, uniform='', weights='', lr=3e-4, lam=
         tag = ('S9' if weights == 'formula' else f'S8_uniform{uniform}' if uniform else 'S5') + os.environ.get('HEADS_TAG', '')
         def save(Wb):
             extra = dict(score_W=prm['W'], score_kn=prm['kn'], score_mu=prm['mu'], score_sd=prm['sd']) if weights == 'formula' else {}
-            np.savez(OUT / f'{tag}_model.npz', W=torch.einsum('hkj,hjo->hko', Mt, Wb).cpu().numpy(), kn=kn, uniform=uniform, weights=weights or 'part', **extra)
+            Wp = torch.einsum('hkj,hjo->hko', Mt, Wb).cpu().numpy(); Wp[dead] = 0
+            np.savez(OUT / f'{tag}_model.npz', W=Wp, kn=kn, uniform=uniform, weights=weights or 'part', dead=dead, **extra)
         OUT.mkdir(parents=True, exist_ok=True); save(bestW)
         for i in range(steps):
             for a in range(0, n_fit, 5000):
