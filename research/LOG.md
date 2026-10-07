@@ -404,3 +404,5 @@ models are starting points — train and tune the thresholds until > 90 %. Ident
   pruning (S15q) queued. **The class-token shares matter**: α_h,cls replaced by their means 75.3 %, the c·α_cls terms
   removed 47.8 % — but the particles' weights sum to 1 − α_cls, so part of that is normalization. Clean test queued (S16):
   the same fit with the particle weights renormalized to sum to 1 and no α_cls terms at all.
+- S16 (S15 without the class-token share: particle weights renormalized to 1, no α_cls terms): least squares 87.96 %,
+  tuned **91.03 %** (S15: 91.22 / 93.29 %). The 16 class-token shares are worth ≈ 2.3 pt; the model stands without them.

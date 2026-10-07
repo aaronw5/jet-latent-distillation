@@ -108,13 +108,6 @@ def prune(tol=0.1, rounds=8, epochs=40, n_fit=100000, n_dev=20000, device='mps',
     (OUT / 'S15p_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned S15: {int(keep.sum())} (neuron, input) pairs, {100 * a_now:.2f}%'); return r
 
 
-if __name__ == '__main__':
-    cmd, *a = sys.argv[1:]
-    if cmd == 'one_term': one_term(*(int(v) for v in a))
-    elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
-    else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
-
-
 def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S15p', out='S15q', device='mps', log=print):
     """statement-level pruning: single terms (neuron, input, head) removed smallest first — how many per round by bisection on the
     agreement drop (≤ tol points) — then re-tuned; stops when the re-tuned model falls below the start by more than tol"""
@@ -142,3 +135,10 @@ def prune_terms(tol=0.1, rounds=6, epochs=30, n_fit=100000, n_dev=20000, src='S1
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, src=src, start=a_ref, final=a_now, terms_start=n0, terms=int((W[:, :K - 2] != 0).sum()), path=path, seconds=time.time() - t0)
     (OUT / f'{out}_pruned_terms.json').write_text(json.dumps(r, indent=1)); log(f'{out}: {r["terms"]} statements (from {n0}), {100 * a_now:.2f}%'); return r
+
+
+if __name__ == '__main__':
+    cmd, *a = sys.argv[1:]
+    if cmd == 'one_term': one_term(*(int(v) for v in a))
+    elif cmd == 'prune_terms': prune_terms(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
+    else: prune(*(float(v) if i == 0 else int(v) for i, v in enumerate(a)))
