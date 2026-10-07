@@ -334,3 +334,10 @@ re-tuned, end to end):
   S12: weights that serve ParT's values at 97 % do not lift formula values — plain per-particle values only work with
   ParT's own weights, which carry the context. Next: A3 (learned pair interaction in the weights), then A6 (the same
   learned context in the values).
+- A3 (learnable pair interaction in the weights, ParT values fixed): no gain over A2h — 97.04 → 96.4–96.8 % while
+  training; best = the start. With ParT's values the weights are not the limit. Its end-to-end was skipped (identical
+  weights to A2h).
+- A6 (learned pair context in weights AND values, all formulas, 40k jets): 82.5 % → best **83.2 %** (epoch 15), 82.7 %
+  at 40. One learned hop ≈ the hand-made neighbourhood (E3 84 %): the same information limit.
+- A7 queued: L = 3 stacked learned hops (formula message passing: kernel formula per hop + linear maps), in weights
+  and values.
