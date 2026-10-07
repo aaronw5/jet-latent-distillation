@@ -8,7 +8,7 @@ Formula per head: o_bh ≈ W_bh · [Σ_i α_bhi φ(particle i), α_bh,self, 1], 
 JEDI-linear, with the head's weights α. Weights: 'oracle' = ParT's own α (are the head values formula-shaped?).
 
   python -m jetdistill.research.heads [n_fit n_dev]"""
-import json, sys, time, pathlib
+import json, os, sys, time, pathlib
 import numpy as np
 from ..config import RESULTS
 from ..pipeline import jets
