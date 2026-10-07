@@ -57,7 +57,7 @@ PK_PROPS = ['ln pT/pT_jet', 'charge', 'charged hadron', 'neutral hadron', 'photo
 PK = [f'h{h + 1}: {p}' for h in range(8) for p in PK_PROPS]
 
 
-def pk_features(x, ext, jet, model, device='mps', chunk=1000):
+def pk_features(x, ext, jet, model, device='mps', chunk=250):
     """(J, 128, 8·11): for each particle i and head h, the average of the other particles' properties weighted by
     softmax_j U_h(i, j), ParT's pair bias (its pair_embed on ln kT, ln z, ln ΔR, ln m²; massless 4-vectors in jet
     coordinates) — the block-1 attention as far as the physics kernel sets it"""
