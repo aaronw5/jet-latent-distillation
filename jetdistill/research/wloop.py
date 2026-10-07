@@ -106,30 +106,48 @@ def one_term(n_fit=30000, n_dev=20000, epochs=20, device='mps', log=print):
     (OUT / 'W1o_one_term.json').write_text(json.dumps(r, indent=1)); log(f'W1o: selection formulas with one term per input per head, ParT values: {100 * best[0]:.2f}% (start {100 * a0:.2f}%)'); return r
 
 
-def prune(tol=0.1, rounds=6, epochs=8, n_fit=30000, n_dev=20000, device='mps', log=print):
+def prune(tol=0.1, rounds=5, epochs=5, n_fit=30000, n_dev=20000, device='mps', log=print):
+    """remove (head, input) pairs — smallest contribution to the head's scores first; how many per round by bisection on the
+    agreement drop (≤ tol points per round, measured on 5k dev jets) — then re-tune; stop when the full dev falls below tolerance"""
     import torch
     t0 = time.time(); S = setup(n_fit, n_dev, device, log); net = Net(S, device); nf, K = net.nf, net.K; P1 = np.load(OUT / 'W1o_alpha.npz')
     T = lambda a: torch.from_numpy(np.ascontiguousarray(a, np.float32)).to(device); W = P1['W'].copy(); Wz = T(P1['cz'].T)
     cols = lambda f: [1 + f] + [1 + nf + k * nf + f for k in range(K)] + [1 + nf + K * nf + k * nf + f for k in range(K)]
     keep = np.array([[np.any(W[cols(f), h]) for f in range(nf)] for h in range(16)])
+    with torch.no_grad(): B = net.phi(T(S['Fd'][S['okd']][::max(1, S['okd'].sum() // 200000)])).cpu().numpy()          # a sample of real particles, every term
+    sub = np.sort(np.random.default_rng(1).choice(n_dev, 5000, replace=False)); full_dev = S['n_dev']
+    def agree_sub(Wx):
+        net.S['n_dev'] = full_dev; return net.agree(T(Wx), Wz) if len(sub) == full_dev else _agree_on(net, T(Wx), Wz, sub)
     a_ref = a_now = net.agree(T(W), Wz); path = [dict(pairs=int(keep.sum()), agreement=a_now)]; log(f'  start: {int(keep.sum())} (head, input) pairs, {100 * a_now:.2f}%')
     for rnd in range(rounds):
-        drops = {}
-        for h in range(16):
-            for f in np.flatnonzero(keep[h]):
-                Wt = W.copy(); Wt[cols(f), h] = 0; drops[(h, f)] = a_now - net.agree(T(Wt), Wz)
-        order = sorted(drops, key=drops.get); cum, rem = 0.0, []
-        for hf in order:
-            if cum + max(drops[hf], 0) > tol / 100: break
-            cum += max(drops[hf], 0); rem.append(hf)
-        if not rem: break
-        for h, f in rem: keep[h, f] = False; W[cols(f), h] = 0
-        mask = (W != 0).astype(np.float32); mask[0] = 1; best = net.tune(T(W), Wz, T(mask), epochs, log=log, label=f'W1 prune round {rnd + 1}'); W = best[1].cpu().numpy(); Wz = best[2]; a_now = best[0]
-        path.append(dict(round=rnd + 1, removed=len(rem), pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / 'W1p_alpha.npz', W=W, cz=Wz.cpu().numpy().T, kn=P1['kn'], mu=P1['mu'], sd=P1['sd'], basis='extended', keep=keep)
-        log(f'  round {rnd + 1}: removed {len(rem)} (head, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per head), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
+        size = {(h, f): float((B[:, cols(f)] @ W[cols(f), h]).std()) for h in range(16) for f in np.flatnonzero(keep[h])}
+        order = sorted(size, key=size.get); a_sub0 = agree_sub(W); lo, hi = 0, len(order)
+        def after(m):
+            Wt = W.copy()
+            for h, f in order[:m]: Wt[cols(f), h] = 0
+            return Wt
+        while hi - lo > 1:                                                                  # the largest m whose drop ≤ tol
+            mid = (lo + hi) // 2
+            if a_sub0 - agree_sub(after(mid)) <= tol / 100: lo = mid
+            else: hi = mid
+        if lo == 0: log('  nothing removable within the tolerance: stop'); break
+        for h, f in order[:lo]: keep[h, f] = False
+        W = after(lo); mask = (W != 0).astype(np.float32); mask[0] = 1
+        best = net.tune(T(W), Wz, T(mask), epochs, log=log, label=f'W1 prune round {rnd + 1}'); W = best[1].cpu().numpy(); Wz = best[2]; a_now = best[0]
+        path.append(dict(round=rnd + 1, removed=lo, pairs=int(keep.sum()), agreement=a_now)); np.savez(OUT / 'W1p_alpha.npz', W=W, cz=Wz.cpu().numpy().T, kn=P1['kn'], mu=P1['mu'], sd=P1['sd'], basis='extended', keep=keep)
+        log(f'  round {rnd + 1}: removed {lo} (head, input) pairs → {int(keep.sum())} kept ({keep.sum(1).min()}–{keep.sum(1).max()} inputs per head), re-tuned {100 * a_now:.2f}% (start {100 * a_ref:.2f}%), {time.time() - t0:.0f} s')
         if a_now < a_ref - tol / 100: log('  below the tolerance: stop'); break
     r = dict(tol=tol, start=a_ref, final=a_now, inputs_per_head=keep.sum(1).tolist(), path=path, seconds=time.time() - t0)
     (OUT / 'W1p_pruned.json').write_text(json.dumps(r, indent=1)); log(f'pruned W1: {int(keep.sum())} (head, input) pairs, {100 * a_now:.2f}%'); return r
+
+
+def _agree_on(net, Wc, Wz, idx, bs=500):
+    """agreement on a subset of the dev jets"""
+    t = net.t; ref = net.S['ref'][idx]; pred = np.empty(len(idx), int); od = idx[np.argsort(net.S['okd'][idx].sum(1))]
+    with t.no_grad():
+        for a in range(0, len(od), bs):
+            i = t.from_numpy(od[a:a + bs]).to(net.device); pred[a:a + bs] = net.logits(net.Fdt[i], net.okdt[i], net.Zdt[i], net.Vdt[i], Wc, Wz).argmax(1).cpu().numpy()
+    return float((pred == net.S['ref'][od]).mean())
 
 
 if __name__ == '__main__':
