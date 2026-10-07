@@ -301,3 +301,11 @@ explorer does not apply to these models.
   (balanced dev) with 6080 terms instead of 36480 nonzero coefficients. (Two re-tuning runs blew up: the constant
   bias column's zero spread made its coefficient scale 1e6 — fixed.) Formulas shown as symbolic math, one term per
   input. 2M-jet test and page queued.
+- S14 (S5rpc1) on the 2M test jets: **93.01 %** same class as ParT, accuracy 0.8424, AUC 0.9845 — at most one term per
+  input per neuron (6080 terms) costs 0.2 pt against S5rpc (93.21 %). Page with the per-neuron explorer (JEDI-style
+  facts, if-statements, symbolic formula) publishing.
+
+### JEDI-linear: at most one term per observable per neuron (repo ~/Documents/jet-latent-distillation, branch one-term)
+- n8, test file: 805 terms 90.57 % → 589 terms 89.75 % (accuracy 65.45 %); the smaller 399 → 328 terms, 90.06 % →
+  89.28 %. n64: data found in ~/Documents/jedi-distill/data (splits identical to the existing n64 caches); step 1 +
+  tuning running, then the one-term step.
