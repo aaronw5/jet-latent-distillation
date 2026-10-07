@@ -213,6 +213,7 @@ def sparsify(src=None, out=None, target=0.81, epochs=20, n_fit=100000, n_dev=200
     strengths; statements whose size falls below 1 % of the largest are dropped and the rest re-tuned without the penalty;
     the sparsest model with agreement ≥ target is kept"""
     src, out = src or f'{PRE}q', out or f'{PRE}s'
+    if os.environ.get('L1S'): lams = tuple(float(v) for v in os.environ['L1S'].split(','))
     t0 = time.time(); model, Ef, Ed, Hf, Lf, ref, kn, _ = load(n_fit, n_dev, device, log); K = Ef.shape[2]
     W = np.load(OUT / f'{src}_model.npz')['W'].reshape(16, K, -1).astype(np.float32); sdc = Ef[:20000].std(0); sdc = np.where(sdc < 1e-6, 1.0, sdc)
     n0 = int((W[:, :K - 2] != 0).sum()); path = []; best = None; log(f'  start {src}: {n0} statements')
