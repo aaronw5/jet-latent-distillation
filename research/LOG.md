@@ -185,3 +185,10 @@ hinge(own 18 + neighbourhood 20 features, 5 thresholds), self-weight, 1); least 
   Same quality, ~20 % fewer terms. Page published.
 - Note: the wall-clock times written in this log before this entry were estimates and run a few hours ahead of the
   machine's clock (logs/timing.log has the real times).
+
+### Balanced reruns (clock ~02:10)
+- S5c-bal (per-head formula values, ParT's weights, 100k fit, balanced 20k dev): least squares 83.7 % → **93.2 %**
+  (300 epochs). The > 90 % result stands.
+- S7-bal (ParT's values, weights swapped): block 1 uniform **78.4 %** (skewed dev had said 92.8 %); block 1 particles
+  uniform with ParT's self-weight 88.9 %; block 2 uniform 96.4 % (was 99.1 %). The weights matter more than the
+  skewed sample suggested, block 1's self-weight in particular.
