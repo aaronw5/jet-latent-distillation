@@ -524,3 +524,7 @@ functionally right for ParT's values but different in detail; formula neurons ar
   pair pruning switched to bisection on the measured agreement (prune_pairs).
 - **W1q on the 2M test jets: 96.65 %** (accuracy 0.8557, AUC 0.9870) with 2,165 head–input pairs; **W2: 95.77 %** (accuracy
   0.8524, AUC 0.9863) with only the 8 block-1 selection formulas (434 pairs), block 2 a plain average.
+- (19:30) Memory pressure (11 % free): the C1q 2M test (75 % done; C1q superseded by C3/C6) stopped → 21 % free.
+- C6 statements: 74,208 → 59,632 in 5 rounds at ≈ 82.6 % — the bisection limit (0.1 pt per round) removes little per
+  round; an L1 penalty during re-tuning or a target-agreement prune would cut deeper (next).
+- C3 (one term) loop: C3q 4,504 statements, 74.05 % (then C3j joint re-tune).
