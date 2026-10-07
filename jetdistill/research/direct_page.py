@@ -141,7 +141,7 @@ def analyze(tag, n_dev=20000, n_ex=6, device='mps', log=print):
                 pats.append(dict(name=('fires: ' + ', '.join(on) if on else 'none of the statements fires') + (' · not: ' + ', '.join(off) if off and on and len(off) <= 3 else ''), fires=on, share=float(g.mean()), mean_f=float(fbar[g].mean()), mean_w=float(awt[g].mean() * nmean),
                                  contrib=float(contrib[g].sum() / tot_c), abs_share=float(np.abs(contrib[g]).sum() / tot_c), kinds={k_: float(v_[g].mean()) for k_, v_ in KR.items()}, hard=float(ZR[g].mean()), by_class=[float(contrib[g & (YR == c)].sum() / ncls[c]) for c in range(10)]))
             pats.sort(key=lambda g: -g['abs_share']); groups = pats[:10]
-        neurons.append(dict(n=n, title=title, inputs=ins, strength=strength, drop=drop, r2=r2, means=means, auc=auc, effect=eff, fc=[float(FW[c, n]) for c in range(10)], bias=float(W[:, -1, n].sum()),
+        neurons.append(dict(n=n, vmean=float(v.mean()), vsd=float(v.std()), title=title, inputs=ins, strength=strength, drop=drop, r2=r2, means=means, auc=auc, effect=eff, fc=[float(FW[c, n]) for c in range(10)], bias=float(W[:, -1, n].sum()),
                             cls=[float(W[h, -2, n]) for h in range(16)], head_share=hs.round(4).tolist(), groups=groups,
                             measures=('Sums over the particles of the jet, with each head’s weights, a formula that ' + '; '.join(parts) + '.') if ins else 'A constant plus the class-token terms: no particle input.',
                             role=f'This neuron {role}; without it (held at its mean), agreement with ParT changes by {-100 * drop:+.2f} pt. It reproduces ParT’s neuron {n + 1} with R² = {r2:.2f}.',
