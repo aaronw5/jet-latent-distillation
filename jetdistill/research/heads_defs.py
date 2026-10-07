@@ -120,6 +120,7 @@ def neuron_snippet(tag, block, head, o, inputs, share=.99):
         acc += d['importance']; expr = ' '.join(term_math(c, k, t, d['feature']) for c, k, t in d['terms'])
         lines.append(f'      {expr:<62s}  # ±{d["importance"]:.3g}')
     return (f'# neuron {o + 1} of block {block}, head {head} = Σ_i α_i · f(x_i) + c·α_cls + b,   x_i = the inputs of particle i\n'
+            f'# notation: [name] / x["name"] = the input called “name” of the particle being scored (defined in the table at the bottom of the page)\n'
             f'f(x) =\n' + '\n'.join(lines) + f'\n      # … {max(0, len(inputs) - len(lines))} smaller inputs (exact: {tag}_formulas.py);  # ±: how much the input moves the neuron across jets')
 
 
@@ -163,7 +164,7 @@ PHRASE = {
 
 def if_lines(inputs, share=.99):
     """one value neuron as if-statements, one per input (its single term), largest first"""
-    tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, []
+    tot = sum(d['importance'] for d in inputs) or 1.0; acc, out = 0.0, ['# x["name"] = the input called “name” of the particle being scored (table of inputs at the bottom); each line adds to f for this particle']
     for d in inputs:
         if acc >= share * tot and len(out) >= 3: break
         acc += d['importance']
@@ -177,7 +178,7 @@ def if_lines(inputs, share=.99):
 
 def neuron_python(block, head, o, inputs, c, b):
     """the complete Python function of one value neuron (every term)"""
-    L = [f'def neuron_b{block}_h{head}_n{o + 1}(particles, alpha, alpha_cls):',
+    L = [f'# x["name"] = the input called “name” of the particle being scored (see the table of inputs at the bottom of the page)', f'def neuron_b{block}_h{head}_n{o + 1}(particles, alpha, alpha_cls):',
          f'    """block {block}, head {head}, value neuron {o + 1}: sum over the particles of alpha_i * f(x_i), plus c * alpha_cls + b.',
          f'    particles: list of dicts of the per-particle inputs; alpha: this head\'s weights of those particles; alpha_cls: its weight on the class token"""',
          '    total = 0.0', '    for x, a in zip(particles, alpha):', '        f = 0.0']
@@ -189,3 +190,15 @@ def neuron_python(block, head, o, inputs, c, b):
             else: L.append(f'        if {v} < {t:.6g}: f += {cf:.6g} * ({t:.6g} - {v})')
     L += ['        total += a * f', f'    return total + {c:.6g} * alpha_cls + {b:.6g}']
     return '\n'.join(L)
+
+
+def group_words(g, classes, phrase=None):
+    """one sentence about a particle group: what the particles are, how the head weights them, how they move the neuron, where"""
+    kinds = sorted(g['kinds'].items(), key=lambda t: -t[1]); main = [f'{k}s' if not k.endswith('n') else k + 's' for k, v in kinds if v >= .3]
+    what = ' and '.join(main[:2]) if main else 'mixed particles'
+    hard = 'mostly hard (above 5 % of the jet pT)' if g['hard'] >= .5 else 'mostly soft' if g['hard'] <= .15 else 'of mixed hardness'
+    w = g['mean_w']; weight = 'weights them about like average particles' if .8 <= w <= 1.25 else (f'weights them {w:.1f}× an average particle' if w > 1.25 else f'gives them only {w:.2f}× an average particle’s weight')
+    c = g['contrib']; push = ('raise' if c > 0 else 'lower'); size = 'strongly' if abs(c) >= .3 else 'moderately' if abs(c) >= .1 else 'slightly'
+    top = sorted(enumerate(g['by_class']), key=lambda t: -abs(t[1]))[:2]; where = ', '.join(f'{classes[i]} jets' for i, v in top if abs(v) > 1e-3)
+    return (f'{100 * g["share"]:.0f} % of all particles — {what}, {hard}. The head {weight}; they {size} {push} this neuron '
+            f'({100 * abs(c):.0f} % of its total), mainly in {where or "no particular class"}.')
