@@ -323,3 +323,7 @@ re-tuned, end to end):
 - A3 learnable pair-interaction formula: s_i = g(x_i) + Σ_j K(ΔR_ij, kT_ij, z_ij, m²_ij)·h(x_j), K, g, h small formulas.
 - A4 jet-conditioned scores: Σ_k a_k(jet)·b_k(particle) (products with a few jet quantities).
 - A5 selection by rank under a formula score.
+- A1 (2nd-hop + pT-weighted kernel context, 302 inputs; score formulas on 10k jets): block-1 weights 5.3–18.6 % off
+  ParT's (S11: 5.7–19.5 %). ParT values + formula α: block 1 97.14 % (96.89), both blocks **95.95 %** (95.74);
+  S5 values + formula α both 75.77 % (74.84). A small gain: ParT's own kernels applied twice do not capture what its
+  8 blocks build. End-to-end re-tune (A1_values) next, then A2 (decision-focused) and A3 (learnable pair interaction).
