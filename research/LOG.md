@@ -544,3 +544,5 @@ functionally right for ParT's values but different in detail; formula neurons ar
   dropped, re-tuned): 1e-3 35,739 / 82.75 % · 3e-3 20,404 / 82.52 % · **1e-2 8,267 / 81.49 %** · 3e-2 5,886 / 80.31 % ·
   1e-1 5,474 / 79.74 %. Kept for the 2M test: 8,267 statements, 81.49 % (target ≥ 81 %). At equal size the no-limit route
   beats one term per input: 5,886 statements → 80.3 % vs C3j 4,504 → 78.8 %.
+- (22:05) The C6j 2M test (40 % done) stopped so the C6s and C3j tests finish sooner — C6s (8,267 statements) is the
+  combined model that gets a page; C6j (57,010 statements) is the unreadable reference.
