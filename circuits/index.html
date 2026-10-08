@@ -14,6 +14,9 @@ tr.circ td{font-weight:600}.grid{display:grid;grid-template-columns:repeat(auto-
 .ok{color:#2f855a}.bad{color:#c05621}code{font:12px ui-monospace,Menlo,monospace;background:#f3f5f8;padding:1px 4px;border-radius:4px}
 .leg span{display:inline-block;width:11px;height:11px;border-radius:2px;margin:0 4px 0 10px;vertical-align:middle}
 select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}
+#modal{display:none;position:fixed;inset:0;background:rgba(16,24,40,.45);z-index:20}#modal.on{display:block}#mbox{position:absolute;left:50%;top:4vh;transform:translateX(-50%);width:min(980px,94vw);max-height:90vh;overflow:auto;background:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 20px 50px rgba(0,0,0,.25)}
+#mclose{position:sticky;top:0;float:right;border:none;background:#f2f4f7;border-radius:8px;padding:4px 10px;cursor:pointer;font-size:15px}.clk{cursor:pointer}.clk:hover{text-decoration:underline}svg .clk:hover rect{stroke-width:3.5}
+.hint{background:#fffbea;border:1px solid #f5e1a4;border-radius:8px;padding:6px 10px;font-size:12.5px;margin:6px 0}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 </head><body><main>
@@ -24,7 +27,7 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 <div id="bar"><div id="decs"></div><div style="margin-top:4px"><b>Jet:</b> <select id="jetsel"></select> <span id="onnxmsg" class="cnt">loading ParT…</span>
 <details style="margin-top:4px"><summary>…or type your own jet</summary><div class="cnt">One particle per line: <code>pT  Δη  Δφ  type  |d0|/σ</code> — pT in GeV, angles from the jet axis; type one of <code>h+ h- h0 g e+ e- m+ m-</code> (charged hadron, neutral hadron, photon, electron, muon; default <code>h+</code>); |d0|/σ the track’s displacement in units of its error (default 0, charged only). Energies assume massless particles and the jet axis at η = 0.</div>
 <textarea id="own" rows="7" style="width:100%;max-width:560px"></textarea><br><button class="btn" id="runown">run this jet</button> <span id="ownmsg" class="cnt"></span></details></div></div>
-<div id="circuit"></div><div id="jetview"></div><div id="selftest" class="cnt"></div>
+<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="jetview"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
 </main>
 <script>
 const KCOL={'class token':'#C9CED6','lepton':'#C0392B','displaced track':'#1F4E79','prompt charged':'#7FA3C6','photon':'#E3B23C','neutral hadron':'#8E6FB0'};
@@ -69,14 +72,14 @@ function parseJet(txt){
 }
 // ---- drawing ----
 function probs(L){ const mx=Math.max(...L), e=L.map(v=>Math.exp(v-mx)), s=e.reduce((a,b)=>a+b,0); return e.map(v=>v/s); }
-function etaphi(J,alpha,title){
+function etaphi(J,alpha,title,hidx){
   const p=J.p, n=J.n, ext=[...Array(n).keys()].map(i=>Math.max(Math.abs(p.deta[i]),Math.abs(p.dphi[i]))).sort((a,b)=>a-b), q=ext[Math.floor(0.85*(n-1))];
   const W=260,H=260,R=Math.min(0.85,Math.max(0.12,1.4*q)),cl=t=>Math.max(-R,Math.min(R,t)),sx=e=>W/2+cl(e)/R*(W/2-8),sy=f=>H/2-cl(f)/R*(H/2-8);
   const w=alpha.slice(1), mx=Math.max(...w)*n||1; let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="background:#fafbfc;border:1px solid var(--line);border-radius:8px"><line x1="${W/2}" x2="${W/2}" y1="4" y2="${H-4}" stroke="#eef0f3"/><line x1="4" x2="${W-4}" y1="${H/2}" y2="${H/2}" stroke="#eef0f3"/>`;
   const idx=[...Array(n).keys()].sort((a,b)=>w[a]-w[b]);
   for(const i of idx){ const pt=Math.hypot(p.px[i],p.py[i]), r=2+16*Math.sqrt(pt/J.jet.jet_pt), a=Math.min(1,w[i]*n/mx); const k=kind(p,i);
-    g+=`<circle cx="${sx(p.deta[i]).toFixed(1)}" cy="${sy(p.dphi[i]).toFixed(1)}" r="${r.toFixed(1)}" fill="${KCOL[k]}" fill-opacity="${(0.12+0.88*a).toFixed(2)}" stroke="${a>0.5?'#1d2433':'none'}" stroke-width="1.5"><title>${k}, pT ${pt.toFixed(1)} GeV, attention ×${(w[i]*n).toFixed(2)} an average particle</title></circle>`; }
-  return g+`<text x="8" y="16" font-size="12" fill="#667085">${title}</text><text x="${W-8}" y="16" font-size="11" text-anchor="end" fill="#98a2b3">±${R.toFixed(2)} in Δη, Δφ</text><text x="8" y="${H-8}" font-size="12" fill="#667085">parked on the class token: ${pct(alpha[0])}</text></svg>`;
+    g+=`<circle class="clk" onclick="openParticle(${i})" cx="${sx(p.deta[i]).toFixed(1)}" cy="${sy(p.dphi[i]).toFixed(1)}" r="${r.toFixed(1)}" fill="${KCOL[k]}" fill-opacity="${(0.12+0.88*a).toFixed(2)}" stroke="${a>0.5?'#1d2433':'none'}" stroke-width="1.5"><title>${k}, pT ${pt.toFixed(1)} GeV, attention ×${(w[i]*n).toFixed(2)} an average particle</title></circle>`; }
+  return g+`<text x="8" y="16" font-size="12" fill="#1F4E79" class="clk" ${hidx!=null?`onclick="openHead('${HNAMES[hidx]}')"`:''}>${title}</text><text x="${W-8}" y="16" font-size="11" text-anchor="end" fill="#98a2b3">±${R.toFixed(2)} in Δη, Δφ</text><text x="8" y="${H-8}" font-size="12" fill="#667085">parked on the class token: ${pct(alpha[0])}</text></svg>`;
 }
 function compBar(comp){ let x=0, s='<div style="display:flex;height:14px;width:220px;border-radius:3px;overflow:hidden">'; for(const [k,c] of Object.entries(KCOL)){ const v=comp[k]||0; if(v>0.005) s+=`<div title="${k} ${pct(v)}" style="width:${(100*v).toFixed(1)}%;background:${c}"></div>`; } return s+'</div>'; }
 function neuronScale(nn,d,z){
@@ -105,11 +108,78 @@ function circuitMap(d,R){
   ns.forEach((n,j)=>[ia,ib].forEach((c,k)=>{ const w=D.FW[c][n-1]*D.sd[n-1], col=w>0?'#2f855a':'#c05621';
     g+=`<line x1="${NX+190}" y1="${ny(j)}" x2="${CX-8}" y2="${cy[k]}" stroke="${col}" stroke-opacity="0.6" stroke-width="${(1+2.5*Math.abs(w)).toFixed(1)}" marker-end="url(#ah)"><title>n${n} → score(${SHORT[D.classes[c]]}): ${w>0?'+':''}${w.toFixed(2)} per s.d.</title></line>`; }));
   heads.forEach((h,i)=>{ const hd=d.heads[i], b=+h[1], hh=+h[3]-1, park=R?(b===1?R.a1:R.a2)[hh][0]:null;
-    g+=`<g><rect x="${HX-120}" y="${hy(i)-22}" width="240" height="44" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="${HX-108}" y="${hy(i)-3}" font-size="14" font-weight="600" fill="#1F4E79">head ${h}</text><text x="${HX-108}" y="${hy(i)+15}" font-size="12" fill="#667085">${pct(hd.share)} of the decision${park!==null?` · parks ${pct(park)} here`:''}</text></g>`; });
+    g+=`<g class="clk" onclick="openHead('${h}')"><rect x="${HX-120}" y="${hy(i)-22}" width="240" height="44" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="${HX-108}" y="${hy(i)-3}" font-size="14" font-weight="600" fill="#1F4E79">head ${h}</text><text x="${HX-108}" y="${hy(i)+15}" font-size="12" fill="#667085">${pct(hd.share)} of the decision${park!==null?` · parks ${pct(park)} here`:''}</text></g>`; });
   ns.forEach((n,j)=>{ const nn=d.neurons[j], v=R?(R.z[n-1]-D.mu[n-1])/D.sd[n-1]:null;
-    g+=`<g><rect x="${NX}" y="${ny(j)-24}" width="190" height="48" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="${NX+12}" y="${ny(j)-4}" font-size="14" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="${NX+12}" y="${ny(j)+15}" font-size="12" fill="#667085">${pct(nn.share)}${v!==null?` · this jet ${v>=0?'+':''}${v.toFixed(2)} s.d.`:''}</text></g>`; });
+    g+=`<g class="clk" onclick="openNeuron(${n})"><rect x="${NX}" y="${ny(j)-24}" width="190" height="48" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="${NX+12}" y="${ny(j)-4}" font-size="14" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="${NX+12}" y="${ny(j)+15}" font-size="12" fill="#667085">${pct(nn.share)}${v!==null?` · this jet ${v>=0?'+':''}${v.toFixed(2)} s.d.`:''}</text></g>`; });
   [ia,ib].forEach((c,k)=>{ const sc=R?R.logits[c]:null; g+=`<g><rect x="${CX}" y="${cy[k]-24}" width="170" height="48" rx="8" fill="#f1f3f6" stroke="#6B4E9B" stroke-width="2"/><text x="${CX+12}" y="${cy[k]-4}" font-size="14" font-weight="600" fill="#6B4E9B">score(${SHORT[D.classes[c]]})</text><text x="${CX+12}" y="${cy[k]+15}" font-size="12" fill="#667085">${sc!==null?'this jet '+sc.toFixed(2):''}</text></g>`; });
   return g+`<text x="${HX-120}" y="16" font-size="12" fill="#667085">heads (edge width: how much the formula’s head→neuron edge moves the decision; hover an edge for its if-statements)</text><text x="${NX+200}" y="16" font-size="12" fill="#667085">green: raises the score, orange: lowers it</text></svg>`;
+}
+
+// ---- popups: the formula and its fit ----
+let PU=null, PUW={};
+async function popData(){ if(!PU){ document.getElementById('mbody').innerHTML='<p class="cnt">loading the formulas…</p>'; PU=await (await fetch('popup.json')).json();
+  for(const [n,v] of Object.entries(PU.neurons)){ const w=new Float32Array(16*PU.cols.length); for(const [h,k,x] of v.w) w[h*PU.cols.length+k]=x; PUW[n]=w; } } return PU; }
+function openModal(html){ document.getElementById('mbody').innerHTML=html; document.getElementById('modal').classList.add('on'); }
+document.addEventListener('click',e=>{ if(e.target.id==='modal'||e.target.id==='mclose') document.getElementById('modal').classList.remove('on'); });
+function colText(k){ const [nm,kind,thr]=PU.cols[k]; if(nm==='class-token share') return 'share parked on the class token'; if(nm==='constant') return 'constant'; if(kind==='lin') return esc(nm)+' (linear)';
+  const t=esc(thr).replace(/ ([-\d.]+( GeV|%| mm)?)$/,` ${kind==='gt'?'&gt;':'&lt;'} $1`); return `if ${t}: the amount by which ${esc(nm)} is ${kind==='gt'?'above':'below'} it`; }
+function pooled(F,al){ const K=PU.cols.length, nv=PU.nv, E=new Float64Array(K), acls=al[0];
+  for(let i=0;i<F.length;i++){ const a=al[1+i], f=F[i]; if(!a) continue; for(let q=0;q<nv;q++){ E[q]+=a*f[q]; for(let kk=0;kk<5;kk++) E[nv+kk*nv+q]+=a*Math.max(0,f[q]-PU.kn[kk][q]); } }
+  for(let kk=0;kk<5;kk++) for(let q=0;q<nv;q++) E[6*nv+kk*nv+q]=PU.knv[kk][q]*(1-acls)-E[q]+E[nv+kk*nv+q]; E[K-2]=acls; E[K-1]=1; return E; }
+function particleTerms(f){ const K=PU.cols.length, nv=PU.nv, t=new Float64Array(K); for(let q=0;q<nv;q++){ t[q]=f[q]; for(let kk=0;kk<5;kk++){ const g=Math.max(0,f[q]-PU.kn[kk][q]); t[nv+kk*nv+q]=g; t[6*nv+kk*nv+q]=PU.knv[kk][q]-f[q]+g; } } return t; }
+const HNAMES=[...Array(16).keys()].map(h=>`b${(h>>3)+1}h${(h&7)+1}`);
+function alphaOf(R,h){ return (h<8?R.a1:R.a2)[h&7]; }
+function scatterSVG(pts,r){ const W=300,H=220, xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]), lo=Math.min(...xs,...ys), hi=Math.max(...xs,...ys), sx=v=>34+(v-lo)/(hi-lo)*(W-44), sy=v=>H-26-(v-lo)/(hi-lo)*(H-40);
+  return `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><line x1="${sx(lo)}" y1="${sy(lo)}" x2="${sx(hi)}" y2="${sy(hi)}" stroke="#c9ced6"/>${pts.map(p=>`<circle cx="${sx(p[0]).toFixed(1)}" cy="${sy(p[1]).toFixed(1)}" r="2" fill="#B7791F" fill-opacity=".55"/>`).join('')}<text x="${W/2}" y="${H-6}" font-size="11" text-anchor="middle" fill="#667085">ParT’s neuron</text><text x="10" y="${H/2}" font-size="11" fill="#667085" transform="rotate(-90 10 ${H/2})" text-anchor="middle">formula</text><text x="40" y="14" font-size="12" fill="#1d2433">r = ${r}</text></svg>`; }
+async function openNeuron(n){
+  await popData(); const v=PU.neurons[String(n)]; if(!v){ openModal(`<h2>Neuron ${n}</h2><p class="cnt">No formula data for this neuron.</p>`); return; }
+  const K=PU.cols.length, W=PUW[String(n)], i=n-1, d=D.decisions[DEC];
+  const wts=D.classes.map((c,ci)=>[c,D.FW[ci][i]*D.sd[i]]), wm=Math.max(...wts.map(x=>Math.abs(x[1])));
+  let h=`<h2>Neuron ${n}</h2><div class="cnt">One of the 128 numbers in ParT’s final class token (after its last LayerNorm). ParT’s last layer adds it to each class score with these weights (per standard deviation of the neuron over the test jets):</div><div class="grid" style="grid-template-columns:repeat(5,1fr);margin:6px 0">${wts.map(([c,w])=>`<div class="cnt">${SHORT[c]} <b style="color:${w>0?'#2f855a':'#c05621'}">${w>0?'+':''}${w.toFixed(2)}</b><div style="height:6px;width:${(80*Math.abs(w)/wm).toFixed(0)}px;background:${w>0?'#2f855a':'#c05621'}"></div></div>`).join('')}</div>`;
+  h+=`<h3>The formula (class-token fit)</h3><div class="cnt">neuron ${n} = Σ over the 16 heads of [ Σ over particles of α(head, particle) × f(head, particle) + c × share the head parks on the class token ] + constant. α = ParT’s own attention; f = if-statements on the particle’s physics. Heads ordered by how much their part varies between jets:</div>`;
+  const hs=Object.entries(v.head_sd).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  for(const [hn,sd] of hs){ const st=v.top[hn]||[]; h+=`<details${hn===hs[0][0]?' open':''}><summary><b class="clk" onclick="event.preventDefault();openHead('${hn}')">${hn}</b> <span class="cnt">part varies by ${sd.toFixed(2)} (neuron units)</span></summary><table style="margin:4px 0 8px 14px"><tr><th class="l">statement (per attended particle)</th><th>coefficient</th></tr>${st.map(([k,w])=>`<tr><td class="l">${colText(k)}</td><td>${w>0?'+':''}${w.toPrecision(3)}</td></tr>`).join('')}</table></details>`; }
+  h+=`<h3>How well the formula fits ParT</h3><div class="grid" style="grid-template-columns:320px 1fr"><div>${scatterSVG(v.scatter,v.r)}</div><div class="cnt">400 of the 20,000 validation jets: ParT’s neuron ${n} (x) against the formula’s (y), the formula using ParT’s own attention. Correlation r = ${v.r} on all 20,000.</div></div>`;
+  h+=await neuronInJet(n); openModal(h);
+}
+async function neuronInJet(n){
+  if(!CUR) return ''; const idx=CUR.idx, R=CUR.R, z=R.z[n-1];
+  if(idx==null) return `<h3>In this jet</h3><p class="cnt">ParT’s value: ${z.toFixed(3)} (${((z-D.mu[n-1])/D.sd[n-1]).toFixed(2)} s.d. from average). The formula’s inputs are precomputed for the 100 test jets only; pick one of them to see the formula in this jet.</p>`;
+  const PJ=PU.jets[idx], W=PUW[String(n)], K=PU.cols.length; let tot=0; const ch=[];
+  for(let hh=0;hh<16;hh++){ const E=pooled(PJ.F,alphaOf(R,hh)); let c=0, terms=[]; for(let k=0;k<K;k++){ const w=W[hh*K+k]; if(w){ c+=E[k]*w; terms.push([k,E[k]*w]); } } tot+=c; ch.push([HNAMES[hh],c,terms]); }
+  const cm=Math.max(...ch.map(x=>Math.abs(x[1]))); ch.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  let h=`<h3>In this jet</h3><div class="cnt">ParT’s value <b>${z.toFixed(3)}</b> · the formula’s value <b>${tot.toFixed(3)}</b> (rebuilt in your browser; Python: ${PJ.zform[String(n)]}). Each head’s part:</div><table><tr><th class="l">head</th><th>part</th><th class="l"></th><th class="l">largest statements in this jet</th></tr>`;
+  for(const [hn,c,terms] of ch.slice(0,6)){ terms.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])); h+=`<tr><td class="l clk" onclick="openHead('${hn}')"><b>${hn}</b></td><td>${c>=0?'+':''}${c.toFixed(3)}</td><td class="l"><div style="height:8px;width:${(120*Math.abs(c)/cm).toFixed(0)}px;background:${c>0?'#2f855a':'#c05621'}"></div></td><td class="l cnt">${terms.slice(0,3).map(([k,x])=>`${colText(k)}: ${x>=0?'+':''}${x.toFixed(3)}`).join('<br>')}</td></tr>`; }
+  return h+'</table>';
+}
+async function openHead(hn){
+  await popData(); const H=PU.heads[hn], d=D.decisions[DEC], b=+hn[1], hh=+hn[3]-1, ci=[d.a,d.b].map(c=>D.classes.indexOf(c));
+  const bar=(row)=>`<div style="display:flex;height:13px;width:260px;border-radius:3px;overflow:hidden">${PU.kinds.map((k,q)=>row[q]>0.005?`<div title="${k} ${pct(row[q])}" style="width:${(100*row[q]).toFixed(1)}%;background:${KCOL[k]}"></div>`:'').join('')}</div>`;
+  let h=`<h2>Head ${hn} <span class="cnt">(class-attention block ${b}, head ${hh+1})</span></h2><div class="cnt">A head reads the jet by putting attention α on particles (α sums to 1 over the particles and the class token); the share left on the class token means the head “parks” and reads nothing from the particles. The attention formula describes it as: <i>${esc(H.title)}</i>; it ${esc(H.selects)}.</div>`;
+  h+=`<h3>Where its attention goes: ParT against the formulas</h3><table><tr><th class="l">class</th><th class="l">ParT</th><th class="l">attention formula</th><th class="l">combined fit</th></tr>${ci.map(c=>`<tr><td class="l">${SHORT[D.classes[c]]}</td><td class="l">${bar(H.comp.part[c])}</td><td class="l">${bar(H.comp.W1q[c])}</td><td class="l">${bar(H.comp.C6j[c])}</td></tr>`).join('')}</table><div class="cnt leg">${PU.kinds.map(k=>`<span style="background:${KCOL[k]}"></span>${k}`).join('')}</div>
+   <div class="cnt">Fit over all 10 classes × 6 kinds: attention formula mean |difference| ${(100*H.fid.W1q.mean_abs_diff).toFixed(1)} points, correlation of the class differences ${H.fid.W1q.class_pattern_corr.toFixed(2)}; combined fit ${(100*H.fid.C6j.mean_abs_diff).toFixed(1)} points, ${H.fid.C6j.class_pattern_corr.toFixed(2)}.</div>`;
+  h+=`<h3>The attention formula (attention-weights fit)</h3><div class="cnt">Each particle gets a score; α = softmax of the scores over the jet. Inputs are standardised (value − mean) / spread:</div><pre style="font-size:12px;background:#f7f8fa;padding:8px;border-radius:6px;overflow-x:auto">${H.ftxt.map(esc).join('\n')}</pre>
+   <div class="cnt">Switch: the share parked on the class token = 1 / (1 + e<sup>u</sup>), u = Σ coefficient × jet quantity (quantile-scaled); the largest terms: ${H.switch.map(([q,c])=>`${esc(q)} ${c>0?'+':''}${c.toFixed(2)}`).join(', ')}.</div>`;
+  if(CUR){ const al=alphaOf(CUR.R,(b-1)*8+hh), PJ=CUR.idx!=null?PU.jets[CUR.idx]:null, fal=PJ?(b===1?PJ.fa1:PJ.fa2)[hh]:null, n=CUR.J.n, p=CUR.J.p;
+    const order=[...Array(n).keys()].sort((x,y)=>al[1+y]-al[1+x]).slice(0,8);
+    h+=`<h3>In this jet</h3><div class="grid" style="grid-template-columns:270px 270px 1fr"><div>${etaphi(CUR.J,al,'ParT’s attention',(b-1)*8+hh)}</div>${fal?`<div>${etaphi(CUR.J,fal,'the formula’s attention',(b-1)*8+hh)}</div>`:'<div class="cnt">The formula’s attention is precomputed for the 100 test jets only.</div>'}
+      <div><table><tr><th class="l">particle</th><th>ParT α × n</th>${fal?'<th>formula α × n</th>':''}</tr>${order.map(i=>`<tr class="clk" onclick="openParticle(${i})"><td class="l">${kind(p,i)}, ${Math.hypot(p.px[i],p.py[i]).toFixed(1)} GeV</td><td>${(al[1+i]*n).toFixed(2)}</td>${fal?`<td>${(fal[1+i]*n).toFixed(2)}</td>`:''}</tr>`).join('')}<tr><td class="l">parked (class token)</td><td>${pct(al[0])}</td>${fal?`<td>${pct(fal[0])}</td>`:''}</tr></table></div></div>`; }
+  openModal(h);
+}
+async function openParticle(i){
+  await popData(); const J=CUR.J, p=J.p, R=CUR.R, n=J.n, d=D.decisions[DEC], pt=Math.hypot(p.px[i],p.py[i]), sig=p.charge[i]!=0?Math.abs(p.d0val[i])/Math.max(p.d0err[i],1e-6):0;
+  const PJ=CUR.idx!=null?PU.jets[CUR.idx]:null;
+  let h=`<h2>Particle ${i+1} of ${n}: ${kind(p,i)}</h2><div class="cnt">pT ${pt.toFixed(2)} GeV (${pct(pt/J.jet.jet_pt)} of the jet) · Δη ${p.deta[i].toFixed(3)} · Δφ ${p.dphi[i].toFixed(3)} · ΔR ${Math.hypot(p.deta[i],p.dphi[i]).toFixed(3)} · charge ${p.charge[i]} · |d0|/σ ${sig.toFixed(1)}</div>`;
+  const rows=HNAMES.map((hn,hh)=>{ const a=alphaOf(R,hh)[1+i]*n, fa=PJ?((hh<8?PJ.fa1:PJ.fa2)[hh&7][1+i]*n):null; return [hn,a,fa]; }), am=Math.max(...rows.map(r=>Math.max(r[1],r[2]||0)));
+  h+=`<h3>Attention it gets from each head (× an average particle)</h3><table><tr><th class="l">head</th><th>ParT</th><th class="l"></th>${PJ?'<th>formula</th>':''}</tr>${rows.map(([hn,a,fa])=>`<tr><td class="l clk" onclick="openHead('${hn}')">${hn}</td><td>${a.toFixed(2)}</td><td class="l"><div style="height:8px;width:${(150*a/am).toFixed(0)}px;background:var(--acc)"></div></td>${PJ?`<td>${fa.toFixed(2)}</td>`:''}</tr>`).join('')}</table>`;
+  if(PJ){ const K=PU.cols.length, t=particleTerms(PJ.F[i]);
+    h+=`<h3>What it adds to the circuit’s neurons (the formula’s if-statements, weighted by ParT’s attention)</h3>`;
+    for(const nn of d.neurons.map(x=>x.n)){ const W=PUW[String(nn)]; if(!W) continue; let tot=0; const terms=[];
+      for(let hh=0;hh<16;hh++){ const a=alphaOf(R,hh)[1+i]; if(!a) continue; for(let k=0;k<K-2;k++){ const w=W[hh*K+k]; if(w&&t[k]){ const c=a*t[k]*w; tot+=c; terms.push([HNAMES[hh],k,c]); } } }
+      terms.sort((x,y)=>Math.abs(y[2])-Math.abs(x[2]));
+      h+=`<details open><summary><b class="clk" onclick="event.preventDefault();openNeuron(${nn})">neuron ${nn}</b>: ${tot>=0?'+':''}${tot.toFixed(3)} from this particle</summary><table style="margin-left:14px"><tr><th class="l">head</th><th class="l">statement</th><th>adds</th></tr>${terms.slice(0,5).map(([hn,k,c])=>`<tr><td class="l">${hn}</td><td class="l">${colText(k)}</td><td>${c>=0?'+':''}${c.toFixed(3)}</td></tr>`).join('')}</table></details>`; }
+  } else h+='<p class="cnt">The formula’s inputs are precomputed for the 100 test jets only; pick one of them to see which if-statements fire for this particle.</p>';
+  openModal(h);
 }
 // ---- views ----
 function decButtons(){ document.getElementById('decs').innerHTML='<b>Decision:</b> '+D.decisions.map((d,k)=>`<span class="btn${k===DEC?' on':''}" data-k="${k}">${SHORT[d.a]} vs ${SHORT[d.b]}</span>`).join(''); document.querySelectorAll('#decs .btn').forEach(b=>b.onclick=()=>{DEC=+b.dataset.k; decButtons(); draw();}); }
@@ -117,8 +187,8 @@ function circuitCard(d){
   const b=d.bench; let t=`<tr><th class="l">α · neuron values</th><th class="l"></th><th>acc ${SHORT[d.a]} vs ${SHORT[d.b]}</th><th>AUC</th><th>rejection</th><th>acc vs all</th><th>AUC</th><th>rejection</th><th>acc 10 classes</th><th>AUC</th></tr>`;
   for(const v of VN){ for(const [lab,key] of [['full network','complete'],['circuit only','circuit']]){ const ab=b.pair[v][key], va=b.vs_all[v][key], tn=b.ten[v][key==='complete'?'full':'circuit'];
     t+=`<tr class="${key==='circuit'?'circ':''}"><td class="l">${key==='complete'?VL[v]:''}</td><td class="l">${lab}</td><td>${pct(ab.acc)}</td><td>${f3(ab.auc)}</td><td>${rj(ab.rej)}</td><td>${pct(va.acc)}</td><td>${f3(va.auc)}</td><td>${rj(va.rej)}</td><td>${pct(tn.acc)}</td><td>${f3(tn.auc)}</td></tr>`; } }
-  const heads=d.heads.map(h=>`<div><b style="color:var(--acc)">${h.h}</b> · ${pct(h.share)} of the decision<div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.a]} ${compBar(h.comp[d.a])}</div><div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.b]} ${compBar(h.comp[d.b])}</div></div>`).join('');
-  const neurons=d.neurons.map(n=>`<div><b style="color:var(--gold)">neuron ${n.n}</b> · ${pct(n.share)} of the decision · weight ${SHORT[d.a]} ${(D.FW[D.classes.indexOf(d.a)][n.n-1]*D.sd[n.n-1]).toFixed(2)}, ${SHORT[d.b]} ${(D.FW[D.classes.indexOf(d.b)][n.n-1]*D.sd[n.n-1]).toFixed(2)} per s.d. · formula r = ${n.fid}</div>`).join('');
+  const heads=d.heads.map(h=>`<div><b class="clk" style="color:var(--acc)" onclick="openHead('${h.h}')">${h.h}</b> · ${pct(h.share)} of the decision<div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.a]} ${compBar(h.comp[d.a])}</div><div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.b]} ${compBar(h.comp[d.b])}</div></div>`).join('');
+  const neurons=d.neurons.map(n=>`<div><b class="clk" style="color:var(--gold)" onclick="openNeuron(${n.n})">neuron ${n.n}</b> · ${pct(n.share)} of the decision · weight ${SHORT[d.a]} ${(D.FW[D.classes.indexOf(d.a)][n.n-1]*D.sd[n.n-1]).toFixed(2)}, ${SHORT[d.b]} ${(D.FW[D.classes.indexOf(d.b)][n.n-1]*D.sd[n.n-1]).toFixed(2)} per s.d. · formula r = ${n.fid}</div>`).join('');
   const edges=d.edges.slice(0,4).map(e=>`<li><b>${e.head} → n${e.neuron}</b>: ${e.statements.slice(0,3).map(s=>statement(s,e.neuron)).join('; ')}</li>`).join('');
   return `<h2>The circuit for ${SHORT[d.a]} versus ${SHORT[d.b]}</h2><div class="card">${circuitMap(d,CUR?CUR.R:null)}</div><div class="card"><div class="grid"><div><h3>Heads (share of the decision; where ParT’s attention goes in ${SHORT[d.a]} and ${SHORT[d.b]} jets)</h3>${heads}<div class="cnt leg">${Object.entries(KCOL).map(([k,c])=>`<span style="background:${c}"></span>${k}`).join('')}</div></div><div><h3>Neurons</h3>${neurons}<h3>Key if-statements on the edges</h3><ul class="cnt" style="padding-left:18px;margin:0">${edges||'<li>—</li>'}</ul></div></div></div>
    <div class="card"><h3>How well the circuit alone does (all 2,000,000 test jets)</h3><table>${t}</table><div class="cnt">acc ${SHORT[d.a]} vs ${SHORT[d.b]}: on jets of those two classes, score(${SHORT[d.a]}) &gt; score(${SHORT[d.b]}) picks the true class · acc vs all: “top of the 10 scores is ${SHORT[d.a]}” agrees with “is ${SHORT[d.a]}” on all jets (never calling it gives 90%) · 10 classes: top score = true class; AUC each class vs the rest, averaged · rejection at 50% efficiency for ${SHORT[d.a]}.<br>
@@ -130,8 +200,8 @@ function jetView(J,R,d){
   let circ=D.FB[ia]-D.FB[ib], full=R.logits[ia]-R.logits[ib]; for(let k=0;k<128;k++) circ+=dw(k)*(C.includes(k+1)?R.z[k]:D.mu[k]);
   const U=D.union.neurons, LU=D.classes.map((c,ci)=>{let s=D.FB[ci];for(let k=0;k<128;k++) s+=D.FW[ci][k]*(U.includes(k+1)?R.z[k]:D.mu[k]);return s;}), utop=LU.indexOf(Math.max(...LU));
   const bars=D.classes.map((c,ci)=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:62px">${SHORT[c]}</span><div style="height:10px;width:${(200*P[ci]).toFixed(1)}px;background:${ci===top?'var(--acc)':'#a9b3bf'};border-radius:2px"></div><span class="cnt">${pct(P[ci])}</span></div>`).join('');
-  const neur=d.neurons.map(n=>{ const k=n.n-1, c=dw(k)*(R.z[k]-D.mu[k]); return `<tr><td class="l"><b>n${n.n}</b></td><td>${((R.z[k]-D.mu[k])/D.sd[k]).toFixed(2)}</td><td class="l">${neuronScale(n.n,d,R.z)}</td><td class="${c>0?'ok':'bad'}">${c>=0?'+':''}${c.toFixed(2)}</td></tr>`; }).join('');
-  const maps=d.heads.map(h=>{ const b=+h.h[1], hh=+h.h[3]-1; return etaphi(J,(b===1?R.a1:R.a2)[hh],`head ${h.h}`); }).join('');
+  const neur=d.neurons.map(n=>{ const k=n.n-1, c=dw(k)*(R.z[k]-D.mu[k]); return `<tr><td class="l clk" onclick="openNeuron(${n.n})"><b>n${n.n}</b></td><td>${((R.z[k]-D.mu[k])/D.sd[k]).toFixed(2)}</td><td class="l">${neuronScale(n.n,d,R.z)}</td><td class="${c>0?'ok':'bad'}">${c>=0?'+':''}${c.toFixed(2)}</td></tr>`; }).join('');
+  const maps=d.heads.map(h=>{ const b=+h.h[1], hh=+h.h[3]-1; return etaphi(J,(b===1?R.a1:R.a2)[hh],`head ${h.h} ›`,(b-1)*8+hh); }).join('');
   const call=(s)=>s>0?SHORT[d.a]:SHORT[d.b];
   return `<h2>This jet${J.cls?` (true class ${SHORT[J.cls]})`:''} · ${J.n} particles</h2><div class="card"><div class="grid"><div><h3>ParT’s answer (all 10 classes)</h3>${bars}</div>
    <div><h3>${SHORT[d.a]} versus ${SHORT[d.b]}</h3><span class="kpi">full network<b>${full>=0?'+':''}${full.toFixed(2)} → ${call(full)}</b></span><span class="kpi">circuit only<b>${circ>=0?'+':''}${circ.toFixed(2)} → ${call(circ)}</b></span><div class="cnt">score(${SHORT[d.a]}) − score(${SHORT[d.b]}). All ${U.length} circuit neurons together (all decisions) call this jet <b>${SHORT[D.classes[utop]]}</b>; ParT calls it <b>${SHORT[D.classes[top]]}</b>.</div>
@@ -143,12 +213,12 @@ async function draw(){
   if(!CUR) return; const R=CUR.R;
   document.getElementById('jetview').innerHTML=jetView(CUR.J,R,d);
 }
-async function pick(J,label){
+async function pick(J,idx){
   let R=null, note='';
   if(SESS){ R=await runPart(J); if(J.logits){ const dl=Math.max(...R.logits.map((v,k)=>Math.abs(v-J.logits[k]))); note=`computed in your browser · matches the Python run to ${dl.toExponential(1)}`; } else note='computed in your browser'; }
   else if(J.logits){ R={logits:J.logits,z:J.z,a1:J.a1,a2:J.a2}; note='precomputed (ParT could not be loaded in this browser)'; }
   else { document.getElementById('ownmsg').textContent='ParT is not loaded yet'; return; }
-  document.getElementById('onnxmsg').textContent=note; CUR={J,R}; draw();
+  document.getElementById('onnxmsg').textContent=note; CUR={J,R,idx:(idx===undefined?null:idx)}; draw();
 }
 async function selftest(){
   let mx=0, same=0, all=[]; for(const J of D.jets){ const R=await runPart(J); const dd=R.logits.map((v,k)=>Math.abs(v-J.logits[k])); all.push(...dd); mx=Math.max(mx,...dd); if(R.logits.indexOf(Math.max(...R.logits))===J.logits.indexOf(Math.max(...J.logits))) same++; }
@@ -162,9 +232,10 @@ async function selftest(){
   sel.value=String(J0); document.getElementById('own').value=jetToText(D.jets[J0]); draw();
   try{ ort.env.wasm.numThreads=1; SESS=await ort.InferenceSession.create('part_full.onnx',{executionProviders:['wasm']}); document.getElementById('onnxmsg').textContent='ParT loaded'; }
   catch(e){ document.getElementById('onnxmsg').textContent='ParT could not be loaded here ('+e+'); showing precomputed results'; }
-  sel.onchange=()=>{ const J=D.jets[+sel.value]; document.getElementById('own').value=jetToText(J); pick(J); };
-  document.getElementById('runown').onclick=async()=>{ try{ const J=parseJet(document.getElementById('own').value); document.getElementById('ownmsg').textContent=`${J.n} particles`; await pick(J); }catch(e){ document.getElementById('ownmsg').textContent='error: '+e; } };
-  await pick(D.jets[J0]);
+  sel.onchange=()=>{ const J=D.jets[+sel.value]; document.getElementById('own').value=jetToText(J); pick(J,+sel.value); };
+  document.getElementById('runown').onclick=async()=>{ try{ const J=parseJet(document.getElementById('own').value); document.getElementById('ownmsg').textContent=`${J.n} particles`; await pick(J,null); }catch(e){ document.getElementById('ownmsg').textContent='error: '+e; } };
+  await pick(D.jets[J0],J0);
   if(location.search.includes('selftest')) await selftest();
+  const op=new URLSearchParams(location.search).get('open'); if(op){ if(op[0]==='n') await openNeuron(+op.slice(1)); else if(op[0]==='h') await openHead(op.slice(1)); else if(op[0]==='p') await openParticle(+op.slice(1)); }
 })();
 </script></body></html>
