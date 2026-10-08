@@ -465,9 +465,10 @@ function jediCard(){
    <div class="cnt">${D.jagree&&D.jagree[JN]&&D.jagree[JN][JD]?`Same call as the network, jet by jet: <b>${(100*D.jagree[JN][JD].network.decision).toFixed(1)}%</b> with the network’s neuron values, ${(100*D.jagree[JN][JD].formula.decision).toFixed(1)}% with the formula’s (if-statements only). `:''}The circuit alone keeps ${(100*d.kept).toFixed(1)}% of the network’s separation. Setting its 3 neurons to their average costs ${(100*d.necessity.neurons).toFixed(1)}% (3 random other neurons: ${(100*d.necessity.random).toFixed(1)}%). ${d.b==='rest'?`AUC of P(${JSH[d.a]}) against all other classes.`:''}</div></div></div></div>`;
 }
 // ---- views ----
+let ALLDEC=false;
 function decButtons(){
   const lbl=d=>`${SHORT[d.a]} vs ${SHORT[d.b]}`, kp=d=>d.kept!=null?` · keeps ${(100*d.kept).toFixed(1)}%`:'';
-  const quick=D.decisions.map((d,k)=>[d,k]).filter(([d])=>d.on_slides).map(([d,k])=>`<span class="btn${k===DEC?' on':''}" data-k="${k}">${lbl(d)}</span>`).join('');
+  const quick=D.decisions.map((d,k)=>[d,k]).filter(([d])=>ALLDEC||d.on_slides).map(([d,k])=>`<span class="btn${k===DEC?' on':''}" data-k="${k}">${lbl(d)}</span>`).join('')+`<span class="btn" style="border-style:dashed" onclick="ALLDEC=!ALLDEC;decButtons()">${ALLDEC?'show the 13 on the slides':'show all 55'}</span>`;
   const grp=(t,f)=>`<optgroup label="${t}">`+D.decisions.map((d,k)=>[d,k]).filter(([d])=>f(d)).map(([d,k])=>`<option value="${k}"${k===DEC?' selected':''}>${lbl(d)}${kp(d)}</option>`).join('')+'</optgroup>';
   document.getElementById('decs').innerHTML=`<b>Circuit:</b> <select id="decsel">${grp('class pairs on the slides',d=>d.on_slides)}${grp('all other class pairs',d=>!d.on_slides&&d.b!=='rest')}${grp('one class against all others',d=>d.b==='rest')}</select> <span class="cnt">${D.decisions.length} circuits, found by one rule (${esc(D.rule||'')}); “keeps” = share of ParT’s separation the circuit keeps alone</span><div style="margin-top:3px">${quick}</div>`;
   document.querySelectorAll('#decs .btn').forEach(b=>b.onclick=()=>{DEC=+b.dataset.k; decButtons(); draw();});
