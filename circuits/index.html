@@ -27,7 +27,7 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 <div id="bar"><div id="decs"></div><div style="margin-top:4px"><b>Jet:</b> <select id="jetsel"></select> <span id="onnxmsg" class="cnt">loading ParT…</span>
 <details style="margin-top:4px"><summary>…or type your own jet</summary><div class="cnt">One particle per line: <code>pT  Δη  Δφ  type  |d0|/σ</code> — pT in GeV, angles from the jet axis; type one of <code>h+ h- h0 g e+ e- m+ m-</code> (charged hadron, neutral hadron, photon, electron, muon; default <code>h+</code>); |d0|/σ the track’s displacement in units of its error (default 0, charged only). Energies assume massless particles and the jet axis at η = 0.</div>
 <textarea id="own" rows="7" style="width:100%;max-width:560px"></textarea><br><button class="btn" id="runown">run this jet</button> <span id="ownmsg" class="cnt"></span></details></div></div>
-<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="pcirc"></div><div id="hblocks"></div><div id="jetview"></div><div id="cues"></div><div id="ncirc"></div><div id="hcomp"></div><div id="triples"></div><div id="jedi"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
+<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="pcirc"></div><div id="hblocks"></div><div id="pairf"></div><div id="jetview"></div><div id="cues"></div><div id="ncirc"></div><div id="hcomp"></div><div id="triples"></div><div id="jedi"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
 </main>
 <script>
 const KCOL={'class token':'#C9CED6','lepton':'#C0392B','displaced track':'#1F4E79','prompt charged':'#7FA3C6','photon':'#E3B23C','neutral hadron':'#8E6FB0'};
@@ -242,6 +242,16 @@ function blocksCard(d){
      ${ws.map(([h,l])=>`<tr><td class="l">head <span class="clk" onclick="openHead('${h}')">${h}</span> alone</td><td>${(100*l).toFixed(1)}%</td><td></td></tr>`).join('')}</table>`; }
   return `<h2>Removing heads together: block 1 reads, block 2 is a backup</h2><div class="card"><div class="cnt">Heads set to their average output in ParT (everything after recomputed): single heads, all 120 pairs, whole blocks. No single head is needed; only b1h2 + b1h3 matter together (W vs Z); without block 2 ParT barely changes, without block 1 its ten scores lose their balance.</div><div class="grid" style="grid-template-columns:1fr 1fr;margin-top:6px"><div>${td}</div><div>${t10}</div></div></div>`;
 }
+// ---- pair-feature circuits (G58) ----
+function pairCard(d){
+  const G=D.pairfeat; if(!G) return ''; const key=`${d.a} vs ${d.b}`, F=['ln m²','ln ΔR','ln kT','ln z','all four'], SUB={'ln m²':'pair mass','ln ΔR':'opening angle','ln kT':'softer pT × angle','ln z':'pT sharing','all four':''};
+  const cell=(v,x)=>`<td style="background:rgb(${Math.round(250-52*x)},${Math.round(250-168*x)},${Math.round(250-205*x)});color:${x>0.55?'#fff':'#1d2433'};text-align:center;border-radius:4px">${(100*v).toFixed(1)}%</td>`;
+  const row=(lab,f)=>`<tr><td class="l">${lab}</td>${F.map(k=>{ const [v,x]=f(k); return cell(v,x); }).join('')}</tr>`;
+  let t=`<table style="border-collapse:separate;border-spacing:2px"><tr><th></th>${F.map(k=>`<th>${k}<div class="cnt" style="font-weight:400">${SUB[k]}</div></th>`).join('')}</tr>`;
+  if(G.none[key]!==undefined) t+=row(`<b>${SHORT[d.a]} vs ${SHORT[d.b]}</b>: separation lost`,k=>[G[k][key],Math.min(1,G[k][key]/0.4)]);
+  t+=row('10-class accuracy (ParT '+(100*G.none.acc).toFixed(1)+'%)',k=>[G[k].acc,Math.min(1,(G.none.acc-G[k].acc)/0.45)])+'</table>';
+  return `<h2>Pair-feature circuits: what ParT’s particle attention needs from each pair</h2><div class="card"><div class="cnt">ParT biases every particle-to-particle attention with four features of the pair. Each set to its average over all pairs, ParT re-run on 500,000 test jets. Mass decisions run through the pair mass (for massless particles m²<sub>jet</sub> = Σ m²<sub>ij</sub>); lepton and displaced-track decisions barely use pair features.${G.none[key]===undefined?' Per-decision numbers for the 13 class pairs on the slides.':''}</div>${t}</div>`;
+}
 // ---- head-to-head circuits (G57) ----
 function hcompCard(){
   if(!D.hcomp) return ''; const M=D.hcomp.mean, S=D.hcomp.shuffle, H1=[...Array(8).keys()].map(i=>`b1h${i+1}`), H2=[...Array(8).keys()].map(i=>`b2h${i+1}`);
@@ -370,22 +380,17 @@ function jetView(J,R,d){
 }
 // ---- particle circuits over many jets (G55) ----
 function pcircCard(d){
-  if(!D.pcirc) return ''; const key=`${d.a} vs ${d.b}`, r=D.pcirc[key]; if(d.b==='rest') return '';
-  if(!r) return `<h2>Particle circuits</h2><div class="card cnt">Measured for the 13 class pairs on the slides (buttons above); pick one of them. For any jet and decision, “Which particles carry this decision?” below runs it in your browser.</div>`;
-  const KS=[1,2,3,5,10,20], W=520,H=230, xs=k=>50+(W-70)*Math.log(k)/Math.log(20), ys=v=>H-30-(H-50)*Math.max(0,Math.min(1,v));
+  if(!D.pcirc||d.b==='rest') return ''; const r=D.pcirc[`${d.a} vs ${d.b}`];
+  if(!r) return `<h2>Particle circuits</h2><div class="card cnt">Measured for the 13 class pairs on the slides (buttons above). For any jet and decision, “Which particles carry this decision?” below runs the scan in your browser.</div>`;
+  const KS=[1,3,10,20], W=560,H=240, xs=k=>60+(W-90)*Math.log(k)/Math.log(20), ys=v=>H-34-(H-56)*Math.max(0,Math.min(1,v));
   let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><g font-size="11" fill="#667085">`;
-  for(const t of [0,0.25,0.5,0.75,1]) g+=`<line x1="50" x2="${W-20}" y1="${ys(t)}" y2="${ys(t)}" stroke="#eef0f3"/><text x="44" y="${ys(t)+4}" text-anchor="end">${100*t}%</text>`;
-  for(const k of KS) g+=`<text x="${xs(k)}" y="${H-12}" text-anchor="middle">${k}</text>`;
-  g+=`<text x="${(W+30)/2}" y="${H}" text-anchor="middle">particles kept (the rest hidden from ParT’s class attention)</text></g>`;
-  for(const [lab,col] of [['effect','#2f855a'],['circuit heads','#1F4E79']]){ const pts=KS.map(k=>[xs(k),ys(r.keep[`${lab} ${k}`].kept)]);
-    g+=`<polyline points="${pts.map(p=>p.join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="2.5"/>`+pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${col}"><title>${KS[i]} particles: ${(100*r.keep[`${lab} ${KS[i]}`].kept).toFixed(1)}% of the separation</title></circle>`).join(''); }
-  g+=`<text x="60" y="18" font-size="12" fill="#2f855a">chosen by what moves the score most</text><text x="60" y="34" font-size="12" fill="#1F4E79">chosen by where the circuit’s heads look</text></svg>`;
-  const side=c=>{ const q=r[c], kinds=Object.entries(q.kind).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0.005), ranks=Object.entries(q.rank);
-    return `<div><h3>${SHORT[c]} jets: the particle that matters most</h3><div class="cnt">is a</div>${kinds.map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:110px" class="cnt">${k}</span><div style="height:9px;width:${(160*v).toFixed(0)}px;background:#B7791F"></div><span class="cnt">${pct(v)}</span></div>`).join('')}
-     <div class="cnt" style="margin-top:4px">its pT rank</div>${ranks.map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:110px" class="cnt">${k==='1'?'hardest':k==='2'?'2nd':k==='3'?'3rd':k}</span><div style="height:9px;width:${(160*v).toFixed(0)}px;background:#3b82b0"></div><span class="cnt">${pct(v)}</span></div>`).join('')}
-     <div class="cnt" style="margin-top:4px">displaced (|d0|/σ > 3.7): ${pct(q.displaced)} · removing it changes the score difference by ${(100*q.share_median).toFixed(0)}% of its size (median) · it supports ParT’s call in ${pct(q.supports)}</div></div>`; };
-  return `<h2>Particle circuits: how few particles carry ${SHORT[d.a]} versus ${SHORT[d.b]}</h2><div class="card"><div class="cnt">On ${r.n.toLocaleString()} test jets (50,000 of each class): each particle removed in turn from ParT’s class attention (what the class token reads), then only the k most important particles kept. Lines: share of ParT’s separation kept (AUC − 0.5, relative).</div>
-   <div class="grid" style="grid-template-columns:minmax(360px,1fr) 1fr 1fr">${`<div>${g}</div>`}${side(d.a)}${side(d.b)}</div></div>`;
+  for(const t of [0,0.25,0.5,0.75,1]) g+=`<line x1="60" x2="${W-30}" y1="${ys(t)}" y2="${ys(t)}" stroke="#eef0f3"/><text x="54" y="${ys(t)+4}" text-anchor="end">${100*t}%</text>`;
+  for(const k of KS) g+=`<text x="${xs(k)}" y="${H-16}" text-anchor="middle">${k}</text>`;
+  g+=`<text x="${(W+30)/2}" y="${H-2}" text-anchor="middle">particles kept (the rest removed from the jet)</text></g>`;
+  const L=[['input heads','#1F4E79','where its circuit heads look most'],['input hardest','#B7791F','the hardest'],['input random','#8A94A3','random']];
+  L.forEach(([key,col,lab],li)=>{ const pts=KS.map(k=>[xs(k),ys(r[`${key} ${k}`])]); g+=`<polyline points="${pts.map(p=>p.join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="2.5"/>`+pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${col}"><title>${lab}, ${KS[i]}: ${(100*r[`${key} ${KS[i]}`]).toFixed(1)}%</title></circle>`).join('')+`<text x="${W-40}" y="${H-96+li*15}" font-size="12" text-anchor="end" fill="${col}">${lab}</text>`; });
+  g+='</svg>';
+  return `<h2>Particle circuits: how few particles carry ${SHORT[d.a]} versus ${SHORT[d.b]}</h2><div class="card"><div class="grid" style="grid-template-columns:minmax(380px,${W}px) 1fr"><div>${g}</div><div class="cnt">ParT re-run on only k particles of each jet (the rest removed, jet pT and energy kept), on 100,000 test jets: share of ParT’s separation kept. The k particles are those this decision’s three circuit heads attend to most in the full jet, the k hardest, or k random.<br><br>With the single particle the heads look at most: <b>${(100*r['input heads 1']).toFixed(0)}%</b> (hardest: ${(100*r['input hardest 1']).toFixed(0)}%, random: ${(100*r['input random 1']).toFixed(0)}%).<br><br>Why not inside the class block: after ParT’s 8 particle blocks every particle’s embedding carries the whole jet — one random embedding alone keeps ${(100*r['cls random 1']).toFixed(0)}% of this decision.</div></div></div>`;
 }
 // ---- particle scan: remove each particle in turn and re-run ParT ----
 function subJet(J,idx){ const p={}; for(const k in J.p) p[k]=idx.map(i=>J.p[k][i]); return {...J, n:idx.length, p}; }
@@ -410,7 +415,7 @@ async function particleScan(){
    <h3>ParT on only the most important particles</h3><table><tr><th class="l">particles kept</th><th>score difference</th><th class="l">call</th></tr>${keep.map(([k,v])=>`<tr><td class="l">top ${k}</td><td>${v>=0?'+':''}${v.toFixed(2)}</td><td class="l">${call(v)}</td></tr>`).join('')}<tr><td class="l">all ${n}</td><td>${D0>=0?'+':''}${D0.toFixed(2)}</td><td class="l">${call(D0)}</td></tr></table></div></div>`;
 }
 async function draw(){
-  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d); document.getElementById('pcirc').innerHTML=pcircCard(d); document.getElementById('hblocks').innerHTML=blocksCard(d); document.getElementById('cues').innerHTML=cueCard(); document.getElementById('ncirc').innerHTML=ncircCard(); document.getElementById('hcomp').innerHTML=hcompCard(); document.getElementById('triples').innerHTML=triCard(); document.getElementById('jedi').innerHTML=jediCard();
+  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d); document.getElementById('pcirc').innerHTML=pcircCard(d); document.getElementById('hblocks').innerHTML=blocksCard(d); document.getElementById('pairf').innerHTML=pairCard(d); document.getElementById('cues').innerHTML=cueCard(); document.getElementById('ncirc').innerHTML=ncircCard(); document.getElementById('hcomp').innerHTML=hcompCard(); document.getElementById('triples').innerHTML=triCard(); document.getElementById('jedi').innerHTML=jediCard();
   if(!CUR) return; const R=CUR.R;
   document.getElementById('jetview').innerHTML=jetView(CUR.J,R,d)+scanCard();
 }
