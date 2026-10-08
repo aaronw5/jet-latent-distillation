@@ -27,7 +27,7 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 <div id="bar"><div id="decs"></div><div style="margin-top:4px"><b>Jet:</b> <select id="jetsel"></select> <span id="onnxmsg" class="cnt">loading ParT…</span>
 <details style="margin-top:4px"><summary>…or type your own jet</summary><div class="cnt">One particle per line: <code>pT  Δη  Δφ  type  |d0|/σ</code> — pT in GeV, angles from the jet axis; type one of <code>h+ h- h0 g e+ e- m+ m-</code> (charged hadron, neutral hadron, photon, electron, muon; default <code>h+</code>); |d0|/σ the track’s displacement in units of its error (default 0, charged only). Energies assume massless particles and the jet axis at η = 0.</div>
 <textarea id="own" rows="7" style="width:100%;max-width:560px"></textarea><br><button class="btn" id="runown">run this jet</button> <span id="ownmsg" class="cnt"></span></details></div></div>
-<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="jetview"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
+<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="jetview"></div><div id="cues"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
 </main>
 <script>
 const KCOL={'class token':'#C9CED6','lepton':'#C0392B','displaced track':'#1F4E79','prompt charged':'#7FA3C6','photon':'#E3B23C','neutral hadron':'#8E6FB0'};
@@ -187,6 +187,19 @@ async function openParticle(i){
   } else h+='<p class="cnt">The formula’s inputs are precomputed for the 100 test jets only; pick one of them to see which if-statements fire for this particle.</p>';
   openModal(h);
 }
+
+const CUEL={'jet mass (angles × 1.1)':['Jet mass','angles × 1.1: mass +10%'],'displacement (all tracks prompt)':['Displacement','every track made prompt'],'lepton (relabelled as a hadron)':['Lepton','lepton → charged hadron'],'charge (all charges 0)':['Charge','all charges set to 0'],'photons (relabelled as neutral hadrons)':['Photons','photons → neutral hadrons']};
+const JNM={WToQQ:'W',HToBB:'H→bb',TTBarLep:'t→bℓν',HToGG:'H→gg'}; let CUE=0;
+function cueCard(){
+  if(!D.cues) return ''; const c=D.cues[CUE], tot=c.delta, [t1,t2]=CUEL[c.name]||[c.name,''];
+  const hs=Object.entries(c.heads).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,4), ns=Object.entries(c.neurons).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,4);
+  const W=1120,H=280, y=(i,n)=>40+i*(H-70)/Math.max(1,n-1); let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto">`;
+  g+=`<rect x="0" y="${H/2-34}" width="220" height="68" rx="8" fill="#f1f3f6" stroke="#8A94A3" stroke-width="2"/><text x="12" y="${H/2-8}" font-size="15" font-weight="600">${t1}</text><text x="12" y="${H/2+14}" font-size="11" fill="#667085">${t2}</text><text x="12" y="${H/2+28}" font-size="11" fill="#667085">${JNM[c.jets]||c.jets} jets</text>`;
+  hs.forEach(([h,v],i)=>{ const yy=y(i,hs.length), sh=v/tot; g+=`<path d="M 222 ${H/2} C 300 ${H/2}, 300 ${yy}, 380 ${yy}" fill="none" stroke="#1F4E79" stroke-opacity=".35" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/><g class="clk" onclick="openHead('${h}')"><rect x="380" y="${yy-20}" width="180" height="40" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="392" y="${yy-2}" font-size="13" font-weight="600" fill="#1F4E79">head ${h}</text><text x="392" y="${yy+14}" font-size="11" fill="#667085">${(100*sh).toFixed(0)}% of the change</text></g>`; });
+  ns.forEach(([n,v],i)=>{ const yy=y(i,ns.length), sh=v/tot; g+=`<path d="M 560 ${H/2} C 620 ${H/2}, 620 ${yy}, 680 ${yy}" fill="none" stroke="#B7791F" stroke-opacity=".35" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/><g class="clk" onclick="openNeuron(${n})"><rect x="680" y="${yy-20}" width="170" height="40" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="692" y="${yy-2}" font-size="13" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="692" y="${yy+14}" font-size="11" fill="#667085">${(100*sh).toFixed(0)}% of the change</text></g><path d="M 850 ${yy} C 900 ${yy}, 900 ${H/2}, 935 ${H/2}" fill="none" stroke="#6B4E9B" stroke-opacity=".3" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/>`; });
+  g+=`<rect x="935" y="${H/2-34}" width="185" height="68" rx="8" fill="#f1f3f6" stroke="#6B4E9B" stroke-width="2"/><text x="947" y="${H/2-8}" font-size="13" font-weight="600" fill="#6B4E9B">score(${SHORT[c.a]}) − score(${SHORT[c.b]})</text><text x="947" y="${H/2+12}" font-size="12" fill="#667085">changes by ${tot>=0?'+':''}${tot.toFixed(2)}</text><text x="947" y="${H/2+28}" font-size="12" fill="#667085">${(100*c.flipped).toFixed(0)}% of ${SHORT[c.a]} calls flip</text></svg>`;
+  return `<h2>Cue circuits: a physical cue traced through ParT</h2><div class="card"><div class="cnt">Another kind of circuit: start from a cue, change it in 100,000 test jets of one class, and follow the change. Head: the original run with only that head’s output taken from the edited run (path patching). Neuron: its change × its last-layer weight (these add up exactly). Click a head or neuron for its formula.</div><div style="margin:6px 0">${D.cues.map((q,k)=>`<span class="btn${k===CUE?' on':''}" onclick="CUE=${k};document.getElementById('cues').innerHTML=cueCard()">${(CUEL[q.name]||[q.name])[0]}</span>`).join('')}</div>${g}</div>`;
+}
 // ---- views ----
 function decButtons(){
   const lbl=d=>`${SHORT[d.a]} vs ${SHORT[d.b]}`, kp=d=>d.kept!=null?` · keeps ${(100*d.kept).toFixed(1)}%`:'';
@@ -223,7 +236,7 @@ function jetView(J,R,d){
    <div class="card"><h3>Where the circuit’s heads look in this jet</h3><div class="cnt">Each circle is a particle at (Δη, Δφ) from the jet axis; size ∝ √pT; colour = kind; the stronger the fill (and a dark ring), the more of the head’s attention it gets. Hover for numbers. The view is zoomed to the jet (range in the corner); the few particles beyond it sit on the edge.</div><div class="grid" style="margin-top:6px">${maps}</div><div class="cnt leg">${Object.entries(KCOL).filter(([k])=>k!=='class token').map(([k,c])=>`<span style="background:${c}"></span>${k}`).join('')}</div></div>`;
 }
 async function draw(){
-  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d);
+  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d); document.getElementById('cues').innerHTML=cueCard();
   if(!CUR) return; const R=CUR.R;
   document.getElementById('jetview').innerHTML=jetView(CUR.J,R,d);
 }
