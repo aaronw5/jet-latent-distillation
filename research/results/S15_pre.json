@@ -1,0 +1,9 @@
+{
+ "experiment": "S15_pre",
+ "terms": 3680,
+ "least_squares": 0.91275,
+ "best": 0.93015,
+ "best_epoch": 270,
+ "check": 1.0,
+ "seconds": 92.23414182662964
+}

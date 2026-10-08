@@ -1,0 +1,63 @@
+{
+ "tol": 0.1,
+ "src": "C6p",
+ "start": 0.82425,
+ "final": 0.8255,
+ "terms_start": 74208,
+ "terms": 57010,
+ "path": [
+  {
+   "terms": 74208,
+   "agreement": 0.82425
+  },
+  {
+   "round": 1,
+   "removed": 9220,
+   "terms": 64988,
+   "agreement": 0.82605
+  },
+  {
+   "round": 2,
+   "removed": 808,
+   "terms": 64180,
+   "agreement": 0.8255
+  },
+  {
+   "round": 3,
+   "removed": 3518,
+   "terms": 60662,
+   "agreement": 0.82555
+  },
+  {
+   "round": 4,
+   "removed": 589,
+   "terms": 60073,
+   "agreement": 0.8259
+  },
+  {
+   "round": 5,
+   "removed": 441,
+   "terms": 59632,
+   "agreement": 0.82585
+  },
+  {
+   "round": 6,
+   "removed": 328,
+   "terms": 59304,
+   "agreement": 0.8257
+  },
+  {
+   "round": 7,
+   "removed": 1157,
+   "terms": 58147,
+   "agreement": 0.8248
+  },
+  {
+   "round": 8,
+   "removed": 1137,
+   "terms": 57010,
+   "agreement": 0.8255
+  }
+ ],
+ "seconds": 868.7900850772858
+}

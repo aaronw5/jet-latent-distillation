@@ -1,0 +1,64 @@
+{
+ "model": "S15_post",
+ "which": "dev",
+ "n": 20000,
+ "agreement": 0.9329,
+ "accuracy": 0.84395,
+ "auc": 0.9848233348187282,
+ "rej": {
+  "Hbb": {
+   "eff": 0.5,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Hcc": {
+   "eff": 0.5,
+   "rej": 666.0,
+   "n_bkg_pass": 3,
+   "n_bkg": 1998
+  },
+  "Hgg": {
+   "eff": 0.5,
+   "rej": 95.14285714285714,
+   "n_bkg_pass": 21,
+   "n_bkg": 1998
+  },
+  "H4q": {
+   "eff": 0.5,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Hqql": {
+   "eff": 0.99,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Tbqq": {
+   "eff": 0.5,
+   "rej": 1998.0,
+   "n_bkg_pass": 1,
+   "n_bkg": 1998
+  },
+  "Tbl": {
+   "eff": 0.995,
+   "rej": null,
+   "n_bkg_pass": 0,
+   "n_bkg": 1998
+  },
+  "Wqq": {
+   "eff": 0.5,
+   "rej": 399.6,
+   "n_bkg_pass": 5,
+   "n_bkg": 1998
+  },
+  "Zqq": {
+   "eff": 0.5,
+   "rej": 249.75,
+   "n_bkg_pass": 8,
+   "n_bkg": 1998
+  }
+ }
+}

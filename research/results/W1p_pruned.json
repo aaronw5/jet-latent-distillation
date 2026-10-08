@@ -1,0 +1,54 @@
+{
+ "tol": 0.1,
+ "start": 0.9697,
+ "final": 0.9685,
+ "inputs_per_head": [
+  180,
+  210,
+  77,
+  168,
+  189,
+  182,
+  158,
+  217,
+  292,
+  283,
+  278,
+  282,
+  297,
+  288,
+  267,
+  296
+ ],
+ "path": [
+  {
+   "pairs": 5024,
+   "agreement": 0.9697
+  },
+  {
+   "round": 1,
+   "removed": 550,
+   "pairs": 4474,
+   "agreement": 0.9688
+  },
+  {
+   "round": 2,
+   "removed": 170,
+   "pairs": 4304,
+   "agreement": 0.96915
+  },
+  {
+   "round": 3,
+   "removed": 373,
+   "pairs": 3931,
+   "agreement": 0.9689
+  },
+  {
+   "round": 4,
+   "removed": 267,
+   "pairs": 3664,
+   "agreement": 0.9685
+  }
+ ],
+ "seconds": 720.7186579704285
+}

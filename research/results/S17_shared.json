@@ -1,0 +1,11 @@
+{
+ "experiment": "S17",
+ "src": "S15q",
+ "start_src": 0.92855,
+ "start": 0.7208,
+ "best": 0.9227,
+ "best_epoch": 190,
+ "statements": 367,
+ "coefficients": 5020,
+ "seconds": 211.39783096313477
+}

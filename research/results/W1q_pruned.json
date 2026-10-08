@@ -1,0 +1,78 @@
+{
+ "tol": 0.25,
+ "start": 0.9685,
+ "final": 0.9674,
+ "inputs_per_head": [
+  52,
+  77,
+  8,
+  49,
+  61,
+  60,
+  33,
+  94,
+  229,
+  209,
+  193,
+  198,
+  244,
+  243,
+  177,
+  238
+ ],
+ "path": [
+  {
+   "pairs": 3664,
+   "agreement": 0.9685
+  },
+  {
+   "round": 1,
+   "removed": 350,
+   "pairs": 3314,
+   "agreement": 0.968
+  },
+  {
+   "round": 2,
+   "removed": 157,
+   "pairs": 3157,
+   "agreement": 0.9679
+  },
+  {
+   "round": 3,
+   "removed": 197,
+   "pairs": 2960,
+   "agreement": 0.9679
+  },
+  {
+   "round": 4,
+   "removed": 467,
+   "pairs": 2493,
+   "agreement": 0.9669
+  },
+  {
+   "round": 5,
+   "removed": 87,
+   "pairs": 2406,
+   "agreement": 0.9669
+  },
+  {
+   "round": 6,
+   "removed": 60,
+   "pairs": 2346,
+   "agreement": 0.96745
+  },
+  {
+   "round": 7,
+   "removed": 90,
+   "pairs": 2256,
+   "agreement": 0.9671
+  },
+  {
+   "round": 8,
+   "removed": 91,
+   "pairs": 2165,
+   "agreement": 0.9674
+  }
+ ],
+ "seconds": 879.5037100315094
+}

@@ -1,0 +1,36 @@
+{
+ "src": "C6j",
+ "target": 0.81,
+ "statements_start": 57010,
+ "statements": 8267,
+ "agreement": 0.8149,
+ "lam": 0.01,
+ "path": [
+  {
+   "lam": 0.001,
+   "statements": 35739,
+   "agreement": 0.8275
+  },
+  {
+   "lam": 0.003,
+   "statements": 20404,
+   "agreement": 0.82515
+  },
+  {
+   "lam": 0.01,
+   "statements": 8267,
+   "agreement": 0.8149
+  },
+  {
+   "lam": 0.03,
+   "statements": 5886,
+   "agreement": 0.80305
+  },
+  {
+   "lam": 0.1,
+   "statements": 5474,
+   "agreement": 0.7974
+  }
+ ],
+ "seconds": 206.21407318115234
+}

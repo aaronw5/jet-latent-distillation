@@ -1,0 +1,51 @@
+{
+ "tol": 0.1,
+ "src": "C3p",
+ "start": 0.66545,
+ "final": 0.7405,
+ "terms_start": 5776,
+ "terms": 4504,
+ "path": [
+  {
+   "terms": 5776,
+   "agreement": 0.66545
+  },
+  {
+   "round": 1,
+   "removed": 477,
+   "terms": 5299,
+   "agreement": 0.6935
+  },
+  {
+   "round": 2,
+   "removed": 180,
+   "terms": 5119,
+   "agreement": 0.7104
+  },
+  {
+   "round": 3,
+   "removed": 166,
+   "terms": 4953,
+   "agreement": 0.72085
+  },
+  {
+   "round": 4,
+   "removed": 83,
+   "terms": 4870,
+   "agreement": 0.7291
+  },
+  {
+   "round": 5,
+   "removed": 306,
+   "terms": 4564,
+   "agreement": 0.736
+  },
+  {
+   "round": 6,
+   "removed": 60,
+   "terms": 4504,
+   "agreement": 0.7405
+  }
+ ],
+ "seconds": 758.1050608158112
+}

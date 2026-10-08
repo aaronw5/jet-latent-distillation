@@ -1,0 +1,10 @@
+{
+ "experiment": "C1o",
+ "start": 0.78345,
+ "one_term_ls": 0.2554,
+ "best": 0.6521,
+ "best_epoch": 150,
+ "terms": 77824,
+ "terms_start": 466944,
+ "seconds": 617.1602208614349
+}

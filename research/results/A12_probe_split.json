@@ -1,0 +1,32 @@
+{
+ "n_fit": 20000,
+ "n_dev": 10000,
+ "part": 1.0,
+ "levels": {
+  "own": {
+   "inputs": 38,
+   "values_only": 0.7247,
+   "keys_only": 0.928,
+   "both": 0.6088
+  },
+  "k1": {
+   "inputs": 126,
+   "values_only": 0.7837,
+   "keys_only": 0.9473,
+   "both": 0.7157
+  },
+  "k2": {
+   "inputs": 302,
+   "values_only": 0.8044,
+   "keys_only": 0.9519,
+   "both": 0.7434
+  },
+  "hops": {
+   "inputs": 356,
+   "values_only": 0.807,
+   "keys_only": 0.9517,
+   "both": 0.7512
+  }
+ },
+ "seconds": 413.55613827705383
+}

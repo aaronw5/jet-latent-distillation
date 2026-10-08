@@ -1,0 +1,9 @@
+{
+ "experiment": "W1o",
+ "start": 0.97035,
+ "one_term_ls": 0.96535,
+ "best": 0.9697,
+ "best_epoch": 14,
+ "terms": 5024,
+ "seconds": 614.8746240139008
+}

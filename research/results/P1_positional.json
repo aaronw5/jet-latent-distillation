@@ -1,0 +1,8 @@
+{
+ "experiment": "P1",
+ "columns": 8116,
+ "least_squares": 0.7095,
+ "best": 0.76025,
+ "best_epoch": 100,
+ "seconds": 331.494482755661
+}
