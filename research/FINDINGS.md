@@ -35,3 +35,27 @@ Each round: hypothesis → test (code below, data named) → numbers with uncert
   validation jets with errors (A1). The JEDI-linear extras quoted the formula's explanation (60,000 jets): removed until
   re-checked with ≥ 100,000 jets (G8). Slides that describe the fitted formulas themselves (type values, input rankings)
   are exact properties of the formula and are labelled so.
+
+## A1–A3 — measurements behind the slides (100,000 validation jets, errors)
+- A1 (ParT's attention): lepton weight b2h1 17.7 ± 0.1×, b2h8 7.8 ± 0.1×, b2h6 7.0 ± 0.1×; b2h2 gives tracks at 3–5σ
+  8.2 ± 0.1× vs 0.68× prompt; class-token share b2h7 77 % (Tbl), 42 % (Hqql), ≤ 2 % other classes; Hgg jets get the most
+  effective particles in 14 of 16 heads.
+- A2 (class-token fit S15q): 18 active neurons; agreement 92.55 % on the 100k validation jets; neuron 98: W−Z +2.57 per s.d.
+- A3 (attention-weights fit W1q): head b2h7's share formula reproduces the switch-off (Tbl 71 % vs ParT 77 %, Hqql 47 % vs
+  42 %, correlation 0.72); largest terms all lepton quantities. Head b2h4 not reproduced (Hqql 18 % vs 46 %, corr 0.20);
+  b2h8 partly (Wqq 21 % vs 67 %, corr 0.55).
+- ParT neuron mass windows (100k): neuron 1 peak 122.5 GeV (half-max 108–138), neuron 103 172.5 (163–188), neuron 25 82.5
+  (62–98, covers both W and Z), neuron 34 92.5 (88–98).
+
+## G3 — the class-token fit's W/Z gap and |jet charge| (inconclusive)
+- The fit's neurons read charge only through signed linear terms (1–2 % of a neuron; e.g. neuron 98, head b1h2: −1 → −0.57,
+  +1 → +0.57), which cannot build |jet charge|. Prediction: its W/Z disagreement with ParT grows with |Q|.
+- Stratified (as G2): ParT W / fit Z +0.56 ± 0.30 pt (1.9σ); ParT Z / fit W −0.60 ± 0.23 pt (2.7σ); control (attention-
+  weights fit) −2.7 / +1.1 pt. Verdict: inconclusive; at most a small part of the gap.
+
+## Corrections
+- An earlier slide said neuron 17 "adds leptons": its formula gives muons −4.53 and electrons −2.74 (summed over heads) — wrong,
+  removed. A slide said b2h2's formula scores "the most displaced track highest": its terms are mixed (one lowers the score
+  near the jet maximum, another raises it by rank) — removed.
+- No-α control (S20u): the class-token fit with every particle weighted 1/n: 69.78 % (least squares 60.47 %) vs 93.29 %
+  with ParT's α — the attention weights carry 23.5 pt.
