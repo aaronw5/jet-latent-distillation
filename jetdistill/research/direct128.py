@@ -23,6 +23,11 @@ def run(variant='post', n_fit=100000, n_dev=20000, epochs=300, lr=3e-4, lam=0.01
         for A_ in (Af, Ad): A_[..., 1:] /= np.maximum(1 - A_[..., :1], 1e-9); A_[..., 0] = 0
         log('  NOCLS: particle weights renormalized per head, the class token\'s share dropped')
     Pf, kn = phi_pooled(Jf, rf, Af); Pd, _ = phi_pooled(Jd, rd, Ad, kn); n, K = Pf.shape[0], Pf.shape[2]
+    if os.environ.get('UNIFORM'):                                                  # control: no attention weights — every particle weighted equally, no class-token share
+        for A_, M_ in ((Af, Mf), (Ad, Md)):
+            A_[..., 0] = 0; A_[..., 1:] = (M_ / np.maximum(M_.sum(1, keepdims=True), 1))[None, :, None, :]
+        log('  UNIFORM: every particle weighted 1/n in every head (no α)')
+        Pf, kn = phi_pooled(Jf, rf, Af); Pd, _ = phi_pooled(Jd, rd, Ad, kn)
     hs = [int(h) for h in os.environ['HEADS'].split(',')] if os.environ.get('HEADS') else list(range(16))   # S19: only some heads' selections
     if len(hs) < 16: Pf, Pd = Pf[:, hs], Pd[:, hs]; log(f'  only heads {hs}')
     Bf, Bd = Pf.reshape(n, -1), Pd.reshape(n_dev, -1)                                               # all heads' pooled terms side by side
