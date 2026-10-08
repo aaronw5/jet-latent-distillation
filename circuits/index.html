@@ -33,15 +33,16 @@ svg{max-width:100%;height:auto}
   .tab{flex:0 0 auto;padding:6px 10px;font-size:12.5px}
   .model{padding:6px 10px;font-size:13px} .model .cnt{display:none}
   .grid{grid-template-columns:1fr !important}
-  .card{padding:10px;margin:8px 0}
+  .card{padding:10px;margin:8px 0;overflow-x:auto;-webkit-overflow-scrolling:touch}
   .kpi{min-width:0;padding:6px 9px;margin:3px 4px 3px 0}.kpi b{font-size:16px}
   td,th{padding:3px 5px;font-size:12px}
-  #mbox{left:0;top:0;transform:none;width:100vw;max-height:100vh;height:100vh;border-radius:0;padding:12px 12px 40px}
+  #mbox{left:0;top:0;transform:none;width:100vw;max-width:100vw;box-sizing:border-box;max-height:100vh;height:100vh;border-radius:0;padding:12px 12px 40px;overflow-x:hidden}
+  #mbox table{display:block;overflow-x:auto}
   #mclose{font-size:14px}
   textarea{max-width:100% !important}
   .hint{font-size:12px}
   details summary{line-height:1.4}
-  .atl td{min-width:46px !important;font-size:10.5px !important;padding:2px !important} .atl td div{font-size:8.5px !important} .atl td span{display:none} .atl th{font-size:10.5px;padding:2px}
+  .atl td{min-width:46px !important;font-size:10.5px !important;padding:2px !important} .atl td div{font-size:8.5px !important} .atl td span{display:none} .atl td div:last-child{display:none} .atl th{font-size:10.5px;padding:2px}
   .atl{border-spacing:2px !important}
   svg.wide{min-width:720px;max-width:none !important}
 }
@@ -674,7 +675,7 @@ function jatlasCard(){
   if(!D.jedi) return ''; const CL5=['g','q','W','Z','t'];
   const cell=(C,k,n)=>{ const r=C[k]; if(!r) return '<td></td>'; const x=Math.max(0,Math.min(1,(r.kept-0.7)/0.3)), bad=r.necessity.neurons>0.2;
     return `<td class="clk" onclick="jopen('${k}','${n}')" title="keeps ${(100*r.kept).toFixed(1)}% alone; removing its neurons costs ${(100*r.necessity.neurons).toFixed(1)}%" style="background:rgb(${Math.round(250-203*x)},${Math.round(250-117*x)},${Math.round(250-160*x)});color:${x>0.55?'#fff':'#1d2433'};text-align:center;min-width:76px;border-radius:5px;${bad?'outline:2px solid #c05621;':''}"><span style="font-size:10px">keeps</span> ${(100*r.kept).toFixed(1)}%<div style="font-size:10px">same call ${D.jagree&&D.jagree[n]&&D.jagree[n][k]?(100*D.jagree[n][k].network.decision).toFixed(1)+'%':'—'}</div><div style="font-size:9.5px;opacity:.85">n${r.neurons.join(' · ')}</div></td>`; };
-  const grid=n=>{ const C=D.jedi[n]; return `<div><h3>${n} particles</h3><table style="border-collapse:separate;border-spacing:3px"><tr><th></th>${CL5.map(c=>`<th>${JSH[c]}</th>`).join('')}<th>vs all</th></tr>${CL5.map((a,i)=>`<tr><th class="l">${JSH[a]}</th>${CL5.map((b,j)=>j<i?cell(C,`${b} vs ${a}`,n):'<td></td>').join('')}${cell(C,`${a} vs rest`,n)}</tr>`).join('')}</table></div>`; };
+  const grid=n=>{ const C=D.jedi[n]; return `<div><h3>${n} particles</h3><table class="atl" style="border-collapse:separate;border-spacing:3px"><tr><th></th>${CL5.map(c=>`<th>${JSH[c]}</th>`).join('')}<th>vs all</th></tr>${CL5.map((a,i)=>`<tr><th class="l">${JSH[a]}</th>${CL5.map((b,j)=>j<i?cell(C,`${b} vs ${a}`,n):'<td></td>').join('')}${cell(C,`${a} vs rest`,n)}</tr>`).join('')}</table></div>`; };
   const JIDX=`<h2>More on JEDI-linear</h2><div class="grid">${[['jcirc','Decision circuits','one decision: its neurons, their if-statements, benchmarks'],['jcues','Cue circuits','the jet mass, the total pT, the multiplicity traced through the neurons'],['jneur','Neurons','the 16 neurons: statements and share of each decision']].map(([k,l,d])=>`<div class="card clk" onclick="setTab('${k}','jedi')"><b>${l}</b><div class="cnt">${d}</div></div>`).join('')}</div>`;
   return `<h2>JEDI-linear circuit atlas</h2><div class="card"><div class="cnt">Every decision of JEDI-linear: each class pair and each class against the rest, at 64 and 8 particles. Cell: the share of the network’s separation its circuit (top-3 of 16 neurons) keeps alone, on the test jets; “same call” = the share of test jets on which the circuit alone gives the network’s answer; its neurons below; outlined: removing the 3 neurons costs more than 20%. Click a cell for the circuit.</div><div class="grid" style="grid-template-columns:1fr 1fr">${grid('64')}${grid('8')}</div></div>${JIDX}`;
 }
