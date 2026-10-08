@@ -27,7 +27,7 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 <div id="bar"><div id="decs"></div><div style="margin-top:4px"><b>Jet:</b> <select id="jetsel"></select> <span id="onnxmsg" class="cnt">loading ParT…</span>
 <details style="margin-top:4px"><summary>…or type your own jet</summary><div class="cnt">One particle per line: <code>pT  Δη  Δφ  type  |d0|/σ</code> — pT in GeV, angles from the jet axis; type one of <code>h+ h- h0 g e+ e- m+ m-</code> (charged hadron, neutral hadron, photon, electron, muon; default <code>h+</code>); |d0|/σ the track’s displacement in units of its error (default 0, charged only). Energies assume massless particles and the jet axis at η = 0.</div>
 <textarea id="own" rows="7" style="width:100%;max-width:560px"></textarea><br><button class="btn" id="runown">run this jet</button> <span id="ownmsg" class="cnt"></span></details></div></div>
-<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="jetview"></div><div id="cues"></div><div id="ncirc"></div><div id="triples"></div><div id="jedi"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
+<div class="hint">Click any <b>head</b>, <b>neuron</b> or <b>particle</b> to see its formula, how well the formula fits ParT, and what it does in this jet.</div><div id="circuit"></div><div id="pcirc"></div><div id="hblocks"></div><div id="jetview"></div><div id="cues"></div><div id="ncirc"></div><div id="hcomp"></div><div id="triples"></div><div id="jedi"></div><div id="selftest" class="cnt"></div><div id="modal"><div id="mbox"><button id="mclose">✕ close</button><div id="mbody"></div></div></div>
 </main>
 <script>
 const KCOL={'class token':'#C9CED6','lepton':'#C0392B','displaced track':'#1F4E79','prompt charged':'#7FA3C6','photon':'#E3B23C','neutral hadron':'#8E6FB0'};
@@ -229,6 +229,28 @@ function ncircCard(){
    <div class="grid" style="grid-template-columns:minmax(380px,1.2fr) 1fr;margin-top:8px"><div><h3>All 16 heads</h3>${tab}<div class="cnt">The formula’s top-3: ${v.formula_circuit.join(', ')} (alone they reproduce ${(100*v.r2.formula_top3).toFixed(0)}% of the neuron in ParT).</div></div>
    <div><h3>Edits that move it (change in s.d., 100,000 jets each)</h3>${cues}<h3>Class averages (s.d. from the overall average)</h3>${cls}<h3>Used in ${v.used_in.length} decision circuits</h3><div>${used||'—'}</div></div></div></div>`;
 }
+// ---- removing heads together (G56, G56b) ----
+function blocksCard(d){
+  const B=D.blocks10; if(!B) return ''; const r=D.hblocks&&D.hblocks[`${d.a} vs ${d.b}`];
+  const t10=`<table><tr><th class="l">all 10 classes (100,000 validation jets)</th><th>accuracy</th><th>macro AUC</th><th>same class as ParT</th></tr>${[['ParT','ParT'],['all block-2 heads at their average','block 2 at mean'],['b1h2 + b1h3 at their average','b1h2 + b1h3 at mean'],['b2h8 at its average','b2h8 at mean'],['all block-1 heads at their average','block 1 at mean']].map(([l,k])=>`<tr><td class="l">${l}</td><td>${(100*B[k].acc).toFixed(2)}%</td><td>${B[k].auc.toFixed(4)}</td><td>${(100*B[k].same_as_part).toFixed(1)}%</td></tr>`).join('')}</table>`;
+  let td='<div class="cnt">Per-decision numbers are measured for the 13 class pairs on the slides.</div>';
+  if(r){ const ws=Object.entries(r.single).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    td=`<table><tr><th class="l">${SHORT[d.a]} vs ${SHORT[d.b]} (100,000 test jets): set to average</th><th>separation lost</th><th>beyond the two heads alone</th></tr>
+     <tr><td class="l">all 8 block-1 heads</td><td><b>${(100*r.block1).toFixed(1)}%</b></td><td></td></tr><tr><td class="l">all 8 block-2 heads</td><td><b>${(100*r.block2).toFixed(2)}%</b></td><td></td></tr>
+     <tr><td class="l">the circuit’s heads (${r.top3.map(h=>`<span class="clk" onclick="openHead('${h}')">${h}</span>`).join(', ')})</td><td>${(100*r.top3_lost).toFixed(1)}%</td><td></td></tr>
+     ${r.pairs.slice(0,4).map(([p,l,i])=>`<tr><td class="l">pair ${p.split('+').map(h=>`<span class="clk" onclick="openHead('${h}')">${h}</span>`).join(' + ')}</td><td>${(100*l).toFixed(1)}%</td><td>${i>=0?'+':''}${(100*i).toFixed(1)} pts</td></tr>`).join('')}
+     ${ws.map(([h,l])=>`<tr><td class="l">head <span class="clk" onclick="openHead('${h}')">${h}</span> alone</td><td>${(100*l).toFixed(1)}%</td><td></td></tr>`).join('')}</table>`; }
+  return `<h2>Removing heads together: block 1 reads, block 2 is a backup</h2><div class="card"><div class="cnt">Heads set to their average output in ParT (everything after recomputed): single heads, all 120 pairs, whole blocks. No single head is needed; only b1h2 + b1h3 matter together (W vs Z); without block 2 ParT barely changes, without block 1 its ten scores lose their balance.</div><div class="grid" style="grid-template-columns:1fr 1fr;margin-top:6px"><div>${td}</div><div>${t10}</div></div></div>`;
+}
+// ---- head-to-head circuits (G57) ----
+function hcompCard(){
+  if(!D.hcomp) return ''; const M=D.hcomp.mean, S=D.hcomp.shuffle, H1=[...Array(8).keys()].map(i=>`b1h${i+1}`), H2=[...Array(8).keys()].map(i=>`b2h${i+1}`);
+  const col=v=>{ const x=Math.min(1,Math.max(0,(v-0.05)/0.28)); return `rgb(${Math.round(250-219*x)},${Math.round(250-172*x)},${Math.round(250-129*x)})`; };
+  let t=`<table style="border-collapse:separate;border-spacing:2px"><tr><th></th>${H2.map(b=>`<th class="clk" onclick="openHead('${b}')" style="color:#6B4E9B">${b}</th>`).join('')}</tr>`;
+  for(const a of H1){ t+=`<tr><th class="clk l" onclick="openHead('${a}')" style="color:#1F4E79">${a}</th>`+H2.map(b=>{ const [st,ol,pk]=M[a][b], x=(st-0.05)/0.28; return `<td title="${a} set to its average: ${b}'s attention moves ${(100*st).toFixed(1)}%, ${(100*ol).toFixed(0)}% of its output variation, parks ${(100*pk).toFixed(1)} pts ${pk<0?'less':'more'} on the class token; another jet's ${a} instead: ${(100*S[a][b][0]).toFixed(1)}%" style="background:${col(st)};color:${x>0.55?'#fff':'#1d2433'};text-align:center;min-width:46px;border-radius:4px">${(100*st).toFixed(0)}</td>`; }).join('')+'</tr>'; }
+  t+='</table>';
+  return `<h2>Head-to-head circuits: block 1 steers block 2</h2><div class="card"><div class="cnt">Block-2 heads ask their question with the class token that block 1 wrote. Each block-1 head (rows) set to its average output on 100,000 validation jets; cell = % of the block-2 head’s attention (columns) that moves. Hover for its output change and the control (that head taken from another jet); click a head for its formula. Any change of the class token moves attention by 5–16%; b1h3 stands out (b2h8, b2h3: about a third), and sets how much b2h8 parks on the class token — the mass switch.</div>${t}</div>`;
+}
 // ---- three-class circuits (G54) ----
 function triCard(){
   if(!D.triples) return ''; const ks=Object.keys(D.triples), t=D.triples[ks[TRI]], C=t.classes, ci=C.map(c=>CI(c));
@@ -346,10 +368,51 @@ function jetView(J,R,d){
    <h3>The circuit’s neurons in this jet</h3><table><tr><th class="l">neuron</th><th>s.d. from average</th><th class="l">▼ this jet · ● class averages</th><th>adds to the difference</th></tr>${neur}</table></div></div></div>
    <div class="card"><h3>Where the circuit’s heads look in this jet</h3><div class="cnt">Each circle is a particle at (Δη, Δφ) from the jet axis; size ∝ √pT; colour = the property the head is most selective on (or the one chosen above); the stronger the fill (and a dark ring), the more of the head’s attention it gets. Hover for numbers. The view is zoomed to the jet (range in the corner); the few particles beyond it sit on the edge.</div><div class="grid" style="margin-top:6px">${maps}</div></div>`;
 }
+// ---- particle circuits over many jets (G55) ----
+function pcircCard(d){
+  if(!D.pcirc) return ''; const key=`${d.a} vs ${d.b}`, r=D.pcirc[key]; if(d.b==='rest') return '';
+  if(!r) return `<h2>Particle circuits</h2><div class="card cnt">Measured for the 13 class pairs on the slides (buttons above); pick one of them. For any jet and decision, “Which particles carry this decision?” below runs it in your browser.</div>`;
+  const KS=[1,2,3,5,10,20], W=520,H=230, xs=k=>50+(W-70)*Math.log(k)/Math.log(20), ys=v=>H-30-(H-50)*Math.max(0,Math.min(1,v));
+  let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><g font-size="11" fill="#667085">`;
+  for(const t of [0,0.25,0.5,0.75,1]) g+=`<line x1="50" x2="${W-20}" y1="${ys(t)}" y2="${ys(t)}" stroke="#eef0f3"/><text x="44" y="${ys(t)+4}" text-anchor="end">${100*t}%</text>`;
+  for(const k of KS) g+=`<text x="${xs(k)}" y="${H-12}" text-anchor="middle">${k}</text>`;
+  g+=`<text x="${(W+30)/2}" y="${H}" text-anchor="middle">particles kept (the rest hidden from ParT’s class attention)</text></g>`;
+  for(const [lab,col] of [['effect','#2f855a'],['circuit heads','#1F4E79']]){ const pts=KS.map(k=>[xs(k),ys(r.keep[`${lab} ${k}`].kept)]);
+    g+=`<polyline points="${pts.map(p=>p.join(',')).join(' ')}" fill="none" stroke="${col}" stroke-width="2.5"/>`+pts.map((p,i)=>`<circle cx="${p[0]}" cy="${p[1]}" r="3.5" fill="${col}"><title>${KS[i]} particles: ${(100*r.keep[`${lab} ${KS[i]}`].kept).toFixed(1)}% of the separation</title></circle>`).join(''); }
+  g+=`<text x="60" y="18" font-size="12" fill="#2f855a">chosen by what moves the score most</text><text x="60" y="34" font-size="12" fill="#1F4E79">chosen by where the circuit’s heads look</text></svg>`;
+  const side=c=>{ const q=r[c], kinds=Object.entries(q.kind).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0.005), ranks=Object.entries(q.rank);
+    return `<div><h3>${SHORT[c]} jets: the particle that matters most</h3><div class="cnt">is a</div>${kinds.map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:110px" class="cnt">${k}</span><div style="height:9px;width:${(160*v).toFixed(0)}px;background:#B7791F"></div><span class="cnt">${pct(v)}</span></div>`).join('')}
+     <div class="cnt" style="margin-top:4px">its pT rank</div>${ranks.map(([k,v])=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:110px" class="cnt">${k==='1'?'hardest':k==='2'?'2nd':k==='3'?'3rd':k}</span><div style="height:9px;width:${(160*v).toFixed(0)}px;background:#3b82b0"></div><span class="cnt">${pct(v)}</span></div>`).join('')}
+     <div class="cnt" style="margin-top:4px">displaced (|d0|/σ > 3.7): ${pct(q.displaced)} · removing it changes the score difference by ${(100*q.share_median).toFixed(0)}% of its size (median) · it supports ParT’s call in ${pct(q.supports)}</div></div>`; };
+  return `<h2>Particle circuits: how few particles carry ${SHORT[d.a]} versus ${SHORT[d.b]}</h2><div class="card"><div class="cnt">On ${r.n.toLocaleString()} test jets (50,000 of each class): each particle removed in turn from ParT’s class attention (what the class token reads), then only the k most important particles kept. Lines: share of ParT’s separation kept (AUC − 0.5, relative).</div>
+   <div class="grid" style="grid-template-columns:minmax(360px,1fr) 1fr 1fr">${`<div>${g}</div>`}${side(d.a)}${side(d.b)}</div></div>`;
+}
+// ---- particle scan: remove each particle in turn and re-run ParT ----
+function subJet(J,idx){ const p={}; for(const k in J.p) p[k]=idx.map(i=>J.p[k][i]); return {...J, n:idx.length, p}; }
+function scanCard(){ return `<div class="card"><h3>Which particles carry this decision? <span class="cnt">(a particle circuit for this jet)</span></h3><div class="cnt">Removes each particle from the jet in turn and re-runs ParT in your browser (jet pT and energy kept), then keeps only the few particles that matter most. Contribution = how much the score difference drops when the particle is removed.</div><div style="margin:6px 0"><span class="btn" onclick="particleScan()">▶ run (${CUR?CUR.J.n+4:''} ParT runs)</span></div><div id="pscan"></div></div>`; }
+async function particleScan(){
+  const out=document.getElementById('pscan'); if(!CUR||!SESS){ out.innerHTML='<span class="cnt">ParT is not loaded in this browser.</span>'; return; }
+  const J=CUR.J, d=D.decisions[DEC], n=J.n, Dof=L=>sideScore(d,'a',L)-sideScore(d,'b',L), D0=Dof(CUR.R.logits), c=[];
+  for(let i=0;i<n;i++){ const R=await runPart(subJet(J,[...Array(n).keys()].filter(j=>j!==i))); c.push(D0-Dof(R.logits)); if(i%4===0){ out.innerHTML=`<span class="cnt">ParT without particle ${i+1} of ${n}…</span>`; await new Promise(r=>setTimeout(r,0)); } }
+  const order=[...Array(n).keys()].sort((a,b)=>Math.abs(c[b])-Math.abs(c[a])), keep=[];
+  for(const k of [1,3,5,10]) if(k<n){ const R=await runPart(subJet(J,order.slice(0,k).sort((a,b)=>a-b))); keep.push([k,Dof(R.logits)]); }
+  const p=J.p, cm=Math.max(...c.map(Math.abs))||1, ext=[...Array(n).keys()].map(i=>Math.max(Math.abs(p.deta[i]),Math.abs(p.dphi[i]))).sort((a,b)=>a-b), q=ext[Math.floor(0.85*(n-1))];
+  const W=300,H=300,Rr=Math.min(0.85,Math.max(0.12,1.4*q)),cl=t=>Math.max(-Rr,Math.min(Rr,t)),sx=e=>W/2+cl(e)/Rr*(W/2-8),sy=f=>H/2-cl(f)/Rr*(H/2-8);
+  const la=SHORT[d.a], lb=d.b==='rest'?'the others':SHORT[d.b];
+  let g=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="background:#fafbfc;border:1px solid var(--line);border-radius:8px"><line x1="${W/2}" x2="${W/2}" y1="4" y2="${H-4}" stroke="#eef0f3"/><line x1="4" x2="${W-4}" y1="${H/2}" y2="${H/2}" stroke="#eef0f3"/>`;
+  for(const i of [...order].reverse()){ const pt=Math.hypot(p.px[i],p.py[i]), r=2+16*Math.sqrt(pt/J.jet.jet_pt), a=Math.abs(c[i])/cm;
+    g+=`<circle class="clk" onclick="openParticle(${i})" cx="${sx(p.deta[i]).toFixed(1)}" cy="${sy(p.dphi[i]).toFixed(1)}" r="${r.toFixed(1)}" fill="${c[i]>0?'#2f855a':'#c05621'}" fill-opacity="${(0.08+0.92*a).toFixed(2)}" stroke="${a>0.3?'#1d2433':'none'}" stroke-width="1.5"><title>${kind(p,i)}, pT ${pt.toFixed(1)} GeV: ${c[i]>=0?'+':''}${c[i].toFixed(3)} toward ${c[i]>0?la:lb}</title></circle>`; }
+  g+=`<text x="8" y="16" font-size="12" fill="#667085">green: pushes toward ${la}; orange: toward ${lb}</text><text x="${W-8}" y="${H-8}" font-size="11" text-anchor="end" fill="#98a2b3">±${Rr.toFixed(2)} in Δη, Δφ</text></svg>`;
+  const rank=i=>1+[...Array(n).keys()].filter(j=>Math.hypot(p.px[j],p.py[j])>Math.hypot(p.px[i],p.py[i])).length;
+  const tab=`<table><tr><th class="l">particle</th><th>pT (GeV)</th><th>pT rank</th><th>contribution</th></tr>${order.slice(0,8).map(i=>`<tr><td class="l clk" onclick="openParticle(${i})">${kind(p,i)}</td><td>${Math.hypot(p.px[i],p.py[i]).toFixed(1)}</td><td>${rank(i)}</td><td style="color:${c[i]>0?'#2f855a':'#c05621'}">${c[i]>=0?'+':''}${c[i].toFixed(3)}</td></tr>`).join('')}</table>`;
+  const call=s=>s>0?la:(d.b==='rest'?'not '+la:lb);
+  out.innerHTML=`<div class="grid" style="grid-template-columns:${W+20}px 1fr"><div>${g}</div><div><div class="cnt">score difference with all ${n} particles: <b>${D0>=0?'+':''}${D0.toFixed(2)}</b> (${call(D0)}). The particles that matter most:</div>${tab}
+   <h3>ParT on only the most important particles</h3><table><tr><th class="l">particles kept</th><th>score difference</th><th class="l">call</th></tr>${keep.map(([k,v])=>`<tr><td class="l">top ${k}</td><td>${v>=0?'+':''}${v.toFixed(2)}</td><td class="l">${call(v)}</td></tr>`).join('')}<tr><td class="l">all ${n}</td><td>${D0>=0?'+':''}${D0.toFixed(2)}</td><td class="l">${call(D0)}</td></tr></table></div></div>`;
+}
 async function draw(){
-  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d); document.getElementById('cues').innerHTML=cueCard(); document.getElementById('ncirc').innerHTML=ncircCard(); document.getElementById('triples').innerHTML=triCard(); document.getElementById('jedi').innerHTML=jediCard();
+  const d=D.decisions[DEC]; document.getElementById('circuit').innerHTML=circuitCard(d); document.getElementById('pcirc').innerHTML=pcircCard(d); document.getElementById('hblocks').innerHTML=blocksCard(d); document.getElementById('cues').innerHTML=cueCard(); document.getElementById('ncirc').innerHTML=ncircCard(); document.getElementById('hcomp').innerHTML=hcompCard(); document.getElementById('triples').innerHTML=triCard(); document.getElementById('jedi').innerHTML=jediCard();
   if(!CUR) return; const R=CUR.R;
-  document.getElementById('jetview').innerHTML=jetView(CUR.J,R,d);
+  document.getElementById('jetview').innerHTML=jetView(CUR.J,R,d)+scanCard();
 }
 async function pick(J,idx){
   let R=null, note='';
@@ -374,6 +437,7 @@ async function selftest(){
   document.getElementById('runown').onclick=async()=>{ try{ const J=parseJet(document.getElementById('own').value); document.getElementById('ownmsg').textContent=`${J.n} particles`; await pick(J,null); }catch(e){ document.getElementById('ownmsg').textContent='error: '+e; } };
   await pick(D.jets[J0],J0);
   if(location.search.includes('selftest')) await selftest();
+  if(new URLSearchParams(location.search).get('scan')) await particleScan();
   const op=new URLSearchParams(location.search).get('open'); if(op){ if(op[0]==='n') await openNeuron(+op.slice(1)); else if(op[0]==='h') await openHead(op.slice(1)); else if(op[0]==='p') await openParticle(+op.slice(1)); }
 })();
 </script></body></html>
