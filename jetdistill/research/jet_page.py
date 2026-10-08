@@ -18,7 +18,7 @@ HN = lambda h: f'b{h // 8 + 1}h{h % 8 + 1}'
 def metric(tag):
     for p, k in ((OUT / f'{tag}_metrics_full_test.json', 'test'),):
         if p.exists(): return dict(value=json.loads(p.read_text())['agreement'], where='2M test jets')
-    for name, key in ((f'{tag}_shared.json', 'best'), (f'{tag}_pruned_terms.json', 'final'), (f'{tag}_pruned.json', 'final'), (f'{tag}_one_term.json', 'best'), (f'{tag}_uniform2.json', 'best')):
+    for name, key in ((f'{tag}_sparsify.json', 'agreement'), (f'{tag}_direct_alpha.json', 'best'), (f'{tag}_shared.json', 'best'), (f'{tag}_pruned_terms.json', 'final'), (f'{tag}_pruned.json', 'final'), (f'{tag}_one_term.json', 'best'), (f'{tag}_uniform2.json', 'best')):
         p = OUT / name
         if p.exists(): return dict(value=json.loads(p.read_text())[key], where='balanced validation jets')
     return None
