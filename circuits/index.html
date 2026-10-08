@@ -31,12 +31,17 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 </main>
 <script>
 const KCOL={'class token':'#C9CED6','lepton':'#C0392B','displaced track':'#1F4E79','prompt charged':'#7FA3C6','photon':'#E3B23C','neutral hadron':'#8E6FB0'};
-const SHORT={QCD:'QCD',Hbb:'H→bb',Hcc:'H→cc',Hgg:'H→gg',H4q:'H→4q',Hqql:'H→ℓνqq',Zqq:'Z',Wqq:'W',Tbqq:'t→bqq',Tbl:'t→bℓν'};
+const SHORT={QCD:'QCD',Hbb:'H→bb',Hcc:'H→cc',Hgg:'H→gg',H4q:'H→4q',Hqql:'H→ℓνqq',Zqq:'Z',Wqq:'W',Tbqq:'t→bqq',Tbl:'t→bℓν',rest:'all others'};
 const VN=['ParT itself','ParT attention + formula neurons','formula attention + ParT values','formula attention + formula neurons'];
 const VL={'ParT itself':'ParT’s · ParT’s','ParT attention + formula neurons':'ParT’s · formula','formula attention + ParT values':'formula · ParT’s','formula attention + formula neurons':'formula · formula'};
 let D=null, SESS=null, DEC=0, CUR=null;
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const pct=v=>(100*v).toFixed(1)+'%', f3=v=>v.toFixed(3), rj=r=>r==null?'&gt; 200,000':Math.round(r).toLocaleString('en-US');
+const pct=v=>v==null?'—':(100*v).toFixed(1)+'%', f3=v=>v==null?'—':v.toFixed(3), rj=r=>r==null?'—':Math.round(r).toLocaleString('en-US');
+const CI=c=>D.classes.indexOf(c);
+function sideW(d,side,k){ if(side==='a') return D.FW[CI(d.a)][k]; if(d.b!=='rest') return D.FW[CI(d.b)][k]; let s=0; D.classes.forEach((c,ci)=>{ if(c!==d.a) s+=D.FW[ci][k]; }); return s/9; }
+function sideMean(d,side,k){ if(side==='a') return D.class_means[CI(d.a)][k]; if(d.b!=='rest') return D.class_means[CI(d.b)][k]; let s=0; D.classes.forEach((c,ci)=>{ if(c!==d.a) s+=D.class_means[ci][k]; }); return s/9; }
+function sideScore(d,side,L){ if(side==='a') return L[CI(d.a)]; if(d.b!=='rest') return L[CI(d.b)]; let s=0; D.classes.forEach((c,ci)=>{ if(c!==d.a) s+=L[ci]; }); return s/9; }
+const sideB=(d,F)=>F(d,'a')-F(d,'b');
 function kind(p,i){ if(p.isElectron[i]>0||p.isMuon[i]>0) return 'lepton'; if(p.charge[i]!=0){ const s=Math.abs(p.d0val[i])/Math.max(p.d0err[i],1e-6); return s>3?'displaced track':'prompt charged'; } return p.isPhoton[i]>0?'photon':'neutral hadron'; }
 // ---- ParT inputs exactly as jetdistill.part.network.inputs (weaver JetClass_full.yaml) ----
 function features(J){
@@ -84,7 +89,7 @@ function etaphi(J,alpha,title,hidx){
 function compBar(comp){ let x=0, s='<div style="display:flex;height:14px;width:220px;border-radius:3px;overflow:hidden">'; for(const [k,c] of Object.entries(KCOL)){ const v=comp[k]||0; if(v>0.005) s+=`<div title="${k} ${pct(v)}" style="width:${(100*v).toFixed(1)}%;background:${c}"></div>`; } return s+'</div>'; }
 function neuronScale(nn,d,z){
   const i=nn-1, sd=D.sd[i], mu=D.mu[i], st=v=>(v-mu)/sd, W=300, sx=t=>W/2+Math.max(-3.2,Math.min(3.2,t))/3.4*(W/2-6);
-  const ma=st(D.class_means[D.classes.indexOf(d.a)][i]), mb=st(D.class_means[D.classes.indexOf(d.b)][i]), mj=st(z[i]);
+  const ma=st(sideMean(d,'a',i)), mb=st(sideMean(d,'b',i)), mj=st(z[i]);
   return `<svg viewBox="0 0 ${W} 40" width="${W}" height="40"><line x1="6" x2="${W-6}" y1="22" y2="22" stroke="#c9ced6"/><line x1="${W/2}" x2="${W/2}" y1="14" y2="30" stroke="#c9ced6"/>`+
    `<circle cx="${sx(ma)}" cy="22" r="6" fill="#1F4E79"><title>mean of ${SHORT[d.a]} jets</title></circle><text x="${sx(ma)}" y="11" font-size="10" text-anchor="middle" fill="#1F4E79">${SHORT[d.a]}</text>`+
    `<circle cx="${sx(mb)}" cy="22" r="6" fill="#B7791F"><title>mean of ${SHORT[d.b]} jets</title></circle><text x="${sx(mb)}" y="40" font-size="10" text-anchor="middle" fill="#B7791F">${SHORT[d.b]}</text>`+
@@ -99,19 +104,20 @@ function statement(st,nn){
 }
 
 function circuitMap(d,R){
-  const W=1120,H=300, heads=d.heads.map(h=>h.h), ns=d.neurons.map(n=>n.n), ia=D.classes.indexOf(d.a), ib=D.classes.indexOf(d.b);
-  const hy=i=>40+i*(H-60)/Math.max(1,heads.length-1||1), ny=i=>ns.length===1?H/2:50+i*(H-100)/(ns.length-1), cy=[H/2-55,H/2+55], HX=150, NX=560, CX=930;
+  const W=1120,H=300, heads=d.heads.map(h=>h.h), ns=d.neurons.map(n=>n.n);
+  const hy=i=>44+i*(H-84)/Math.max(1,heads.length-1||1), ny=i=>ns.length===1?H/2:50+i*(H-100)/(ns.length-1), cy=[H/2-55,H/2+55], HX=150, NX=560, CX=930;
   let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#98a2b3"/></marker></defs>`;
   const emax=Math.max(1e-9,...d.edges.map(e=>e.edge_std));
   for(const e of d.edges){ const i=heads.indexOf(e.head), j=ns.indexOf(e.neuron); if(i<0||j<0) continue; const w=1+7*e.edge_std/emax;
     g+=`<path d="M ${HX+120} ${hy(i)} C ${HX+260} ${hy(i)}, ${NX-140} ${ny(j)}, ${NX-6} ${ny(j)}" fill="none" stroke="#1F4E79" stroke-opacity="0.35" stroke-width="${w.toFixed(1)}"><title>${e.head} → n${e.neuron}: ${e.statements.slice(0,3).map(s=>statement(s,e.neuron)).join('; ').replace(/<[^>]+>/g,'')}</title></path>`; }
-  ns.forEach((n,j)=>[ia,ib].forEach((c,k)=>{ const w=D.FW[c][n-1]*D.sd[n-1], col=w>0?'#2f855a':'#c05621';
-    g+=`<line x1="${NX+190}" y1="${ny(j)}" x2="${CX-8}" y2="${cy[k]}" stroke="${col}" stroke-opacity="0.6" stroke-width="${(1+2.5*Math.abs(w)).toFixed(1)}" marker-end="url(#ah)"><title>n${n} → score(${SHORT[D.classes[c]]}): ${w>0?'+':''}${w.toFixed(2)} per s.d.</title></line>`; }));
+  const lab={a:`score(${SHORT[d.a]})`, b:d.b==='rest'?'mean of the other 9 scores':`score(${SHORT[d.b]})`};
+  ns.forEach((n,j)=>['a','b'].forEach((sd_,k)=>{ const w=sideW(d,sd_,n-1)*D.sd[n-1], col=w>0?'#2f855a':'#c05621';
+    g+=`<line x1="${NX+190}" y1="${ny(j)}" x2="${CX-8}" y2="${cy[k]}" stroke="${col}" stroke-opacity="0.6" stroke-width="${(1+2.5*Math.abs(w)).toFixed(1)}" marker-end="url(#ah)"><title>n${n} → ${lab[sd_]}: ${w>0?'+':''}${w.toFixed(2)} per s.d.</title></line>`; }));
   heads.forEach((h,i)=>{ const hd=d.heads[i], b=+h[1], hh=+h[3]-1, park=R?(b===1?R.a1:R.a2)[hh][0]:null;
     g+=`<g class="clk" onclick="openHead('${h}')"><rect x="${HX-120}" y="${hy(i)-22}" width="240" height="44" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="${HX-108}" y="${hy(i)-3}" font-size="14" font-weight="600" fill="#1F4E79">head ${h}</text><text x="${HX-108}" y="${hy(i)+15}" font-size="12" fill="#667085">${pct(hd.share)} of the decision${park!==null?` · parks ${pct(park)} here`:''}</text></g>`; });
   ns.forEach((n,j)=>{ const nn=d.neurons[j], v=R?(R.z[n-1]-D.mu[n-1])/D.sd[n-1]:null;
     g+=`<g class="clk" onclick="openNeuron(${n})"><rect x="${NX}" y="${ny(j)-24}" width="190" height="48" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="${NX+12}" y="${ny(j)-4}" font-size="14" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="${NX+12}" y="${ny(j)+15}" font-size="12" fill="#667085">${pct(nn.share)}${v!==null?` · this jet ${v>=0?'+':''}${v.toFixed(2)} s.d.`:''}</text></g>`; });
-  [ia,ib].forEach((c,k)=>{ const sc=R?R.logits[c]:null; g+=`<g><rect x="${CX}" y="${cy[k]-24}" width="170" height="48" rx="8" fill="#f1f3f6" stroke="#6B4E9B" stroke-width="2"/><text x="${CX+12}" y="${cy[k]-4}" font-size="14" font-weight="600" fill="#6B4E9B">score(${SHORT[D.classes[c]]})</text><text x="${CX+12}" y="${cy[k]+15}" font-size="12" fill="#667085">${sc!==null?'this jet '+sc.toFixed(2):''}</text></g>`; });
+  ['a','b'].forEach((sd_,k)=>{ const sc=R?sideScore(d,sd_,R.logits):null; g+=`<g><rect x="${CX}" y="${cy[k]-24}" width="185" height="48" rx="8" fill="#f1f3f6" stroke="#6B4E9B" stroke-width="2"/><text x="${CX+12}" y="${cy[k]-4}" font-size="${d.b==='rest'&&sd_==='b'?12:14}" font-weight="600" fill="#6B4E9B">${lab[sd_]}</text><text x="${CX+12}" y="${cy[k]+15}" font-size="12" fill="#667085">${sc!==null?'this jet '+sc.toFixed(2):''}</text></g>`; });
   return g+`<text x="${HX-120}" y="16" font-size="12" fill="#667085">heads (edge width: how much the formula’s head→neuron edge moves the decision; hover an edge for its if-statements)</text><text x="${NX+200}" y="16" font-size="12" fill="#667085">green: raises the score, orange: lowers it</text></svg>`;
 }
 
@@ -182,29 +188,37 @@ async function openParticle(i){
   openModal(h);
 }
 // ---- views ----
-function decButtons(){ document.getElementById('decs').innerHTML='<b>Decision:</b> '+D.decisions.map((d,k)=>`<span class="btn${k===DEC?' on':''}" data-k="${k}">${SHORT[d.a]} vs ${SHORT[d.b]}</span>`).join(''); document.querySelectorAll('#decs .btn').forEach(b=>b.onclick=()=>{DEC=+b.dataset.k; decButtons(); draw();}); }
+function decButtons(){
+  const lbl=d=>`${SHORT[d.a]} vs ${SHORT[d.b]}`, kp=d=>d.kept!=null?` · keeps ${(100*d.kept).toFixed(1)}%`:'';
+  const quick=D.decisions.map((d,k)=>[d,k]).filter(([d])=>d.on_slides).map(([d,k])=>`<span class="btn${k===DEC?' on':''}" data-k="${k}">${lbl(d)}</span>`).join('');
+  const grp=(t,f)=>`<optgroup label="${t}">`+D.decisions.map((d,k)=>[d,k]).filter(([d])=>f(d)).map(([d,k])=>`<option value="${k}"${k===DEC?' selected':''}>${lbl(d)}${kp(d)}</option>`).join('')+'</optgroup>';
+  document.getElementById('decs').innerHTML=`<b>Circuit:</b> <select id="decsel">${grp('class pairs on the slides',d=>d.on_slides)}${grp('all other class pairs',d=>!d.on_slides&&d.b!=='rest')}${grp('one class against all others',d=>d.b==='rest')}</select> <span class="cnt">${D.decisions.length} circuits, found by one rule (${esc(D.rule||'')}); “keeps” = share of ParT’s separation the circuit keeps alone</span><div style="margin-top:3px">${quick}</div>`;
+  document.querySelectorAll('#decs .btn').forEach(b=>b.onclick=()=>{DEC=+b.dataset.k; decButtons(); draw();});
+  document.getElementById('decsel').onchange=e=>{DEC=+e.target.value; decButtons(); draw();};
+}
 function circuitCard(d){
-  const b=d.bench; let t=`<tr><th class="l">α · neuron values</th><th class="l"></th><th>acc ${SHORT[d.a]} vs ${SHORT[d.b]}</th><th>AUC</th><th>rejection</th><th>acc vs all</th><th>AUC</th><th>rejection</th><th>acc 10 classes</th><th>AUC</th></tr>`;
-  for(const v of VN){ for(const [lab,key] of [['full network','complete'],['circuit only','circuit']]){ const ab=b.pair[v][key], va=b.vs_all[v][key], tn=b.ten[v][key==='complete'?'full':'circuit'];
-    t+=`<tr class="${key==='circuit'?'circ':''}"><td class="l">${key==='complete'?VL[v]:''}</td><td class="l">${lab}</td><td>${pct(ab.acc)}</td><td>${f3(ab.auc)}</td><td>${rj(ab.rej)}</td><td>${pct(va.acc)}</td><td>${f3(va.auc)}</td><td>${rj(va.rej)}</td><td>${pct(tn.acc)}</td><td>${f3(tn.auc)}</td></tr>`; } }
+  const b=d.bench, R_=d.ref||d.a, rest=d.b==='rest', hasA=!rest&&Object.keys(b.vs_all||{}).length;
+  let t=`<tr><th class="l">α · neuron values</th><th class="l"></th><th>acc ${SHORT[d.a]} vs ${SHORT[d.b]}</th><th>AUC</th><th>rejection</th>${hasA?`<th>acc ${SHORT[R_]} vs all</th><th>AUC</th><th>rejection</th>`:''}<th>acc 10 classes</th><th>AUC</th></tr>`;
+  for(const v of VN){ if(!b.pair[v]) continue; for(const [lab,key] of [['full network','complete'],['circuit only','circuit']]){ const ab=b.pair[v][key], va=hasA&&b.vs_all[v]?b.vs_all[v][key]:null, tn=b.ten[v]?b.ten[v][key==='complete'?'full':'circuit']:null;
+    t+=`<tr class="${key==='circuit'?'circ':''}"><td class="l">${key==='complete'?VL[v]:''}</td><td class="l">${lab}</td><td>${pct(ab.acc)}</td><td>${f3(ab.auc)}</td><td>${rj(ab.rej)}</td>${hasA?`<td>${pct(va&&va.acc)}</td><td>${f3(va&&va.auc)}</td><td>${rj(va&&va.rej)}</td>`:''}<td>${pct(tn&&tn.acc)}</td><td>${f3(tn&&tn.auc)}</td></tr>`; } }
+  const nec=d.necessity, necTxt=`Inside ParT, setting the circuit’s neurons to their average costs ${pct(nec.neurons)} of the separation (as many random neurons: ${pct(nec.random)})`+(nec.worst_head?`; the most important single head, ${nec.worst_head[0]}, costs ${pct(nec.worst_head[1])}.`:(nec.heads_top3!=null?`; its top-3 heads ${pct(nec.heads_top3)}.`:'.'))+(d.swap?` Copying the formula’s top-6 heads from a ${SHORT[d.b]} jet flips ${pct(d.swap.top)} of decisions (bottom-6: ${pct(d.swap.bottom)}).`:'');
   const heads=d.heads.map(h=>`<div><b class="clk" style="color:var(--acc)" onclick="openHead('${h.h}')">${h.h}</b> · ${pct(h.share)} of the decision<div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.a]} ${compBar(h.comp[d.a])}</div><div class="cnt" style="display:flex;gap:6px;align-items:center">${SHORT[d.b]} ${compBar(h.comp[d.b])}</div></div>`).join('');
-  const neurons=d.neurons.map(n=>`<div><b class="clk" style="color:var(--gold)" onclick="openNeuron(${n.n})">neuron ${n.n}</b> · ${pct(n.share)} of the decision · weight ${SHORT[d.a]} ${(D.FW[D.classes.indexOf(d.a)][n.n-1]*D.sd[n.n-1]).toFixed(2)}, ${SHORT[d.b]} ${(D.FW[D.classes.indexOf(d.b)][n.n-1]*D.sd[n.n-1]).toFixed(2)} per s.d. · formula r = ${n.fid}</div>`).join('');
+  const neurons=d.neurons.map(n=>`<div><b class="clk" style="color:var(--gold)" onclick="openNeuron(${n.n})">neuron ${n.n}</b> · ${pct(n.share)} of the decision · weight ${SHORT[d.a]} ${(sideW(d,'a',n.n-1)*D.sd[n.n-1]).toFixed(2)}, ${SHORT[d.b]} ${(sideW(d,'b',n.n-1)*D.sd[n.n-1]).toFixed(2)} per s.d. · formula r = ${n.fid}</div>`).join('');
   const edges=d.edges.slice(0,4).map(e=>`<li><b>${e.head} → n${e.neuron}</b>: ${e.statements.slice(0,3).map(s=>statement(s,e.neuron)).join('; ')}</li>`).join('');
-  return `<h2>The circuit for ${SHORT[d.a]} versus ${SHORT[d.b]}</h2><div class="card">${circuitMap(d,CUR?CUR.R:null)}</div><div class="card"><div class="grid"><div><h3>Heads (share of the decision; where ParT’s attention goes in ${SHORT[d.a]} and ${SHORT[d.b]} jets)</h3>${heads}<div class="cnt leg">${Object.entries(KCOL).map(([k,c])=>`<span style="background:${c}"></span>${k}`).join('')}</div></div><div><h3>Neurons</h3>${neurons}<h3>Key if-statements on the edges</h3><ul class="cnt" style="padding-left:18px;margin:0">${edges||'<li>—</li>'}</ul></div></div></div>
-   <div class="card"><h3>How well the circuit alone does (all 2,000,000 test jets)</h3><table>${t}</table><div class="cnt">acc ${SHORT[d.a]} vs ${SHORT[d.b]}: on jets of those two classes, score(${SHORT[d.a]}) &gt; score(${SHORT[d.b]}) picks the true class · acc vs all: “top of the 10 scores is ${SHORT[d.a]}” agrees with “is ${SHORT[d.a]}” on all jets (never calling it gives 90%) · 10 classes: top score = true class; AUC each class vs the rest, averaged · rejection at 50% efficiency for ${SHORT[d.a]}.<br>
-   Inside ParT: copying the formula’s top-6 heads from a ${SHORT[d.b]} jet flips ${pct(d.swap.top)} of decisions (bottom-6: ${pct(d.swap.bottom)}); setting its top-3 heads to their average costs ${pct(d.necessity.heads_top3)} of the separation, its neurons ${pct(d.necessity.neurons)} (as many random neurons: ${pct(d.necessity.random)}).</div></div>`;
+  return `<h2>The circuit for ${SHORT[d.a]} versus ${d.b==='rest'?'all other classes':SHORT[d.b]}</h2><div class="card">${circuitMap(d,CUR?CUR.R:null)}</div><div class="card"><div class="grid"><div><h3>Heads (share of the decision; where ParT’s attention goes in ${SHORT[d.a]} and ${d.b==='rest'?'all other':SHORT[d.b]} jets)</h3>${heads}<div class="cnt leg">${Object.entries(KCOL).map(([k,c])=>`<span style="background:${c}"></span>${k}`).join('')}</div></div><div><h3>Neurons</h3>${neurons}<h3>Key if-statements on the edges</h3><ul class="cnt" style="padding-left:18px;margin:0">${edges||'<li>—</li>'}</ul></div></div></div>
+   <div class="card"><h3>How well the circuit alone does (all 2,000,000 test jets)</h3><table>${t}</table><div class="cnt">${rest?`acc / AUC ${SHORT[d.a]} vs all others: on all test jets, “top of the 10 scores is ${SHORT[d.a]}” agrees with “is ${SHORT[d.a]}” (never calling it gives 90%); AUC of P(${SHORT[d.a]}); rejection of all other jets at 50% efficiency for ${SHORT[d.a]}`:`acc ${SHORT[d.a]} vs ${SHORT[d.b]}: on jets of those two classes, the larger of the two scores picks the true class; rejection at 50% efficiency for ${SHORT[R_]}`}${hasA?` · vs all: “top of the 10 scores is ${SHORT[R_]}” agrees with “is ${SHORT[R_]}” on all jets (never calling it gives 90%), AUC of P(${SHORT[R_]})`:''} · 10 classes: top score = true class (computed for ParT’s own values) · —: not computed.<br>${necTxt}</div></div>`;
 }
 function jetView(J,R,d){
-  const P=probs(R.logits), ia=D.classes.indexOf(d.a), ib=D.classes.indexOf(d.b), top=P.indexOf(Math.max(...P));
-  const C=d.neurons.map(n=>n.n), dw=k=>D.FW[ia][k]-D.FW[ib][k];
-  let circ=D.FB[ia]-D.FB[ib], full=R.logits[ia]-R.logits[ib]; for(let k=0;k<128;k++) circ+=dw(k)*(C.includes(k+1)?R.z[k]:D.mu[k]);
+  const P=probs(R.logits), top=P.indexOf(Math.max(...P));
+  const C=d.neurons.map(n=>n.n), dw=k=>sideW(d,'a',k)-sideW(d,'b',k);
+  let circ=sideScore(d,'a',D.FB)-sideScore(d,'b',D.FB), full=sideScore(d,'a',R.logits)-sideScore(d,'b',R.logits); for(let k=0;k<128;k++) circ+=dw(k)*(C.includes(k+1)?R.z[k]:D.mu[k]);
   const U=D.union.neurons, LU=D.classes.map((c,ci)=>{let s=D.FB[ci];for(let k=0;k<128;k++) s+=D.FW[ci][k]*(U.includes(k+1)?R.z[k]:D.mu[k]);return s;}), utop=LU.indexOf(Math.max(...LU));
   const bars=D.classes.map((c,ci)=>`<div style="display:flex;gap:6px;align-items:center"><span style="width:62px">${SHORT[c]}</span><div style="height:10px;width:${(200*P[ci]).toFixed(1)}px;background:${ci===top?'var(--acc)':'#a9b3bf'};border-radius:2px"></div><span class="cnt">${pct(P[ci])}</span></div>`).join('');
   const neur=d.neurons.map(n=>{ const k=n.n-1, c=dw(k)*(R.z[k]-D.mu[k]); return `<tr><td class="l clk" onclick="openNeuron(${n.n})"><b>n${n.n}</b></td><td>${((R.z[k]-D.mu[k])/D.sd[k]).toFixed(2)}</td><td class="l">${neuronScale(n.n,d,R.z)}</td><td class="${c>0?'ok':'bad'}">${c>=0?'+':''}${c.toFixed(2)}</td></tr>`; }).join('');
   const maps=d.heads.map(h=>{ const b=+h.h[1], hh=+h.h[3]-1; return etaphi(J,(b===1?R.a1:R.a2)[hh],`head ${h.h} ›`,(b-1)*8+hh); }).join('');
-  const call=(s)=>s>0?SHORT[d.a]:SHORT[d.b];
+  const call=(s)=>s>0?SHORT[d.a]:(d.b==='rest'?'not '+SHORT[d.a]:SHORT[d.b]);
   return `<h2>This jet${J.cls?` (true class ${SHORT[J.cls]})`:''} · ${J.n} particles</h2><div class="card"><div class="grid"><div><h3>ParT’s answer (all 10 classes)</h3>${bars}</div>
-   <div><h3>${SHORT[d.a]} versus ${SHORT[d.b]}</h3><span class="kpi">full network<b>${full>=0?'+':''}${full.toFixed(2)} → ${call(full)}</b></span><span class="kpi">circuit only<b>${circ>=0?'+':''}${circ.toFixed(2)} → ${call(circ)}</b></span><div class="cnt">score(${SHORT[d.a]}) − score(${SHORT[d.b]}). All ${U.length} circuit neurons together (all decisions) call this jet <b>${SHORT[D.classes[utop]]}</b>; ParT calls it <b>${SHORT[D.classes[top]]}</b>.</div>
+   <div><h3>${SHORT[d.a]} versus ${SHORT[d.b]}</h3><span class="kpi">full network<b>${full>=0?'+':''}${full.toFixed(2)} → ${call(full)}</b></span><span class="kpi">circuit only<b>${circ>=0?'+':''}${circ.toFixed(2)} → ${call(circ)}</b></span><div class="cnt">${d.b==='rest'?`score(${SHORT[d.a]}) − mean of the other 9 scores`:`score(${SHORT[d.a]}) − score(${SHORT[d.b]})`}. All ${U.length} circuit neurons together (all decisions) call this jet <b>${SHORT[D.classes[utop]]}</b>; ParT calls it <b>${SHORT[D.classes[top]]}</b>.</div>
    <h3>The circuit’s neurons in this jet</h3><table><tr><th class="l">neuron</th><th>s.d. from average</th><th class="l">▼ this jet · ● class averages</th><th>adds to the difference</th></tr>${neur}</table></div></div></div>
    <div class="card"><h3>Where the circuit’s heads look in this jet</h3><div class="cnt">Each circle is a particle at (Δη, Δφ) from the jet axis; size ∝ √pT; colour = kind; the stronger the fill (and a dark ring), the more of the head’s attention it gets. Hover for numbers. The view is zoomed to the jet (range in the corner); the few particles beyond it sit on the edge.</div><div class="grid" style="margin-top:6px">${maps}</div><div class="cnt leg">${Object.entries(KCOL).filter(([k])=>k!=='class token').map(([k,c])=>`<span style="background:${c}"></span>${k}`).join('')}</div></div>`;
 }
@@ -226,7 +240,7 @@ async function selftest(){
   document.getElementById('selftest').innerHTML=`SELFTEST ok: ${D.jets.length} jets, max |Δ logit| ${mx.toExponential(2)}, median ${all.sort((a,b)=>a-b)[all.length>>1].toExponential(2)}, same class ${same}/${D.jets.length}; typed copy of jet 0: top class ${D.classes[R0.logits.indexOf(Math.max(...R0.logits))]} (original ${D.classes[D.jets[0].logits.indexOf(Math.max(...D.jets[0].logits))]})`;
 }
 (async()=>{
-  D=await (await fetch('data.json')).json(); decButtons();
+  D=await (await fetch('data.json')).json(); DEC=Math.max(0,D.decisions.findIndex(d=>d.a==='Wqq'&&d.b==='Zqq')); const qd=new URLSearchParams(location.search).get('dec'); if(qd){ const [qa,qb]=qd.split(','); const k=D.decisions.findIndex(d=>d.a===qa&&d.b===qb); if(k>=0) DEC=k; } decButtons();
   const sel=document.getElementById('jetsel'); sel.innerHTML=D.classes.map(c=>`<optgroup label="true class ${SHORT[c]}">`+D.jets.map((J,k)=>[J,k]).filter(([J])=>J.cls===c).map(([J,k],i)=>`<option value="${k}">${SHORT[c]} jet ${i+1} (${J.n} particles)</option>`).join('')+'</optgroup>').join('');
   const am=L=>L.indexOf(Math.max(...L)); let J0=D.jets.findIndex(J=>J.cls==='Wqq'&&D.classes[am(J.logits)]==='Wqq'); if(J0<0) J0=70;
   sel.value=String(J0); document.getElementById('own').value=jetToText(D.jets[J0]); draw();
