@@ -19,6 +19,32 @@ select,textarea{font:inherit}textarea{font-family:ui-monospace,Menlo,monospace;f
 .pane{display:none}.pane.on{display:block}#models{display:flex;gap:6px;margin-bottom:8px}.model{padding:7px 16px;border-radius:10px;cursor:pointer;border:1px solid #c9ced6;background:#fff;font-size:14px}.model.on{background:var(--acc);color:#fff;border-color:var(--acc);font-weight:600}.model .cnt{font-size:11.5px}.model.on .cnt{color:#dbe6f2}
 #tabs{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;border-bottom:2px solid var(--line)}.tab{padding:6px 12px;cursor:pointer;border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;background:#eef0f3;font-size:13px;color:var(--mut)}.tab.on{background:#fff;color:var(--ink);font-weight:600;border-color:#c9ced6;margin-bottom:-2px;border-bottom:2px solid #fff}
 .hint{background:#fffbea;border:1px solid #f5e1a4;border-radius:8px;padding:6px 10px;font-size:12.5px;margin:6px 0}
+
+/* ---- phones ---- */
+svg{max-width:100%;height:auto}
+@media (max-width:700px){
+  main{padding:10px 10px 40px} h1{font-size:18px} h2{font-size:15.5px;margin:14px 0 6px} body{font-size:13.5px}
+  #bar{position:static;padding:4px 0 6px}
+  #decs>div, #models{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  #decs .btn, #models .model{flex:0 0 auto}
+  #decs select, #jetline select{max-width:100%;font-size:13px}
+  #decs .cnt{display:block;margin-top:2px}
+  #tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tab{flex:0 0 auto;padding:6px 10px;font-size:12.5px}
+  .model{padding:6px 10px;font-size:13px} .model .cnt{display:none}
+  .grid{grid-template-columns:1fr !important}
+  .card{padding:10px;margin:8px 0}
+  .kpi{min-width:0;padding:6px 9px;margin:3px 4px 3px 0}.kpi b{font-size:16px}
+  td,th{padding:3px 5px;font-size:12px}
+  #mbox{left:0;top:0;transform:none;width:100vw;max-height:100vh;height:100vh;border-radius:0;padding:12px 12px 40px}
+  #mclose{font-size:14px}
+  textarea{max-width:100% !important}
+  .hint{font-size:12px}
+  details summary{line-height:1.4}
+  .atl td{min-width:46px !important;font-size:10.5px !important;padding:2px !important} .atl td div{font-size:8.5px !important} .atl td span{display:none} .atl th{font-size:10.5px;padding:2px}
+  .atl{border-spacing:2px !important}
+  svg.wide{min-width:720px;max-width:none !important}
+}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
 </head><body><main>
@@ -108,7 +134,7 @@ function statement(st,nn){
 function circuitMap(d,R){
   const W=1120,H=300, heads=d.heads.slice(0,3).map(h=>h.h), ns=d.neurons.map(n=>n.n), HN_=D.hnec&&D.hnec[DEC]||{}, NN_=D.nnec&&D.nnec[DEC]||{}, rm=v=>v==null?'—':v<0.001?'<0.1%':(100*v).toFixed(1)+'%';
   const hy=i=>44+i*(H-84)/Math.max(1,heads.length-1||1), ny=i=>ns.length===1?H/2:50+i*(H-100)/(ns.length-1), cy=[H/2-55,H/2+55], HX=150, NX=560, CX=930;
-  let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#98a2b3"/></marker></defs>`;
+  let g=`<svg class="wide" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><defs><marker id="ah" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto"><path d="M0,0 L12,6 L0,12 z" fill="#98a2b3"/></marker></defs>`;
   const emax=Math.max(1e-9,...d.edges.map(e=>e.edge_std));
   heads.forEach((h,i)=>ns.forEach((n,j)=>{ if(!d.edges.some(e=>e.head===h&&e.neuron===n)) g+=`<path d="M ${HX+120} ${hy(i)} C ${HX+260} ${hy(i)}, ${NX-140} ${ny(j)}, ${NX-6} ${ny(j)}" fill="none" stroke="#98a2b3" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="3 4"><title>${h} → n${n}: a weak edge in the formula</title></path>`; }));
   for(const e of d.edges){ const i=heads.indexOf(e.head), j=ns.indexOf(e.neuron); if(i<0||j<0) continue; const w=1+7*e.edge_std/emax;
@@ -278,7 +304,7 @@ const JNM={WToQQ:'W',HToBB:'H→bb',TTBarLep:'t→bℓν',HToGG:'H→gg',ZJetsTo
 function cueCard(){
   if(!D.cues) return ''; const c=D.cues[CUE], tot=c.delta, [t1,t2]=CUEL[c.name]||[c.name,''];
   const hs=Object.entries(c.heads).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,4), ns=Object.entries(c.neurons).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,4);
-  const W=1120,H=280, y=(i,n)=>40+i*(H-70)/Math.max(1,n-1); let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto">`;
+  const W=1120,H=280, y=(i,n)=>40+i*(H-70)/Math.max(1,n-1); let g=`<svg class="wide" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto">`;
   g+=`<rect x="0" y="${H/2-34}" width="220" height="68" rx="8" fill="#f1f3f6" stroke="#8A94A3" stroke-width="2"/><text x="12" y="${H/2-8}" font-size="15" font-weight="600">${t1}</text><text x="12" y="${H/2+14}" font-size="11" fill="#667085">${t2}</text><text x="12" y="${H/2+28}" font-size="11" fill="#667085">${JNM[c.jets]||c.jets} jets</text>`;
   hs.forEach(([h,v],i)=>{ const yy=y(i,hs.length), sh=v/tot; g+=`<path d="M 222 ${H/2} C 300 ${H/2}, 300 ${yy}, 380 ${yy}" fill="none" stroke="#1F4E79" stroke-opacity=".35" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/><g class="clk" onclick="openHead('${h}')"><rect x="380" y="${yy-20}" width="180" height="40" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="392" y="${yy-2}" font-size="13" font-weight="600" fill="#1F4E79">head ${h}</text><text x="392" y="${yy+14}" font-size="11" fill="#667085">${(100*sh).toFixed(0)}% of the change</text></g>`; });
   ns.forEach(([n,v],i)=>{ const yy=y(i,ns.length), sh=v/tot; g+=`<path d="M 560 ${H/2} C 620 ${H/2}, 620 ${yy}, 680 ${yy}" fill="none" stroke="#B7791F" stroke-opacity=".35" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/><g class="clk" onclick="openNeuron(${n})"><rect x="680" y="${yy-20}" width="170" height="40" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="692" y="${yy-2}" font-size="13" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="692" y="${yy+14}" font-size="11" fill="#667085">${(100*sh).toFixed(0)}% of the change</text></g><path d="M 850 ${yy} C 900 ${yy}, 900 ${H/2}, 935 ${H/2}" fill="none" stroke="#6B4E9B" stroke-opacity=".3" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/>`; });
@@ -292,7 +318,7 @@ const sgnb=(x,m,w=110)=>`<div style="display:flex;width:${2*w}px;height:9px"><di
 function ncircCard(){
   if(!D.ncirc) return ''; const ks=Object.keys(D.ncirc), v=D.ncirc[NC], n=+NC.slice(1), i=n-1;
   const hs=v.circuit.map(h=>[h,v.heads[h][0]]), wts=D.classes.map((c,ci)=>[c,D.FW[ci][i]*D.sd[i]]).sort((a,b)=>b[1]-a[1]), outs=[...wts.slice(0,2),wts[wts.length-1]];
-  const W=1120,H=250, y=(k,m)=>40+k*(H-80)/Math.max(1,m-1); let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto">`;
+  const W=1120,H=250, y=(k,m)=>40+k*(H-80)/Math.max(1,m-1); let g=`<svg class="wide" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto">`;
   g+=`<text x="0" y="16" font-size="12" fill="#667085">its top-3 heads (share of the neuron’s variation)</text><text x="420" y="16" font-size="12" fill="#667085">the neuron</text><text x="780" y="16" font-size="12" fill="#667085">what it adds to the class scores (per s.d.)</text>`;
   hs.forEach(([h,s],k)=>{ const yy=y(k,3); g+=`<g class="clk" onclick="openHead('${h}')"><rect x="0" y="${yy-20}" width="200" height="40" rx="8" fill="#fff" stroke="#1F4E79" stroke-width="2"/><text x="12" y="${yy-2}" font-size="13" font-weight="600" fill="#1F4E79">head ${h}</text><text x="12" y="${yy+14}" font-size="11" fill="#667085">share ${(100*s).toFixed(0)}% · removing it loses ${(100*v.heads[h][1]).toFixed(0)}%</text></g><path d="M 200 ${yy} C 300 ${yy}, 330 ${H/2}, 400 ${H/2}" fill="none" stroke="#1F4E79" stroke-opacity=".35" stroke-width="${(1+30*s).toFixed(1)}"/>`; });
   g+=`<g class="clk" onclick="openNeuron(${n})"><rect x="400" y="${H/2-40}" width="270" height="80" rx="10" fill="#fff" stroke="#B7791F" stroke-width="2.5"/><text x="414" y="${H/2-14}" font-size="16" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="414" y="${H/2+6}" font-size="11.5" fill="#667085">these 3 heads alone (others at average)</text><text x="414" y="${H/2+22}" font-size="11.5" fill="#667085">reproduce ${(100*v.r2.top3).toFixed(0)}% of it (top head alone ${(100*v.r2.top1).toFixed(0)}%)</text></g>`;
@@ -368,7 +394,7 @@ function hcompCard(){
 // ---- three-class circuits (G54) ----
 function triCard(){
   if(!D.triples) return ''; const ks=Object.keys(D.triples), t=D.triples[ks[TRI]], C=t.classes, ci=C.map(c=>CI(c));
-  const W=1120,H=230, y=(k,m)=>40+k*(H-70)/Math.max(1,m-1); let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><text x="250" y="16" font-size="12" fill="#667085">the circuit’s neurons</text><text x="700" y="16" font-size="12" fill="#667085">the three class scores (edge: weight × s.d.)</text>`;
+  const W=1120,H=230, y=(k,m)=>40+k*(H-70)/Math.max(1,m-1); let g=`<svg class="wide" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><text x="250" y="16" font-size="12" fill="#667085">the circuit’s neurons</text><text x="700" y="16" font-size="12" fill="#667085">the three class scores (edge: weight × s.d.)</text>`;
   const ws=t.neurons.map(n=>ci.map(c=>D.FW[c][n-1]*D.sd[n-1])), wm=Math.max(...ws.flat().map(Math.abs));
   t.neurons.forEach((n,k)=>{ const yy=y(k,3); C.forEach((c,j)=>{ const w=ws[k][j], y2=y(j,3); g+=`<path d="M 450 ${yy} C 560 ${yy}, 590 ${y2}, 700 ${y2}" fill="none" stroke="${w>0?'#2f855a':'#c05621'}" stroke-opacity=".4" stroke-width="${(1+12*Math.abs(w)/wm).toFixed(1)}"/>`; });
     g+=`<g class="clk" onclick="openNeuron(${n})"><rect x="250" y="${yy-20}" width="200" height="40" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="262" y="${yy-2}" font-size="13" font-weight="600" fill="#B7791F">neuron ${n}</text><text x="262" y="${yy+14}" font-size="11" fill="#667085">${(100*(t.neuron_share[String(n)]||0)).toFixed(0)}% of the three differences</text></g>`; });
@@ -549,7 +575,7 @@ function pcircCard(d){
   if(!r) return `<h2>Particle circuits</h2><div class="card cnt">Measured for the 13 featured class pairs (buttons above). For any jet and decision, “Which particles carry this decision?” below runs the scan in your browser.</div>`;
   const A=v=>0.5+v*(r.auc-0.5), la=SHORT[d.a], lb=SHORT[d.b];   // pairing accuracy (AUC) from the stored share of separation
   const KS=[1,3,10,20], W=580,H=260, xs=k=>70+(W-150)*Math.log(k)/Math.log(20), xall=W-40, ys=v=>H-36-(H-58)*Math.max(0,Math.min(1,(v-0.5)/0.5));
-  let g=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><g font-size="11" fill="#667085">`;
+  let g=`<svg class="wide" viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:auto"><g font-size="11" fill="#667085">`;
   for(const t of [0.5,0.6,0.7,0.8,0.9,1]) g+=`<line x1="70" x2="${W-30}" y1="${ys(t)}" y2="${ys(t)}" stroke="#eef0f3"/><text x="64" y="${ys(t)+4}" text-anchor="end">${Math.round(100*t)}%</text>`;
   g+=`<line x1="70" x2="${W-30}" y1="${ys(r.auc)}" y2="${ys(r.auc)}" stroke="#1d2433" stroke-dasharray="4 4" stroke-opacity=".5"/><text x="74" y="${ys(r.auc)-5}" font-size="10.5" fill="#1d2433">ParT with all particles: ${(100*r.auc).toFixed(1)}%</text><text x="74" y="${ys(0.5)-5}" font-size="10.5">50% = guessing</text>`;
   g+=`<text transform="translate(14 ${(H-30)/2}) rotate(-90)" text-anchor="middle" font-size="10.5">${la} jet scored above a ${lb} jet</text>`;
@@ -607,7 +633,7 @@ function patlasCard(){
   const C=D.classes, find=(a,b)=>D.decisions.findIndex(d=>(d.a===a&&d.b===b)||(d.a===b&&d.b===a));
   const cell=k=>{ if(k<0) return '<td></td>'; const d=D.decisions[k], acc=d.bench.pair['ParT itself'].circuit.acc, x=Math.max(0,Math.min(1,(acc-0.75)/0.25)), bad=d.necessity&&d.necessity.neurons>0.2;
     return `<td class="clk" onclick="DEC=${k};decButtons();draw();setTab('decision','part')" title="${SHORT[d.a]} vs ${d.b==='rest'?'all others':SHORT[d.b]}: the circuit alone is right on ${(100*acc).toFixed(1)}% of jets (ParT ${(100*d.bench.pair['ParT itself'].complete.acc).toFixed(1)}%)" style="background:rgb(${Math.round(250-203*x)},${Math.round(250-117*x)},${Math.round(250-160*x)});color:${x>0.55?'#fff':'#1d2433'};text-align:center;min-width:72px;border-radius:5px;padding:3px 4px;${bad?'outline:2px dashed #3F4A5A;':''}"><span style="font-size:10px">accuracy</span> ${(100*acc).toFixed(1)}%<div style="font-size:10px">same call ${D.agree&&D.agree[k]?(100*D.agree[k]['ParT itself'].decision).toFixed(1)+'%':'—'}</div><div style="font-size:9.5px;opacity:.85">n${d.neurons.map(q=>q.n).join(' · ')}</div></td>`; };
-  let t=`<table style="border-collapse:separate;border-spacing:3px"><tr><th></th>${C.slice(0,-1).map(c=>`<th>${SHORT[c]}</th>`).join('')}<th>vs all</th></tr>`;
+  let t=`<table class="atl" style="border-collapse:separate;border-spacing:3px"><tr><th></th>${C.slice(0,-1).map(c=>`<th>${SHORT[c]}</th>`).join('')}<th>vs all</th></tr>`;
   C.forEach((a,i)=>{ t+=`<tr><th class="l">${SHORT[a]}</th>${C.slice(0,-1).map((b,j)=>j<i?cell(find(a,b)):'<td></td>').join('')}${cell(D.decisions.findIndex(d=>d.a===a&&d.b==='rest'))}</tr>`; }); t+='</table>';
   const IDX=[['decision','Decision circuits','one decision at a time: heads → neurons → scores, in a jet you pick'],['triples','Three-class','three classes at once: pair circuits combine'],['cues','Cue circuits','a physical cue (mass, displacement, lepton, …) followed through ParT'],['neurons','Neuron circuits','the heads behind each of the 13 active neurons'],['h2h','Head → head','block-1 heads steering block-2 heads (b1h3 → b2h8)'],['blocks','Removing heads','single heads, pairs, whole blocks: block 2 is a backup'],['pairs','Pair features','the pair mass carries ParT’s jet mass'],['inputs','Input features','which of the 17 particle inputs each decision needs'],['layers','Layers','which of the 8 particle blocks each decision needs'],['particles','Particle circuits','how few particles carry a decision']];
   const how=`<h2>How ParT classifies, and where the circuits sit</h2><div class="card"><div class="grid" style="grid-template-columns:repeat(4,1fr)">
@@ -635,7 +661,7 @@ let JCN='64', JCK=0;
 function jcueCard(){
   if(!D.jcues) return ''; const C=D.jcues[JCN], ks=Object.keys(C); if(JCK>=ks.length) JCK=0; const c=C[ks[JCK]], tot=c.delta, W=D.jw&&D.jw[JCN];
   const ns=Object.entries(c.neurons).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).slice(0,4), Wd=1120,H=250, y=(i,n)=>40+i*(H-70)/Math.max(1,n-1);
-  let g=`<svg viewBox="0 0 ${Wd} ${H}" style="width:100%;max-width:${Wd}px;height:auto"><rect x="0" y="${H/2-34}" width="260" height="68" rx="8" fill="#f1f3f6" stroke="#8A94A3" stroke-width="2"/><text x="12" y="${H/2-8}" font-size="15" font-weight="600">${esc(ks[JCK])}</text><text x="12" y="${H/2+14}" font-size="12" fill="#667085">${c.n.toLocaleString()} ${JSH[c.jets]} test jets</text>`;
+  let g=`<svg class="wide" viewBox="0 0 ${Wd} ${H}" style="width:100%;max-width:${Wd}px;height:auto"><rect x="0" y="${H/2-34}" width="260" height="68" rx="8" fill="#f1f3f6" stroke="#8A94A3" stroke-width="2"/><text x="12" y="${H/2-8}" font-size="15" font-weight="600">${esc(ks[JCK])}</text><text x="12" y="${H/2+14}" font-size="12" fill="#667085">${c.n.toLocaleString()} ${JSH[c.jets]} test jets</text>`;
   ns.forEach(([n,v],i)=>{ const yy=y(i,ns.length), sh=v/tot; g+=`<path d="M 262 ${H/2} C 360 ${H/2}, 360 ${yy}, 460 ${yy}" fill="none" stroke="#B7791F" stroke-opacity=".4" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/><g class="clk" onclick="JNN='${JCN}';openJediNeuron(${n})"><rect x="460" y="${yy-22}" width="250" height="44" rx="8" fill="#fff" stroke="#B7791F" stroke-width="2"/><text x="472" y="${yy-3}" font-size="13" font-weight="600" fill="#B7791F">neuron ${n} · moves ${c.dz_sd[n]>=0?'+':''}${c.dz_sd[n].toFixed(2)} s.d.</text><text x="472" y="${yy+14}" font-size="11" fill="#667085">${(100*sh).toFixed(0)}% of the change</text></g><path d="M 710 ${yy} C 790 ${yy}, 790 ${H/2}, 860 ${H/2}" fill="none" stroke="#6B4E9B" stroke-opacity=".3" stroke-width="${(1+14*Math.min(1,Math.abs(sh))).toFixed(1)}"/>`; });
   g+=`<rect x="860" y="${H/2-34}" width="250" height="68" rx="8" fill="#f1f3f6" stroke="#6B4E9B" stroke-width="2"/><text x="872" y="${H/2-8}" font-size="13" font-weight="600" fill="#6B4E9B">score(${JSH[c.a]}) − score(${JSH[c.b]})</text><text x="872" y="${H/2+12}" font-size="12" fill="#667085">changes by ${tot>=0?'+':''}${tot.toFixed(2)}</text><text x="872" y="${H/2+28}" font-size="12" fill="#667085">${(100*c.flipped).toFixed(1)}% of ${JSH[c.jets]} calls flip</text></svg>`;
   return `<h2>JEDI-linear cue circuits: a physical cue traced through the network</h2><div class="card"><div class="cnt">One edit on all test jets of one class, the network re-run, and the change of the score difference split exactly over its 16 neurons (the last layer is linear). Mass edits scale every particle’s angles (summed pT kept); the pT edit raises every particle’s pT by 10%; the multiplicity edit splits the softest particle in two at the same place (no jet observable changes). Click a neuron for its if-statements.</div>
