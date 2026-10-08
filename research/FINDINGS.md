@@ -59,3 +59,15 @@ Each round: hypothesis → test (code below, data named) → numbers with uncert
   near the jet maximum, another raises it by rank) — removed.
 - No-α control (S20u): the class-token fit with every particle weighted 1/n: 69.78 % (least squares 60.47 %) vs 93.29 %
   with ParT's α — the attention weights carry 23.5 pt.
+
+## G4 — ParT tells Hbb from Hcc by counting displaced tracks (holds)
+- Hypothesis: P(ParT says Hbb | true Hbb or Hcc, ParT says Hbb or Hcc) rises with the number of tracks with |d0|/σ > 3, in
+  both true classes, at fixed jet mass (10-GeV bins, 100–150 GeV) and jet-pT tercile. Control: jet |η|.
+- Data: 315,152 test jets (161,967 true Hbb, 153,185 true Hcc). Script: discovery/G4_b_vs_c.py.
+- Truth: median number of displaced tracks 8 (Hbb) vs 3 (Hcc).
+- True Hbb: P(Hbb) 50 % (0 tracks, n=146), 71 % (1), 84 % (2), 92 % (3), 97 % (4–5), 99.5 % (6+); stratified ≥ 6 vs ≤ 3:
+  **+12.29 ± 0.35 pt (35σ)**. True Hcc: P(Hbb) 0.1 % → 2.5 %; stratified ≥ 4 vs ≤ 1: **+1.35 ± 0.05 pt (25σ)**.
+  Control |η|: +0.04 ± 0.08 / +0.05 ± 0.06 pt (flat). The 2nd-largest signed d0 significance shows no effect (−1.5σ / −1.7σ).
+- Formula link: the Hbb class score (class-token fit, scores fitted directly) adds +0.515 per displaced track in a prong
+  (head b1h3); the Hcc score has no prong-count term.
+- Verdict: holds.
